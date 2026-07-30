@@ -3,8 +3,8 @@
 import { FileOutput, Sparkles, ExternalLink } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
 
-export function AnalyzerHeader({ caseId }: { caseId: string }) {
-  const { caseData, loading, error } = useCase(caseId);
+export function AnalyzerHeader({ caseId }: { caseId?: string }) {
+  const { caseData, loading, error } = useCase(caseId ?? "");
 
   if (loading) {
     return (
