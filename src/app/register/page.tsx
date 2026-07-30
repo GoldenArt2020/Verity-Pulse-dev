@@ -36,10 +36,7 @@ export default function RegisterPage() {
       const { nextStep } = await signUp({
         username: email,
         password,
-        options: {
-          userAttributes: { email, name },
-          autoSignIn: true,
-        },
+        options: { userAttributes: { email, name }, autoSignIn: true },
       });
 
       if (nextStep.signUpStep === "CONFIRM_SIGN_UP") {
@@ -66,10 +63,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const { nextStep } = await confirmSignUp({
-        username: email,
-        confirmationCode: code,
-      });
+      const { nextStep } = await confirmSignUp({ username: email, confirmationCode: code });
 
       if (nextStep.signUpStep === "COMPLETE_AUTO_SIGN_IN") {
         const { isSignedIn } = await autoSignIn();
@@ -79,7 +73,6 @@ export default function RegisterPage() {
           return;
         }
       }
-
       toast.success("Account confirmed. Please sign in.");
       router.push("/");
     } catch (err) {
@@ -91,21 +84,32 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0F172A] px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0F172A] px-4 lg:justify-end lg:pr-24">
+      <div className="pointer-events-none absolute -left-40 top-1/4 h-96 w-96 rounded-full bg-blue-500/10 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-blue-400/10 blur-[100px]" />
+
+      <div className="absolute left-24 top-1/2 hidden -translate-y-1/2 lg:block">
+        <div className="text-6xl font-bold text-blue-500">V</div>
+        <h1 className="mt-4 text-5xl font-bold tracking-tight text-white">
+          VERITYPULSE
+        </h1>
+        <p className="mt-3 max-w-sm text-lg text-slate-400">
+          The Intelligence Platform for True Crime Creators
+        </p>
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="glass-card w-full max-w-md rounded-[20px] p-10 shadow-[0_18px_48px_rgba(0,0,0,0.35)]"
+        className="glass-card relative z-10 w-full max-w-md rounded-[20px] p-10 shadow-[0_18px_48px_rgba(0,0,0,0.35)]"
       >
         {step === "details" ? (
           <>
             <h1 className="font-display text-3xl font-bold text-white">
               Create Workspace
             </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Start your investigation.
-            </p>
+            <p className="mt-2 text-sm text-slate-400">Start your investigation.</p>
 
             <form className="mt-8 flex flex-col gap-4" onSubmit={handleSignUp}>
               <div className="relative">
@@ -163,9 +167,7 @@ export default function RegisterPage() {
             <h1 className="font-display text-3xl font-bold text-white">
               Confirm Your Email
             </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              We sent a code to {email}.
-            </p>
+            <p className="mt-2 text-sm text-slate-400">We sent a code to {email}.</p>
 
             <form className="mt-8 flex flex-col gap-4" onSubmit={handleConfirm}>
               <Input
