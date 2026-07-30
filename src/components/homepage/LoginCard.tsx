@@ -8,7 +8,7 @@ import { signIn } from "aws-amplify/auth";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import "@/lib/amplifyClient";
+import "../../../lib/amplify-config";
 
 export function LoginCard() {
   const router = useRouter();

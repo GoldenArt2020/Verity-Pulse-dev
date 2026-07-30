@@ -2,7 +2,7 @@
 
 import { Authenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
-import "@/lib/amplifyClient";
+import "../../lib/amplify-config";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <Authenticator.Provider>{children}</Authenticator.Provider>;
