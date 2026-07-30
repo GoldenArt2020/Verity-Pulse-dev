@@ -1,0 +1,33 @@
+import {
+  Target,
+  Search,
+  Compass,
+  ScanSearch,
+  Wand2,
+  SlidersHorizontal,
+  BarChart3,
+  CalendarDays,
+  Bookmark,
+  FolderKanban,
+  BellRing,
+  Users,
+  Plug,
+  Settings,
+} from "lucide-react";
+
+export const NAV_ITEMS = [
+  { label: "Mission Control", href: "/dashboard", icon: Target },
+  { label: "Find Opportunity", href: "/find-opportunity", icon: Compass },
+  { label: "Research Hub", href: "/research-hub", icon: Search },
+  { label: "Case Analyzer", href: "/case-analyzer", icon: ScanSearch },
+  { label: "Angle Builder", href: "/angle-builder", icon: Wand2 },
+  { label: "Optimize", href: "/optimize", icon: SlidersHorizontal },
+  { label: "Performance", href: "/performance", icon: BarChart3 },
+  { label: "Content Planner", href: "/content-planner", icon: CalendarDays },
+  { label: "Saved Cases", href: "/saved-cases", icon: Bookmark },
+  { label: "Projects", href: "/projects", icon: FolderKanban },
+  { label: "Custom Alerts", href: "/custom-alerts", icon: BellRing },
+  { label: "Team", href: "/team", icon: Users },
+  { label: "Integrations", href: "/integrations", icon: Plug },
+  { label: "Settings", href: "/settings", icon: Settings },
+] as const;
