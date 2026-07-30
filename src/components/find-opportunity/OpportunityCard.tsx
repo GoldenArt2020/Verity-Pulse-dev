@@ -5,7 +5,7 @@ import { Bookmark, ArrowUp } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 interface OpportunityCardProps {
-  id: string;
+  id?: string;
   score: number;
   scoreLabel: string;
   scoreColor: string;
@@ -13,7 +13,7 @@ interface OpportunityCardProps {
   location: string;
   category: string;
   description: string;
-  competitionScore: number;
+  competitionScore: number | string;
 }
 
 function scoreLabel(score: number) {
