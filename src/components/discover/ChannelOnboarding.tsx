@@ -4,6 +4,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { AtSign, Check } from "lucide-react";
 import { useChannelId } from "@/hooks/useChannelId";
+import { useAuthUser } from "@/hooks/useAuthUser";
+import { ensureUserProfile } from "@/lib/ensureUserProfile";
+import { getOrBuildChannelDNA } from "@/services/creatorDNA";
+import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
 const ANALYSIS_STEPS = [
   "Reading channel",
@@ -15,6 +19,7 @@ const ANALYSIS_STEPS = [
 
 export function ChannelOnboarding() {
   const { saveChannel } = useChannelId();
+  const { user, isAuthenticated } = useAuthUser();
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,21 +27,43 @@ export function ChannelOnboarding() {
 
   async function handleConnect() {
     if (!handle.trim()) return;
+    if (!isAuthenticated || !user) {
+      setError("You must be signed in to connect a channel.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setStepIndex(0);
 
     try {
+      // Step 1 — Reading channel (real YouTube lookup)
       const res = await fetch(`/api/youtube/resolve-handle?handle=${encodeURIComponent(handle.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Channel not found");
+      setStepIndex(1);
 
-      // Simulate the analysis pipeline steps while the real data resolves.
-      // TODO: replace with real progress events once the backend analysis pipeline exists.
-      for (let i = 0; i < ANALYSIS_STEPS.length; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        setStepIndex(i + 1);
-      }
+      // Ensure a UserProfile row exists before we link a Channel to it
+      const profile = await ensureUserProfile(user);
+      if (!profile) throw new Error("Could not create user profile");
+
+      // Steps 2-5 happen inside getOrBuildChannelDNA:
+      // fetch channel videos -> single batched Groq call -> cache in DynamoDB
+      const channelSummary: YouTubeChannelSummary = {
+        channelId: data.channelId,
+        title: data.title,
+        handle: handle.trim(),
+        description: data.description ?? "",
+        thumbnailUrl: data.thumbnail ?? "",
+        subscriberCount: parseInt(data.subscriberCount ?? "0", 10),
+        videoCount: data.videoCount ?? 0,
+        viewCount: data.viewCount ?? 0,
+        uploadsPlaylistId: data.uploadsPlaylistId ?? "",
+      };
+
+      setStepIndex(2);
+      await getOrBuildChannelDNA(channelSummary, profile.id);
+      setStepIndex(5);
 
       saveChannel(data.channelId, handle.trim());
     } catch (err) {

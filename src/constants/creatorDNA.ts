@@ -1,17 +1,10 @@
-// TODO: replace with real Groq-generated Creator DNA once channel analysis pipeline is built
-export const CREATOR_DNA = {
-  strengths: [
-    "Institutional failures",
-    "Missing persons",
-    "Long-form investigations",
-    "Documentary storytelling",
-  ],
-  weaknesses: [
-    "Gang history",
-    "Court recaps",
-    "Drug trafficking",
-  ],
-};
+// NOTE: CREATOR_DNA mock data removed — CreatorDNACard.tsx now reads real
+// data via useChannelDNA() -> Channel.channelDNA (see src/services/creatorDNA.ts).
+//
+// RECOMMENDED_FOR_YOU is still mock data. Wiring it to real recommendations
+// requires a recommendation engine that scores existing Cases against the
+// creator's ChannelDNA — that engine and real Case data don't exist yet.
+// See the note in src/components/discover/RecommendedForYou.tsx.
 
 export const RECOMMENDED_FOR_YOU = [
   {

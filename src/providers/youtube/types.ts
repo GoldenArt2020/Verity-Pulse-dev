@@ -12,3 +12,28 @@ export interface YouTubeVideoStats {
   viewCount: number;
   publishedAt: string;
 }
+
+export interface YouTubeChannelSummary {
+  channelId: string;
+  title: string;
+  handle: string;
+  description: string;
+  thumbnailUrl: string;
+  subscriberCount: number;
+  videoCount: number;
+  viewCount: number;
+  uploadsPlaylistId: string;
+}
+
+export interface YouTubeVideoDetail {
+  videoId: string;
+  title: string;
+  description: string;
+  publishedAt: string;
+  thumbnailUrl: string;
+  viewCount: number;
+  likeCount: number;
+  commentCount: number;
+  durationSeconds: number;
+  tags: string[];
+}
