@@ -10,7 +10,7 @@ import {
 
 export const NAV_ITEMS = [
   { label: "Home", href: "/dashboard", icon: Home },
-  { label: "Discover", href: "/find-opportunity", icon: Compass },
+  { label: "Discover", href: "/discover", icon: Compass },
   { label: "Workspace", href: "/projects", icon: FolderKanban },
   { label: "Create", href: "/angle-builder", icon: Wand2 },
   { label: "Optimize", href: "/optimize", icon: SlidersHorizontal },

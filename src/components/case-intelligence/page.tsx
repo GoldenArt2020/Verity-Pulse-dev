@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { TopBar } from "@/components/layout/TopBar";
 import { CaseHeader } from "@/components/case-intelligence/CaseHeader";
 import { CaseTabs } from "@/components/case-intelligence/CaseTabs";
 import { CaseTimeline } from "@/components/case-intelligence/CaseTimeline";
@@ -12,6 +11,10 @@ import { QuickIntelligence } from "@/components/case-intelligence/QuickIntellige
 import { NarrativeGapsFound } from "@/components/case-intelligence/NarrativeGapsFound";
 import { AudienceInterestChart } from "@/components/case-intelligence/AudienceInterestChart";
 import { ResearchStatusBar } from "@/components/case-intelligence/ResearchStatusBar";
+import { CoverageMap } from "@/components/case-intelligence/CoverageMap";
+import { AngleSaturationTable } from "@/components/case-intelligence/AngleSaturationTable";
+import { UntappedAngles } from "@/components/case-intelligence/UntappedAngles";
+import { EditorialFeedback } from "@/components/case-intelligence/EditorialFeedback";
 
 export default function CaseIntelligencePage() {
   return (
@@ -38,6 +41,15 @@ export default function CaseIntelligencePage() {
           </div>
 
           <ResearchStatusBar />
+
+          <div className="grid grid-cols-2 gap-4">
+            <CoverageMap />
+            <AngleSaturationTable />
+          </div>
+
+          <EditorialFeedback />
+
+          <UntappedAngles />
         </div>
 
         <div className="space-y-4">
