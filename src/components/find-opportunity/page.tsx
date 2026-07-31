@@ -80,8 +80,6 @@ export default function FindOpportunityPage() {
                   key={c.id}
                   id={c.id}
                   score={c.opportunityScore ?? 0}
-                  scoreLabel=""
-                  scoreColor=""
                   title={c.name}
                   location={c.country ?? ""}
                   category={c.category ?? ""}
