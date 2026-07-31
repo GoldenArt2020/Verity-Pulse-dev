@@ -1,10 +1,13 @@
+import type { LucideIcon } from "lucide-react";
+
+// ...
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronLeft, LogOut } from "lucide-react";
+import { ChevronDown, ChevronLeft, LogOut, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NAV_ITEMS } from "@/constants/routes";
+import { NAV_ITEMS, SECONDARY_NAV_ITEMS } from "@/constants/routes";
 import { Logo } from "@/components/homepage/Logo";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useUIStore } from "@/store/useUIStore";
@@ -12,22 +15,41 @@ import { useUIStore } from "@/store/useUIStore";
 export function Sidebar() {
   const pathname = usePathname();
   const { user, signOut } = useAuthUser();
-  const { sidebarCollapsed: collapsed, toggleSidebar } = useUIStore();
+  const { sidebarCollapsed: collapsed, toggleSidebar, mobileNavOpen, closeMobileNav } = useUIStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const displayName = user?.signInDetails?.loginId?.split("@")[0] ?? "Creator";
 
-  // Close the dropdown if the sidebar collapses while it's open
   useEffect(() => {
     if (collapsed) setMenuOpen(false);
   }, [collapsed]);
 
-  return (
-    <aside
-      className={`flex h-screen shrink-0 flex-col border-r border-slate-800/60 bg-[rgb(4,9,22)] transition-all duration-200 ${
-        collapsed ? "w-20" : "w-[248px]"
-      }`}
-    >
+  useEffect(() => {
+    closeMobileNav();
+  }, [pathname]);
+
+  
+const renderNavItem = (item: { label: string; href: string; icon: LucideIcon }) => {
+    const active = pathname === item.href;
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+          active
+            ? "bg-blue-500/15 text-blue-400"
+            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+        {!collapsed && item.label}
+      </Link>
+    );
+  };
+
+  const content = (
+    <>
       <div className="flex items-center gap-2.5 px-5 py-5">
         <Logo className="h-7 w-7 shrink-0" />
         {!collapsed && (
@@ -35,27 +57,21 @@ export function Sidebar() {
             VERITYPULSE
           </span>
         )}
+        <button
+          onClick={closeMobileNav}
+          className="ml-auto text-slate-500 hover:text-slate-300 md:hidden"
+          aria-label="Close menu"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href;
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
-                active
-                  ? "bg-blue-500/15 text-blue-400"
-                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              {!collapsed && item.label}
-            </Link>
-          );
-        })}
+        {NAV_ITEMS.map(renderNavItem)}
+
+        <div className="my-3 border-t border-slate-800/60" />
+
+        {SECONDARY_NAV_ITEMS.map(renderNavItem)}
       </nav>
 
       <div className="border-t border-slate-800/60 p-3">
@@ -102,12 +118,32 @@ export function Sidebar() {
 
         <button
           onClick={toggleSidebar}
-          className="mt-2 flex w-full items-center gap-2 rounded-lg px-1 py-2 text-[12px] text-slate-500 hover:text-slate-300"
+          className="mt-2 hidden w-full items-center justify-center rounded-lg px-1 py-2 text-slate-500 hover:text-slate-300 md:flex"
         >
           <ChevronLeft className={`h-3.5 w-3.5 transition-transform ${collapsed ? "rotate-180" : ""}`} />
-          {!collapsed && "Collapse"}
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside
+        className={`hidden h-screen shrink-0 flex-col border-r border-slate-800/60 bg-[rgb(4,9,22)] transition-all duration-200 md:flex ${
+          collapsed ? "w-20" : "w-[248px]"
+        }`}
+      >
+        {content}
+      </aside>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/60" onClick={closeMobileNav} />
+          <aside className="relative flex h-full w-[260px] flex-col border-r border-slate-800/60 bg-[rgb(4,9,22)]">
+            {content}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

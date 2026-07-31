@@ -7,14 +7,14 @@ import { useChannelId } from "@/hooks/useChannelId";
 
 export function ChannelInput() {
   const [input, setInput] = useState("");
-  const { saveChannelId } = useChannelId();
+  const { saveChannel } = useChannelId();
 
   function handleAnalyze() {
     if (!input.trim()) {
       toast.error("Paste a YouTube channel ID.");
       return;
     }
-    saveChannelId(input.trim());
+    saveChannel(input.trim(), input.trim());
     toast.success("Channel saved. Loading stats...");
   }
 

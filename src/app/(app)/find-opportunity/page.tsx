@@ -1,69 +1,72 @@
 "use client";
 
-import { Compass, LayoutGrid, LayoutList, Bookmark } from "lucide-react";
-import { TopBar } from "@/components/layout/TopBar";
-import { FiltersPanel } from "@/components/find-opportunity/FiltersPanel";
+import { useState } from "react";
+import { Search } from "lucide-react";
 import { OpportunityCard } from "@/components/find-opportunity/OpportunityCard";
+import { ChannelOnboarding } from "@/components/discover/ChannelOnboarding";
 import { OPPORTUNITIES } from "@/constants/opportunities";
+import { useChannelId } from "@/hooks/useChannelId";
 
-const TABS = ["High Opportunity", "Trending Now", "Rising Searches", "Low Competition", "Your Niche Fit"];
+const COLLECTIONS = [
+  "Missing Persons",
+  "Institutional Failures",
+  "Cold Cases",
+  "Organized Crime",
+  "Police Corruption",
+  "County Lines",
+];
 
-export default function FindOpportunityPage() {
+export default function DiscoverPage() {
+  const [query, setQuery] = useState("");
+  const { channelId, channelHandle } = useChannelId();
+
+  if (!channelId) {
+    return <ChannelOnboarding />;
+  }
+
   return (
-    <div>
-      <TopBar
-        title="Find Opportunity"
-        subtitle="Discover high-opportunity true crime cases backed by data, not guesswork."
-        icon={<Compass className="h-4.5 w-4.5" />}
-      />
-
-      <div className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-6 border-b border-slate-800/60">
-            {TABS.map((t, i) => (
-              <button
-                key={t}
-                className={`pb-3 text-sm font-medium ${
-                  i === 0 ? "border-b-2 border-blue-500 text-blue-400" : "text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <button className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:scale-[1.02] active:scale-[0.98]">
-            <Bookmark className="h-4 w-4" /> Save Search
-          </button>
+    <div className="mx-auto max-w-5xl px-8 py-12">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[40px] font-bold text-[#FAFAFA]">Discover</h1>
+          <p className="mt-2 text-lg text-[#A1A1AA]">Find your next documentary opportunity.</p>
         </div>
+        <div className="text-right">
+          <p className="text-xs text-[#71717A]">Current Channel</p>
+          <p className="text-sm font-semibold text-[#FAFAFA]">@{channelHandle}</p>
+        </div>
+      </div>
 
-        <div className="mt-5 flex gap-6">
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-400">
-                <span className="font-semibold text-white">128 Opportunities Found</span> · Sorted by{" "}
-                <span className="text-blue-400">Opportunity Score</span>
-              </p>
-              <div className="flex items-center gap-2">
-                <button className="rounded-lg border border-slate-800 p-2 text-slate-400 hover:text-slate-200">
-                  <LayoutList className="h-4 w-4" />
-                </button>
-                <button className="rounded-lg bg-blue-500 p-2 text-white">
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-                <select className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-                  <option>Sort by: Opportunity Score</option>
-                </select>
-              </div>
-            </div>
+      <div className="relative mt-10">
+        <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#71717A]" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search cases, victims, suspects, locations..."
+          className="h-14 w-full rounded-[18px] border border-white/[0.06] bg-[#18181B] pl-14 pr-5 text-[#FAFAFA] placeholder:text-[#71717A] transition-colors focus:border-blue-500/50 focus:outline-none"
+        />
+      </div>
 
-            <div className="mt-4 space-y-3">
-              {OPPORTUNITIES.map((o) => (
-                <OpportunityCard key={o.title} {...o} />
-              ))}
-            </div>
-          </div>
+      <div className="mt-14">
+        <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
+        <div className="mt-5 space-y-4">
+          {OPPORTUNITIES.map((o) => (
+            <OpportunityCard key={o.title} {...o} />
+          ))}
+        </div>
+      </div>
 
-          <FiltersPanel />
+      <div className="mt-14">
+        <h2 className="text-lg font-semibold text-[#FAFAFA]">Collections</h2>
+        <div className="mt-5 grid grid-cols-3 gap-4">
+          {COLLECTIONS.map((c) => (
+            <button
+              key={c}
+              className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-6 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+            >
+              <p className="font-semibold text-[#FAFAFA]">{c}</p>
+            </button>
+          ))}
         </div>
       </div>
     </div>

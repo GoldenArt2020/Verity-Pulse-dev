@@ -1,15 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { CaseVisual, type CaseCategory } from "./CaseVisual";
 
 interface ContinueItem {
   id: string;
   name: string;
+  category: CaseCategory;
   phase: string;
+  phaseColor: string;
   progress: number;
   lastEdited: string;
-  imageUrl: string;
   href: string;
 }
 
@@ -20,7 +21,7 @@ export function ContinueWorking({ items }: { items: ContinueItem[] }) {
 
   return (
     <div className="mt-16">
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
           Continue working
         </p>
@@ -32,35 +33,40 @@ export function ContinueWorking({ items }: { items: ContinueItem[] }) {
         </button>
       </div>
 
-      <div className="divide-y divide-slate-200">
+      <div className="mt-5 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((item) => (
           <button
             key={item.id}
             onClick={() => router.push(item.href)}
-            className="group flex w-full items-center gap-4 py-5 text-left transition-colors hover:bg-slate-50"
+            className="group flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 ring-slate-200 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
           >
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl">
-              <Image src={item.imageUrl} alt="" fill className="object-cover" />
+            <div className="relative h-28 w-full overflow-hidden">
+              <CaseVisual
+                category={item.category}
+                className="h-full w-full transition-transform duration-500 group-hover:scale-105"
+              />
+              <span
+                className="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-medium text-white"
+                style={{ backgroundColor: item.phaseColor }}
+              >
+                {item.phase}
+              </span>
             </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-slate-900">{item.name}</p>
-              <p className="text-sm text-slate-500">{item.phase}</p>
-            </div>
+            <div className="p-4">
+              <p className="truncate font-semibold text-slate-900">{item.name}</p>
+              <p className="mt-1 text-xs text-slate-400">{item.lastEdited}</p>
 
-            <div className="hidden w-40 items-center gap-2 sm:flex">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-slate-900"
-                  style={{ width: `${item.progress}%` }}
-                />
+              <div className="mt-3 flex items-center gap-2">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${item.progress}%`, background: item.phaseColor }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-slate-500">{item.progress}%</span>
               </div>
-              <span className="text-xs text-slate-400">{item.progress}%</span>
             </div>
-
-            <p className="hidden w-32 text-right text-xs text-slate-400 md:block">
-              {item.lastEdited}
-            </p>
           </button>
         ))}
       </div>
