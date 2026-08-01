@@ -42,8 +42,6 @@ export function ChannelOnboarding() {
       if (!res.ok) throw new Error(data.error ?? "Channel not found");
       setStepIndex(1);
 
-      // Steps 2-5 happen inside getOrBuildChannelDNA:
-      // fetch channel videos -> single batched Groq call -> cache in Supabase
       const channelSummary: YouTubeChannelSummary = {
         channelId: data.channelId,
         title: data.title,
@@ -56,6 +54,7 @@ export function ChannelOnboarding() {
         uploadsPlaylistId: data.uploadsPlaylistId ?? "",
       };
 
+      // Steps 2-5: fetch channel videos -> single batched Groq call -> cache in Supabase
       setStepIndex(2);
       await getOrBuildChannelDNA(channelSummary, user.id);
       setStepIndex(5);

@@ -8,11 +8,13 @@ export interface CaseRow {
   name: string;
   country: string | null;
   category: string | null;
+  tags: string[] | null;
   status: string;
   summary: string | null;
   opportunity_score: number | null;
   competition_score: number | null;
   coverage_score: number | null;
+  coverage_intelligence: Record<string, unknown> | null;
   last_updated: string | null;
 }
 

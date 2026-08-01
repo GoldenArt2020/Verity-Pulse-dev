@@ -1,7 +1,7 @@
+import { createClient } from "@/lib/supabase/client";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeChannelSummary, YouTubeVideoDetail } from "@/providers/youtube/types";
-import { createClient } from "@/lib/supabase/client";
 
 const REANALYSIS_INTERVAL_DAYS = 30; // never rebuild DNA automatically more than once/month
 
@@ -77,23 +77,24 @@ function parseDNAResponse(raw: string): Omit<ChannelDNA, "generatedAt"> {
 /**
  * Returns cached Creator DNA if it exists and is recent (<30 days old).
  * Only calls Groq (ONE batched call, not one per video) when:
- *   - no channel row exists yet for this youtube_channel_id + user, OR
+ *   - no channels row exists yet for this youtube_channel_id + user, OR
  *   - the cached DNA is older than REANALYSIS_INTERVAL_DAYS
+ * This is the single Groq-touching step in the whole channel-connect flow.
  */
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
-  userId: string
+  userProfileId: string
 ): Promise<ChannelDNA> {
   const supabase = createClient();
 
-  const { data: existingRows } = await supabase
+  const { data: existingChannel, error: fetchError } = await supabase
     .from("channels")
     .select("*")
     .eq("youtube_channel_id", channelSummary.channelId)
-    .eq("user_id", userId)
-    .limit(1);
+    .eq("user_profile_id", userProfileId)
+    .maybeSingle();
 
-  const existingChannel = existingRows?.[0];
+  if (fetchError) throw new Error(`Failed to check existing channel: ${fetchError.message}`);
 
   if (existingChannel?.channel_dna && existingChannel?.last_analyzed) {
     const ageDays =
@@ -129,13 +130,18 @@ export async function getOrBuildChannelDNA(
   };
 
   if (existingChannel) {
-    await supabase.from("channels").update(commonFields).eq("id", existingChannel.id);
+    const { error: updateError } = await supabase
+      .from("channels")
+      .update(commonFields)
+      .eq("id", existingChannel.id);
+    if (updateError) throw new Error(`Failed to update channel: ${updateError.message}`);
   } else {
-    await supabase.from("channels").insert({
+    const { error: insertError } = await supabase.from("channels").insert({
       youtube_channel_id: channelSummary.channelId,
-      user_id: userId,
+      user_profile_id: userProfileId,
       ...commonFields,
     });
+    if (insertError) throw new Error(`Failed to create channel: ${insertError.message}`);
   }
 
   return dna;
