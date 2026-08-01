@@ -48,7 +48,7 @@ export function TopIntelligenceSources({ caseId }: { caseId: string }) {
             const reliabilityValue = RELIABILITY_VALUE[s.reliability ?? "MEDIUM"];
             const filled = Math.round((reliabilityValue / 100) * 7);
             return (
-              
+              <a
                 key={s.id}
                 href={s.url}
                 target="_blank"
