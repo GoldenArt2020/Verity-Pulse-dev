@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrBuildChannelDNA } from "@/services/creatorDNA";
+import { generateRecommendations } from "@/services/recommendations";
+import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
+import { createClient } from "@/lib/supabase/server";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
 export async function POST(req: NextRequest) {
@@ -15,7 +18,28 @@ export async function POST(req: NextRequest) {
     }
 
     const dna = await getOrBuildChannelDNA(channelSummary, userId);
-    return NextResponse.json({ dna });
+
+    // Reuse the same video set for recommendations — no second YouTube fetch
+    const videos = await youtubeProvider.getChannelVideos(channelSummary.uploadsPlaylistId, 50);
+
+    const supabase = await createClient();
+    const { data: channelRow, error: channelError } = await supabase
+      .from("channels")
+      .select("id")
+      .eq("youtube_channel_id", channelSummary.channelId)
+      .eq("user_profile_id", userId)
+      .single();
+
+    if (channelError || !channelRow) {
+      // DNA already saved successfully — don't fail the whole request over
+      // recommendations. Return DNA, let the client show empty recs state.
+      console.error("Could not find channel row for recommendations:", channelError?.message);
+      return NextResponse.json({ dna, recommendations: null });
+    }
+
+    const recommendations = await generateRecommendations(channelRow.id, videos);
+
+    return NextResponse.json({ dna, recommendations });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to build Creator DNA";
     return NextResponse.json({ error: message }, { status: 500 });
