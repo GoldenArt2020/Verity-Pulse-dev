@@ -20,21 +20,24 @@ export function useCases() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    const supabase = createClient();
 
-    supabase
-      .from("cases")
-      .select("*")
-      .then(({ data, error }) => {
+    async function load() {
+      setLoading(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.from("cases").select("*");
+
         if (!active) return;
         if (error) setError(error.message);
         else setCases(data ?? []);
-      })
-      .finally(() => {
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load cases.");
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
 
+    load();
     return () => {
       active = false;
     };

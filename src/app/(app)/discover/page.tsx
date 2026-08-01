@@ -127,12 +127,12 @@ export default function DiscoverPage() {
               >
                 <OpportunityCard
                   id={c.id}
-                  score={c.opportunityScore ?? 0}
+                  score={c.opportunity_score ?? 0}
                   title={c.name}
                   location={c.country ?? ""}
                   category={c.category ?? ""}
                   description={c.summary ?? ""}
-                  competitionScore={c.competitionScore ?? 0}
+                  competitionScore={c.competition_score ?? 0}
                 />
               </motion.div>
             ))}

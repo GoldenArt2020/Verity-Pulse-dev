@@ -11,11 +11,6 @@ interface UseChannelDNAResult {
   error: string | null;
 }
 
-/**
- * Reads the cached Creator DNA for the currently connected channel
- * (channels.channel_dna in Supabase). Does NOT call Groq or YouTube —
- * that only happens during onboarding via getOrBuildChannelDNA.
- */
 export function useChannelDNA(): UseChannelDNAResult {
   const { channelId } = useChannelId();
   const [dna, setDna] = useState<ChannelDNA | null>(null);
@@ -31,32 +26,31 @@ export function useChannelDNA(): UseChannelDNAResult {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("channels")
+          .select("channel_dna")
+          .eq("youtube_channel_id", channelId)
+          .maybeSingle();
 
-    const supabase = createClient();
-
-    supabase
-      .from("channels")
-      .select("channel_dna")
-      .eq("youtube_channel_id", channelId)
-      .maybeSingle()
-      .then(({ data, error }) => {
         if (!active) return;
         if (error) {
           setError(error.message);
         } else {
           setDna((data?.channel_dna as unknown as ChannelDNA) ?? null);
         }
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load Creator DNA");
-      })
-      .finally(() => {
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load Creator DNA");
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
 
+    load();
     return () => {
       active = false;
     };

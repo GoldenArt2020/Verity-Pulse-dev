@@ -23,33 +23,33 @@ export function useCase(caseId: string) {
 
   useEffect(() => {
     if (!caseId) return;
-
     let active = true;
-    setLoading(true);
-    setError(null);
 
-    const supabase = createClient();
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("cases")
+          .select("*")
+          .eq("id", caseId)
+          .single();
 
-    supabase
-      .from("cases")
-      .select("*")
-      .eq("id", caseId)
-      .single()
-      .then(({ data, error }) => {
         if (!active) return;
         if (error) {
           setError(error.message);
         } else {
           setCaseData(data);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Failed to load case.");
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
 
+    load();
     return () => {
       active = false;
     };
