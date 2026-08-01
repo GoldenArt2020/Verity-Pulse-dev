@@ -45,8 +45,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // If Supabase has "Confirm email" enabled, session will be null here
-    // and the user needs to enter the OTP sent to their inbox.
     if (!data.session) {
       toast.success("Check your email for a confirmation code.");
       setStep("confirm");
@@ -159,3 +157,47 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 disabled={loading}
+                className="h-12 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-base font-semibold shadow-[0_0_0_1px_rgba(59,130,246,0.4)] transition-transform hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(59,130,246,0.45)] active:scale-[0.98] disabled:opacity-60"
+              >
+                {loading ? "Creating..." : "Create Workspace"}
+              </Button>
+            </form>
+          </>
+        ) : (
+          <>
+            <h1 className="font-display text-3xl font-bold text-white">
+              Confirm Your Email
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">We sent a code to {email}.</p>
+
+            <form className="mt-8 flex flex-col gap-4" onSubmit={handleConfirm}>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="Confirmation code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="h-12 rounded-[14px] border-slate-700 bg-slate-900/60 text-center text-lg tracking-widest text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
+              />
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="h-12 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-base font-semibold shadow-[0_0_0_1px_rgba(59,130,246,0.4)] transition-transform hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(59,130,246,0.45)] active:scale-[0.98] disabled:opacity-60"
+              >
+                {loading ? "Verifying..." : "Verify & Continue"}
+              </Button>
+            </form>
+          </>
+        )}
+
+        <p className="mt-6 text-center text-sm text-slate-400">
+          Already have an account?{" "}
+          <a href="/" className="text-blue-400 hover:text-blue-300">
+            Sign In
+          </a>
+        </p>
+      </motion.div>
+    </div>
+  );
+}
