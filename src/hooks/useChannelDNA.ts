@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { client } from "@/lib/dataClient";
+import { createClient } from "@/lib/supabase/client";
 import { useChannelId } from "@/hooks/useChannelId";
 import type { ChannelDNA } from "@/services/creatorDNA";
 
@@ -13,7 +13,7 @@ interface UseChannelDNAResult {
 
 /**
  * Reads the cached Creator DNA for the currently connected channel
- * (Channel.channelDNA in DynamoDB). Does NOT call Groq or YouTube —
+ * (channels.channel_dna in Supabase). Does NOT call Groq or YouTube —
  * that only happens during onboarding via getOrBuildChannelDNA.
  */
 export function useChannelDNA(): UseChannelDNAResult {
@@ -34,13 +34,20 @@ export function useChannelDNA(): UseChannelDNAResult {
     setLoading(true);
     setError(null);
 
-    client.models.Channel.list({
-      filter: { youtubeChannelId: { eq: channelId } },
-    })
-      .then((res) => {
+    const supabase = createClient();
+
+    supabase
+      .from("channels")
+      .select("channel_dna")
+      .eq("youtube_channel_id", channelId)
+      .maybeSingle()
+      .then(({ data, error }) => {
         if (!active) return;
-        const channel = res.data?.[0];
-        setDna((channel?.channelDNA as unknown as ChannelDNA) ?? null);
+        if (error) {
+          setError(error.message);
+        } else {
+          setDna((data?.channel_dna as unknown as ChannelDNA) ?? null);
+        }
       })
       .catch((err) => {
         if (!active) return;

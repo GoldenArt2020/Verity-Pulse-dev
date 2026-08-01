@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { client } from "@/lib/dataClient";
+import { createClient } from "@/lib/supabase/client";
 
 interface DashboardStats {
   totalCases: number;
@@ -24,25 +24,27 @@ export function useDashboardStats() {
     let active = true;
     setLoading(true);
 
-    client.models.Case.list()
-      .then(({ data, errors }) => {
+    const supabase = createClient();
+
+    supabase
+      .from("cases")
+      .select("opportunity_score")
+      .then(({ data, error }) => {
         if (!active) return;
-        if (errors) {
-          console.warn("Amplify not ready yet, using mock stats:", errors[0]?.message);
+        if (error) {
+          console.warn("Supabase not ready yet, using mock stats:", error.message);
           setStats(MOCK_STATS);
           return;
         }
-
-        const scores = data.map((c) => c.opportunityScore ?? 0);
-        const total = data.length;
+        const scores = (data ?? []).map((c) => c.opportunity_score ?? 0);
+        const total = scores.length;
         const high = scores.filter((s) => s >= 80).length;
         const avg = total > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / total) : 0;
-
         setStats({ totalCases: total, highOpportunityCases: high, avgOpportunityScore: avg });
       })
       .catch((err) => {
         if (!active) return;
-        console.warn("Amplify unreachable, using mock stats:", err instanceof Error ? err.message : err);
+        console.warn("Supabase unreachable, using mock stats:", err instanceof Error ? err.message : err);
         setStats(MOCK_STATS);
       })
       .finally(() => {

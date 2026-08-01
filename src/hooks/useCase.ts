@@ -1,13 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { client } from "@/lib/dataClient";
-import type { Schema } from "../../amplify/data/resource";
+import { createClient } from "@/lib/supabase/client";
 
-type CaseType = Schema["Case"]["type"];
+export interface CaseRow {
+  id: string;
+  name: string;
+  country: string | null;
+  category: string | null;
+  status: string;
+  summary: string | null;
+  opportunity_score: number | null;
+  competition_score: number | null;
+  coverage_score: number | null;
+  last_updated: string | null;
+}
 
 export function useCase(caseId: string) {
-  const [caseData, setCaseData] = useState<CaseType | null>(null);
+  const [caseData, setCaseData] = useState<CaseRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,12 +26,19 @@ export function useCase(caseId: string) {
 
     let active = true;
     setLoading(true);
+    setError(null);
 
-    client.models.Case.get({ id: caseId })
-      .then(({ data, errors }) => {
+    const supabase = createClient();
+
+    supabase
+      .from("cases")
+      .select("*")
+      .eq("id", caseId)
+      .single()
+      .then(({ data, error }) => {
         if (!active) return;
-        if (errors) {
-          setError(errors[0]?.message ?? "Failed to load case.");
+        if (error) {
+          setError(error.message);
         } else {
           setCaseData(data);
         }

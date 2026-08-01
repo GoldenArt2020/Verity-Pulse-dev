@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { AtSign, Check } from "lucide-react";
 import { useChannelId } from "@/hooks/useChannelId";
 import { useAuthUser } from "@/hooks/useAuthUser";
-import { ensureUserProfile } from "@/lib/ensureUserProfile";
 import { getOrBuildChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
@@ -43,12 +42,8 @@ export function ChannelOnboarding() {
       if (!res.ok) throw new Error(data.error ?? "Channel not found");
       setStepIndex(1);
 
-      // Ensure a UserProfile row exists before we link a Channel to it
-      const profile = await ensureUserProfile(user);
-      if (!profile) throw new Error("Could not create user profile");
-
       // Steps 2-5 happen inside getOrBuildChannelDNA:
-      // fetch channel videos -> single batched Groq call -> cache in DynamoDB
+      // fetch channel videos -> single batched Groq call -> cache in Supabase
       const channelSummary: YouTubeChannelSummary = {
         channelId: data.channelId,
         title: data.title,
@@ -62,7 +57,7 @@ export function ChannelOnboarding() {
       };
 
       setStepIndex(2);
-      await getOrBuildChannelDNA(channelSummary, profile.id);
+      await getOrBuildChannelDNA(channelSummary, user.id);
       setStepIndex(5);
 
       saveChannel(data.channelId, handle.trim());

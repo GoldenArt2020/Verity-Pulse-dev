@@ -4,11 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { signIn } from "aws-amplify/auth";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import "../../../lib/amplify-config";
+import { createClient } from "@/lib/supabase/client";
 
 export function LoginCard() {
   const router = useRouter();
@@ -25,18 +24,25 @@ export function LoginCard() {
     }
 
     setLoading(true);
-    try {
-      const { isSignedIn } = await signIn({ username: email, password });
-      if (isSignedIn) {
-        toast.success("Welcome back.");
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign in failed. Try again.";
-      toast.error(message);
-    } finally {
-      setLoading(false);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Welcome back.");
+      router.push("/dashboard");
+      router.refresh();
     }
+    setLoading(false);
+  }
+
+  async function handleGoogleSignIn() {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
   }
 
   return (
@@ -46,9 +52,7 @@ export function LoginCard() {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="glass-card w-full max-w-md rounded-[20px] p-10 shadow-[0_18px_48px_rgba(0,0,0,0.35)]"
     >
-      <h1 className="font-display text-3xl font-bold text-white">
-        Welcome Back
-      </h1>
+      <h1 className="font-display text-3xl font-bold text-white">Welcome Back</h1>
       <p className="mt-2 text-sm text-slate-400">Continue your investigation.</p>
 
       <form className="mt-8 flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -84,15 +88,10 @@ export function LoginCard() {
 
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 text-slate-400">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-blue-500"
-            />
+            <input type="checkbox" className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-blue-500" />
             Remember Me
           </label>
-          <a href="#" className="text-blue-400 hover:text-blue-300">
-            Forgot Password?
-          </a>
+          <a href="#" className="text-blue-400 hover:text-blue-300">Forgot Password?</a>
         </div>
 
         <Button
@@ -110,18 +109,17 @@ export function LoginCard() {
         <div className="h-px flex-1 bg-slate-700/60" />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <button className="flex h-12 items-center justify-center gap-3 rounded-xl bg-white text-sm font-semibold text-slate-900 transition-transform hover:scale-[1.01] active:scale-[0.98]">
-          <GoogleIcon />
-          Continue with Google
-        </button>
-      </div>
+      <button
+        onClick={handleGoogleSignIn}
+        className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-sm font-semibold text-slate-900 transition-transform hover:scale-[1.01] active:scale-[0.98]"
+      >
+        <GoogleIcon />
+        Continue with Google
+      </button>
 
       <p className="mt-6 text-center text-sm text-slate-400">
         Don&apos;t have an account?{" "}
-        <a href="/register" className="text-blue-400 hover:text-blue-300">
-          Sign Up
-        </a>
+        <a href="/register" className="text-blue-400 hover:text-blue-300">Create Workspace</a>
       </p>
     </motion.div>
   );

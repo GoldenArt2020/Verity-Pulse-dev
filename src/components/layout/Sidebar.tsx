@@ -18,7 +18,7 @@ export function Sidebar() {
   const { sidebarCollapsed: collapsed, toggleSidebar, mobileNavOpen, closeMobileNav } = useUIStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const displayName = user?.signInDetails?.loginId?.split("@")[0] ?? "Creator";
+  const displayName = user?.email?.split("@")[0] ?? "Creator";
 
   useEffect(() => {
     if (collapsed) setMenuOpen(false);

@@ -1,7 +1,7 @@
-import { client } from "@/lib/dataClient";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeChannelSummary, YouTubeVideoDetail } from "@/providers/youtube/types";
+import { createClient } from "@/lib/supabase/client";
 
 const REANALYSIS_INTERVAL_DAYS = 30; // never rebuild DNA automatically more than once/month
 
@@ -77,28 +77,29 @@ function parseDNAResponse(raw: string): Omit<ChannelDNA, "generatedAt"> {
 /**
  * Returns cached Creator DNA if it exists and is recent (<30 days old).
  * Only calls Groq (ONE batched call, not one per video) when:
- *   - no Channel record exists yet for this youtubeChannelId + user, OR
+ *   - no channel row exists yet for this youtube_channel_id + user, OR
  *   - the cached DNA is older than REANALYSIS_INTERVAL_DAYS
- * This is the single Groq-touching step in the whole channel-connect flow.
  */
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
-  userProfileId: string
+  userId: string
 ): Promise<ChannelDNA> {
-  const existing = await client.models.Channel.list({
-    filter: {
-      youtubeChannelId: { eq: channelSummary.channelId },
-      userProfileId: { eq: userProfileId },
-    },
-  });
+  const supabase = createClient();
 
-  const existingChannel = existing.data?.[0];
+  const { data: existingRows } = await supabase
+    .from("channels")
+    .select("*")
+    .eq("youtube_channel_id", channelSummary.channelId)
+    .eq("user_id", userId)
+    .limit(1);
 
-  if (existingChannel?.channelDNA && existingChannel?.lastAnalyzed) {
+  const existingChannel = existingRows?.[0];
+
+  if (existingChannel?.channel_dna && existingChannel?.last_analyzed) {
     const ageDays =
-      (Date.now() - new Date(existingChannel.lastAnalyzed).getTime()) / (1000 * 60 * 60 * 24);
+      (Date.now() - new Date(existingChannel.last_analyzed).getTime()) / (1000 * 60 * 60 * 24);
     if (ageDays < REANALYSIS_INTERVAL_DAYS) {
-      return existingChannel.channelDNA as unknown as ChannelDNA;
+      return existingChannel.channel_dna as unknown as ChannelDNA;
     }
   }
 
@@ -119,20 +120,20 @@ export async function getOrBuildChannelDNA(
   const dna: ChannelDNA = { ...parsed, generatedAt: new Date().toISOString() };
 
   const commonFields = {
-    channelName: channelSummary.title,
-    subscriberCount: channelSummary.subscriberCount,
-    videoCount: channelSummary.videoCount,
-    viewCount: channelSummary.viewCount,
-    channelDNA: dna,
-    lastAnalyzed: new Date().toISOString(),
+    channel_name: channelSummary.title,
+    subscriber_count: channelSummary.subscriberCount,
+    video_count: channelSummary.videoCount,
+    view_count: channelSummary.viewCount,
+    channel_dna: dna,
+    last_analyzed: new Date().toISOString(),
   };
 
   if (existingChannel) {
-    await client.models.Channel.update({ id: existingChannel.id, ...commonFields });
+    await supabase.from("channels").update(commonFields).eq("id", existingChannel.id);
   } else {
-    await client.models.Channel.create({
-      youtubeChannelId: channelSummary.channelId,
-      userProfileId,
+    await supabase.from("channels").insert({
+      youtube_channel_id: channelSummary.channelId,
+      user_id: userId,
       ...commonFields,
     });
   }

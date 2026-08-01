@@ -1,31 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { client } from "@/lib/dataClient";
-import type { Schema } from "../../amplify/data/resource";
+import { createClient } from "@/lib/supabase/client";
 
-type CaseType = Schema["Case"]["type"];
+interface CaseRow {
+  id: string;
+  name: string;
+  country: string | null;
+  category: string | null;
+  opportunity_score: number | null;
+  competition_score: number | null;
+  summary: string | null;
+}
 
 export function useCases() {
-  const [cases, setCases] = useState<CaseType[]>([]);
+  const [cases, setCases] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    const supabase = createClient();
 
-    client.models.Case.list()
-      .then(({ data, errors }) => {
+    supabase
+      .from("cases")
+      .select("*")
+      .then(({ data, error }) => {
         if (!active) return;
-        if (errors) {
-          setError(errors[0]?.message ?? "Failed to load cases.");
-        } else {
-          setCases(data);
-        }
-      })
-      .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load cases.");
+        if (error) setError(error.message);
+        else setCases(data ?? []);
       })
       .finally(() => {
         if (active) setLoading(false);
