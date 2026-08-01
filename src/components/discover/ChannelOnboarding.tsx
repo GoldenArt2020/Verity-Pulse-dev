@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { AtSign, Check } from "lucide-react";
 import { useChannelId } from "@/hooks/useChannelId";
 import { useAuthUser } from "@/hooks/useAuthUser";
-import { getOrBuildChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
 const ANALYSIS_STEPS = [
@@ -36,7 +35,6 @@ export function ChannelOnboarding() {
     setStepIndex(0);
 
     try {
-      // Step 1 — Reading channel (real YouTube lookup)
       const res = await fetch(`/api/youtube/resolve-handle?handle=${encodeURIComponent(handle.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Channel not found");
@@ -54,9 +52,14 @@ export function ChannelOnboarding() {
         uploadsPlaylistId: data.uploadsPlaylistId ?? "",
       };
 
-      // Steps 2-5: fetch channel videos -> single batched Groq call -> cache in Supabase
       setStepIndex(2);
-      await getOrBuildChannelDNA(channelSummary, user.id);
+      const dnaRes = await fetch("/api/channel/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelSummary, userId: user.id }),
+      });
+      const dnaData = await dnaRes.json();
+      if (!dnaRes.ok) throw new Error(dnaData.error ?? "Failed to build Creator DNA");
       setStepIndex(5);
 
       saveChannel(data.channelId, handle.trim());

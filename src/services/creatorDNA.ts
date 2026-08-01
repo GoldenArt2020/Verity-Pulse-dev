@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeChannelSummary, YouTubeVideoDetail } from "@/providers/youtube/types";
 
-const REANALYSIS_INTERVAL_DAYS = 30; // never rebuild DNA automatically more than once/month
+const REANALYSIS_INTERVAL_DAYS = 30;
 
 export interface ChannelDNA {
   channelStyle: {
@@ -74,18 +74,11 @@ function parseDNAResponse(raw: string): Omit<ChannelDNA, "generatedAt"> {
   return JSON.parse(cleaned);
 }
 
-/**
- * Returns cached Creator DNA if it exists and is recent (<30 days old).
- * Only calls Groq (ONE batched call, not one per video) when:
- *   - no channels row exists yet for this youtube_channel_id + user, OR
- *   - the cached DNA is older than REANALYSIS_INTERVAL_DAYS
- * This is the single Groq-touching step in the whole channel-connect flow.
- */
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
   userId: string
 ): Promise<ChannelDNA> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: existingChannel, error: fetchError } = await supabase
     .from("channels")
@@ -108,10 +101,8 @@ export async function getOrBuildChannelDNA(
     throw new Error("Groq is not configured — cannot generate Creator DNA");
   }
 
-  // Cheap: ~2 quota units for 50 videos (playlistItems + videos.list)
   const videos = await youtubeProvider.getChannelVideos(channelSummary.uploadsPlaylistId, 50);
 
-  // ONE Groq call for the whole channel — never per-video
   const raw = await groqProvider.generateText(buildPrompt(channelSummary, videos), {
     temperature: 0.3,
     maxTokens: 1200,
