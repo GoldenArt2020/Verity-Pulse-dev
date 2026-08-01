@@ -3,19 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 function parseChannelInput(raw: string): { type: "id" | "handle"; value: string } {
   const trimmed = raw.trim();
 
-  // Full URL: https://www.youtube.com/channel/UCxxxxxxxx
   const channelIdMatch = trimmed.match(/youtube\.com\/channel\/([a-zA-Z0-9_-]+)/);
   if (channelIdMatch) {
     return { type: "id", value: channelIdMatch[1] };
   }
 
-  // Full URL: https://www.youtube.com/@handle
   const handleUrlMatch = trimmed.match(/youtube\.com\/@([a-zA-Z0-9_.-]+)/);
   if (handleUrlMatch) {
     return { type: "handle", value: handleUrlMatch[1] };
   }
 
-  // Plain @handle or handle
   return { type: "handle", value: trimmed.replace(/^@/, "") };
 }
 
@@ -36,8 +33,8 @@ export async function GET(req: NextRequest) {
   try {
     const url =
       parsed.type === "id"
-        ? `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${parsed.value}&key=${apiKey}`
-        : `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${parsed.value}&key=${apiKey}`;
+        ? `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${parsed.value}&key=${apiKey}`
+        : `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle=${parsed.value}&key=${apiKey}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`YouTube request failed: ${res.status}`);
@@ -52,8 +49,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       channelId: item.id,
       title: item.snippet.title,
+      description: item.snippet.description ?? "",
       thumbnail: item.snippet.thumbnails?.default?.url,
       subscriberCount: item.statistics.subscriberCount,
+      videoCount: parseInt(item.statistics.videoCount ?? "0", 10),
+      viewCount: parseInt(item.statistics.viewCount ?? "0", 10),
+      uploadsPlaylistId: item.contentDetails?.relatedPlaylists?.uploads ?? "",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to resolve handle";
