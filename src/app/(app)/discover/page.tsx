@@ -10,6 +10,7 @@ import { RecommendedForYou } from "@/components/discover/RecommendedForYou";
 import { SkeletonCard } from "@/components/discover/SkeletonCard";
 import { useChannelId } from "@/hooks/useChannelId";
 import { useCases } from "@/hooks/useCases";
+import { useCaseNavigation } from "@/hooks/useCaseNavigation";
 
 const COLLECTIONS = [
   "Missing Persons",
@@ -29,9 +30,16 @@ export default function DiscoverPage() {
   const [query, setQuery] = useState("");
   const { channelId, channelHandle } = useChannelId();
   const { cases, loading, error } = useCases();
+  const { goToCase, navigatingTo, error: navError } = useCaseNavigation();
 
   if (!channelId) {
     return <ChannelOnboarding />;
+  }
+
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim()) return;
+    goToCase(query.trim());
   }
 
   return (
@@ -53,7 +61,8 @@ export default function DiscoverPage() {
         </div>
       </motion.div>
 
-      <motion.div
+      <motion.form
+        onSubmit={handleSearchSubmit}
         variants={fadeUp}
         initial="hidden"
         animate="show"
@@ -65,9 +74,21 @@ export default function DiscoverPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search cases, victims, suspects, locations..."
-          className="h-14 w-full rounded-[18px] border border-white/[0.06] bg-[#18181B] pl-14 pr-5 text-[#FAFAFA] placeholder:text-[#71717A] transition-colors focus:border-blue-500/50 focus:outline-none"
+          disabled={!!navigatingTo}
+          className="h-14 w-full rounded-[18px] border border-white/[0.06] bg-[#18181B] pl-14 pr-32 text-[#FAFAFA] placeholder:text-[#71717A] transition-colors focus:border-blue-500/50 focus:outline-none disabled:opacity-60"
         />
-      </motion.div>
+        <button
+          type="submit"
+          disabled={!query.trim() || !!navigatingTo}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:opacity-40"
+        >
+          {navigatingTo ? "Opening..." : "Search"}
+        </button>
+      </motion.form>
+
+      {navError && (
+        <p className="mt-2 text-sm text-rose-400">{navError}</p>
+      )}
 
       <motion.div
         variants={fadeUp}
@@ -111,7 +132,9 @@ export default function DiscoverPage() {
 
           {!loading && !error && cases.length === 0 && (
             <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
-              <p className="text-sm text-[#A1A1AA]">No opportunities yet.</p>
+              <p className="text-sm text-[#A1A1AA]">
+                No opportunities yet. Search for a case above to get started.
+              </p>
             </div>
           )}
 

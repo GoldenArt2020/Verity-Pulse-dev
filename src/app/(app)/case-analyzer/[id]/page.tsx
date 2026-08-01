@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
+import { runCaseResearch } from "@/services/caseResearch";
 import { CaseHeader } from "@/components/case-intelligence/CaseHeader";
 import { CaseTabs } from "@/components/case-intelligence/CaseTabs";
 import { CaseTimeline } from "@/components/case-intelligence/CaseTimeline";
@@ -22,6 +24,29 @@ export default function CaseIntelligencePage() {
   const params = useParams();
   const caseId = params?.id as string;
   const { caseData, loading, error } = useCase(caseId);
+
+  const [researching, setResearching] = useState(false);
+  const [researchError, setResearchError] = useState<string | null>(null);
+  const [researchDone, setResearchDone] = useState(false);
+
+  // A "stub" case has no summary yet — meaning it was just created via
+  // getOrCreateCase and hasn't been researched. Trigger research once,
+  // the first time this page sees a stub.
+  const isStub = !loading && !!caseData && caseData.summary === null;
+
+  useEffect(() => {
+    if (!isStub || researching || researchDone || !caseData) return;
+
+    setResearching(true);
+    setResearchError(null);
+
+    runCaseResearch(caseData.id, caseData.name)
+      .then(() => setResearchDone(true))
+      .catch((err) => {
+        setResearchError(err instanceof Error ? err.message : "Research failed");
+      })
+      .finally(() => setResearching(false));
+  }, [isStub, researching, researchDone, caseData]);
 
   return (
     <div>
@@ -53,24 +78,46 @@ export default function CaseIntelligencePage() {
         </div>
       )}
 
-      {!loading && !error && caseData && (
+      {!loading && !error && caseData && isStub && !researchDone && (
+        <div className="flex flex-col items-center justify-center gap-4 p-16 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+          <div>
+            <p className="text-lg font-semibold text-white">Researching {caseData.name}</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Gathering sources, YouTube coverage, and building an editorial recommendation.
+              This usually takes under a minute.
+            </p>
+          </div>
+          {researchError && (
+            <p className="mt-2 text-sm text-rose-400">{researchError}</p>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && caseData && (!isStub || researchDone) && (
         <div className="grid grid-cols-[1fr_340px] gap-4 p-6">
           <div className="space-y-4">
             <CaseHeader caseData={caseData} />
             <CaseTabs />
-            <CaseTimeline />
+            <CaseTimeline caseId={caseData.id} />
+
             <div className="grid grid-cols-2 gap-4">
-              <KeyDocuments />
-              <TopIntelligenceSources />
+              <KeyDocuments caseId={caseData.id} />
+              <TopIntelligenceSources caseId={caseData.id} />
             </div>
+
             <ResearchStatusBar />
+
             <div className="grid grid-cols-2 gap-4">
-              <CoverageMap />
-              <AngleSaturationTable />
+              <CoverageMap caseId={caseData.id} />
+              <AngleSaturationTable caseId={caseData.id} />
             </div>
-            <EditorialFeedback />
-            <UntappedAngles />
+
+            <EditorialFeedback caseId={caseData.id} />
+
+            <UntappedAngles caseId={caseData.id} />
           </div>
+
           <div className="space-y-4">
             <QuickIntelligence />
             <NarrativeGapsFound />
