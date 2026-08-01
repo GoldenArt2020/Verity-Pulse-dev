@@ -1,21 +1,9 @@
 "use client";
 
 import { Share2, Bookmark, Sparkles, ChevronDown } from "lucide-react";
-import type { Schema } from "../../../amplify/data/resource";
+import type { CaseRow } from "@/hooks/useCase";
 
-type CaseType = Schema["Case"]["type"];
-
-const TAG_COLORS = [
-  "bg-blue-500/20 text-blue-400",
-  "bg-purple-500/20 text-purple-400",
-  "bg-slate-700 text-slate-300",
-];
-
-export function CaseHeader({ caseData }: { caseData: CaseType }) {
-  const tags = (caseData.tags ?? []).filter((t): t is string => !!t);
-  const visibleTags = tags.slice(0, 3);
-  const extraCount = tags.length - visibleTags.length;
-
+export function CaseHeader({ caseData }: { caseData: CaseRow }) {
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
       <div className="flex items-start gap-5">
@@ -35,23 +23,6 @@ export function CaseHeader({ caseData }: { caseData: CaseType }) {
           )}
           {caseData.summary && (
             <p className="mt-2 max-w-2xl text-sm text-slate-400">{caseData.summary}</p>
-          )}
-          {tags.length > 0 && (
-            <div className="mt-3 flex gap-2">
-              {visibleTags.map((tag, i) => (
-                <span
-                  key={tag}
-                  className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${TAG_COLORS[i % TAG_COLORS.length]}`}
-                >
-                  {tag}
-                </span>
-              ))}
-              {extraCount > 0 && (
-                <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-                  +{extraCount}
-                </span>
-              )}
-            </div>
           )}
         </div>
 
@@ -82,12 +53,12 @@ export function CaseHeader({ caseData }: { caseData: CaseType }) {
                 stroke="#10B981"
                 strokeWidth="3"
                 strokeDasharray="97.4"
-                strokeDashoffset={97.4 * (1 - (caseData.opportunityScore ?? 0) / 100)}
+                strokeDashoffset={97.4 * (1 - (caseData.opportunity_score ?? 0) / 100)}
                 strokeLinecap="round"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
-              {caseData.opportunityScore ?? "—"}
+              {caseData.opportunity_score ?? "—"}
             </span>
           </div>
         </div>
@@ -95,14 +66,14 @@ export function CaseHeader({ caseData }: { caseData: CaseType }) {
         <div className="text-center">
           <p className="text-[11px] text-slate-500">YouTube Coverage</p>
           <p className="mt-1 text-xl font-semibold text-white">
-            {caseData.coverageScore != null ? `${caseData.coverageScore}/10` : "—"}
+            {caseData.coverage_score != null ? `${caseData.coverage_score}/10` : "—"}
           </p>
         </div>
 
         <div className="text-center">
           <p className="text-[11px] text-slate-500">Competition Score</p>
           <p className="mt-1 text-xl font-semibold text-white">
-            {caseData.competitionScore ?? "—"}{" "}
+            {caseData.competition_score ?? "—"}{" "}
             <span className="text-[11px] font-normal text-slate-500">/100</span>
           </p>
         </div>

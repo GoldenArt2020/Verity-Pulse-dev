@@ -58,24 +58,24 @@ export function AnalyzerHeader({ caseId }: { caseId?: string }) {
               <circle
                 cx="18" cy="18" r="15.5" fill="none" stroke="#10B981" strokeWidth="3"
                 strokeDasharray="97.4"
-                strokeDashoffset={97.4 * (1 - (caseData.opportunityScore ?? 0) / 100)}
+                strokeDashoffset={97.4 * (1 - (caseData.opportunity_score ?? 0) / 100)}
                 strokeLinecap="round"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
-              {caseData.opportunityScore ?? "—"}
+              {caseData.opportunity_score ?? "—"}
             </span>
           </div>
         </div>
 
         <div className="text-center">
           <p className="text-[11px] text-slate-500">Competition Score</p>
-          <p className="mt-1 text-xl font-semibold text-white">{caseData.competitionScore ?? "—"} <span className="text-[11px] font-normal text-slate-500">/100</span></p>
+          <p className="mt-1 text-xl font-semibold text-white">{caseData.competition_score ?? "—"} <span className="text-[11px] font-normal text-slate-500">/100</span></p>
         </div>
 
         <div className="text-center">
           <p className="text-[11px] text-slate-500">Coverage Score</p>
-          <p className="mt-1 text-xl font-semibold text-white">{caseData.coverageScore ?? "—"}</p>
+          <p className="mt-1 text-xl font-semibold text-white">{caseData.coverage_score ?? "—"}</p>
         </div>
 
         <div className="text-center">
