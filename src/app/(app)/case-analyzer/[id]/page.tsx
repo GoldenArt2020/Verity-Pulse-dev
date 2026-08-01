@@ -58,25 +58,19 @@ export default function CaseIntelligencePage() {
           <div className="space-y-4">
             <CaseHeader caseData={caseData} />
             <CaseTabs />
-            <CaseTimeline caseId={caseData.id} />
-
+            <CaseTimeline />
             <div className="grid grid-cols-2 gap-4">
-              <KeyDocuments caseId={caseData.id} />
-              <TopIntelligenceSources caseId={caseData.id} />
+              <KeyDocuments />
+              <TopIntelligenceSources />
             </div>
-
             <ResearchStatusBar />
-
             <div className="grid grid-cols-2 gap-4">
-              <CoverageMap caseId={caseData.id} />
-              <AngleSaturationTable caseId={caseData.id} />
+              <CoverageMap />
+              <AngleSaturationTable />
             </div>
-
-            <EditorialFeedback caseId={caseData.id} />
-
-            <UntappedAngles caseId={caseData.id} />
+            <EditorialFeedback />
+            <UntappedAngles />
           </div>
-
           <div className="space-y-4">
             <QuickIntelligence />
             <NarrativeGapsFound />
