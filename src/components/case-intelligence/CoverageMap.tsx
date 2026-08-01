@@ -2,7 +2,7 @@
 
 import { COVERAGE_MAP } from "@/constants/coverageIntelligence";
 
-export function CoverageMap() {
+export function CoverageMap({ caseId }: { caseId?: string }) {
   return (
     <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-6">
       <h3 className="text-lg font-semibold text-[#FAFAFA]">Coverage Map</h3>

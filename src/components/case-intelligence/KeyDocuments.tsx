@@ -15,7 +15,7 @@ const TYPE_COLOR: Record<string, string> = {
   DOCX: "bg-blue-500/20 text-blue-400",
 };
 
-export function KeyDocuments() {
+export function KeyDocuments({ caseId }: { caseId?: string }) {
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
       <div className="flex items-center justify-between">

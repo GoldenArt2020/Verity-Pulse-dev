@@ -2,7 +2,7 @@
 
 import { ANGLE_SATURATION } from "@/constants/coverageIntelligence";
 
-export function AngleSaturationTable() {
+export function AngleSaturationTable({ caseId }: { caseId?: string }) {
   return (
     <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-6">
       <h3 className="text-lg font-semibold text-[#FAFAFA]">Angle Saturation</h3>

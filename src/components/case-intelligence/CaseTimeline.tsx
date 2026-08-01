@@ -10,7 +10,10 @@ const EVENTS = [
   { date: "Early 2021", title: "Cold Case Unit", desc: "Case moved to Operation Kagal (Cold Case Murder Team).", color: "bg-rose-500" },
 ];
 
-export function CaseTimeline() {
+// TODO: caseId is accepted but not yet used — real event extraction from
+// research data (Tavily sources / timeline_events table) is a future feature.
+// Currently always renders the same hardcoded example timeline regardless of case.
+export function CaseTimeline({ caseId }: { caseId?: string }) {
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
       <div className="flex items-center justify-between">

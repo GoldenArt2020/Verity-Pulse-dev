@@ -2,7 +2,7 @@
 
 import { EDITORIAL_FEEDBACK } from "@/constants/coverageIntelligence";
 
-export function EditorialFeedback() {
+export function EditorialFeedback({ caseId }: { caseId?: string }) {
   return (
     <div className="rounded-[18px] border border-blue-500/20 bg-blue-500/[0.03] p-6">
       <h3 className="text-sm font-semibold text-blue-400">Verity Editorial Feedback</h3>

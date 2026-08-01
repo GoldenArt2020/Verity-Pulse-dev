@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { UNTAPPED_ANGLES } from "@/constants/coverageIntelligence";
 
-export function UntappedAngles() {
+export function UntappedAngles({ caseId }: { caseId?: string }) {
   return (
     <div>
       <h2 className="text-lg font-semibold text-[#FAFAFA]">Untapped Angles</h2>
