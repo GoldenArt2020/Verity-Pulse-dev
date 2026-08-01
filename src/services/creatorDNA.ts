@@ -83,7 +83,7 @@ function parseDNAResponse(raw: string): Omit<ChannelDNA, "generatedAt"> {
  */
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
-  userProfileId: string
+  userId: string
 ): Promise<ChannelDNA> {
   const supabase = createClient();
 
@@ -91,7 +91,7 @@ export async function getOrBuildChannelDNA(
     .from("channels")
     .select("*")
     .eq("youtube_channel_id", channelSummary.channelId)
-    .eq("user_profile_id", userProfileId)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (fetchError) throw new Error(`Failed to check existing channel: ${fetchError.message}`);
@@ -138,7 +138,7 @@ export async function getOrBuildChannelDNA(
   } else {
     const { error: insertError } = await supabase.from("channels").insert({
       youtube_channel_id: channelSummary.channelId,
-      user_profile_id: userProfileId,
+      user_id: userId,
       ...commonFields,
     });
     if (insertError) throw new Error(`Failed to create channel: ${insertError.message}`);
