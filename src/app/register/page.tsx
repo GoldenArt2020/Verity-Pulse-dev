@@ -4,11 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
-import { signUp, confirmSignUp, autoSignIn } from "aws-amplify/auth";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import "../../../lib/amplify-config";
+import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -32,26 +31,32 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    try {
-      const { nextStep } = await signUp({
-        username: email,
-        password,
-        options: { userAttributes: { email, name }, autoSignIn: true },
-      });
+    const supabase = createClient();
 
-      if (nextStep.signUpStep === "CONFIRM_SIGN_UP") {
-        toast.success("Check your email for a confirmation code.");
-        setStep("confirm");
-      } else if (nextStep.signUpStep === "DONE") {
-        toast.success("Account created.");
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign up failed. Try again.";
-      toast.error(message);
-    } finally {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+
+    if (error) {
+      toast.error(error.message);
       setLoading(false);
+      return;
     }
+
+    // If Supabase has "Confirm email" enabled, session will be null here
+    // and the user needs to enter the OTP sent to their inbox.
+    if (!data.session) {
+      toast.success("Check your email for a confirmation code.");
+      setStep("confirm");
+    } else {
+      toast.success("Account created.");
+      router.push("/dashboard");
+      router.refresh();
+    }
+
+    setLoading(false);
   }
 
   async function handleConfirm(e: React.FormEvent) {
@@ -62,25 +67,23 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    try {
-      const { nextStep } = await confirmSignUp({ username: email, confirmationCode: code });
+    const supabase = createClient();
 
-      if (nextStep.signUpStep === "COMPLETE_AUTO_SIGN_IN") {
-        const { isSignedIn } = await autoSignIn();
-        if (isSignedIn) {
-          toast.success("Welcome to VerityPulse.");
-          router.push("/dashboard");
-          return;
-        }
-      }
-      toast.success("Account confirmed. Please sign in.");
-      router.push("/");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Confirmation failed. Try again.";
-      toast.error(message);
-    } finally {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: "signup",
+    });
+
+    if (error) {
+      toast.error(error.message);
       setLoading(false);
+      return;
     }
+
+    toast.success("Welcome to VerityPulse.");
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (
@@ -156,47 +159,3 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="h-12 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-base font-semibold shadow-[0_0_0_1px_rgba(59,130,246,0.4)] transition-transform hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(59,130,246,0.45)] active:scale-[0.98] disabled:opacity-60"
-              >
-                {loading ? "Creating..." : "Create Workspace"}
-              </Button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 className="font-display text-3xl font-bold text-white">
-              Confirm Your Email
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">We sent a code to {email}.</p>
-
-            <form className="mt-8 flex flex-col gap-4" onSubmit={handleConfirm}>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="Confirmation code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className="h-12 rounded-[14px] border-slate-700 bg-slate-900/60 text-center text-lg tracking-widest text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
-              />
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="h-12 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-base font-semibold shadow-[0_0_0_1px_rgba(59,130,246,0.4)] transition-transform hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(59,130,246,0.45)] active:scale-[0.98] disabled:opacity-60"
-              >
-                {loading ? "Verifying..." : "Verify & Continue"}
-              </Button>
-            </form>
-          </>
-        )}
-
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Already have an account?{" "}
-          <a href="/" className="text-blue-400 hover:text-blue-300">
-            Sign In
-          </a>
-        </p>
-      </motion.div>
-    </div>
-  );
-}
