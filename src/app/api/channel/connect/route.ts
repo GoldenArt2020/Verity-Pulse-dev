@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
 
     const dna = await getOrBuildChannelDNA(channelSummary, userId);
 
-    // Reuse the same video set for recommendations — no second YouTube fetch
     const videos = await youtubeProvider.getChannelVideos(channelSummary.uploadsPlaylistId, 50);
 
     const supabase = await createClient();
@@ -27,12 +26,10 @@ export async function POST(req: NextRequest) {
       .from("channels")
       .select("id")
       .eq("youtube_channel_id", channelSummary.channelId)
-      .eq("user_profile_id", userId)
+      .eq("user_id", userId)
       .single();
 
     if (channelError || !channelRow) {
-      // DNA already saved successfully — don't fail the whole request over
-      // recommendations. Return DNA, let the client show empty recs state.
       console.error("Could not find channel row for recommendations:", channelError?.message);
       return NextResponse.json({ dna, recommendations: null });
     }
