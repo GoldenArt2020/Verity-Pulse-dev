@@ -1,4 +1,5 @@
-import { Search, FileQuestion, Scale, AlertTriangle, MapPin } from "lucide-react";
+import { SCENES } from "@/lib/illustrations/sceneLibrary";
+import { selectScene } from "@/lib/illustrations/selectScene";
 
 export type CaseCategory =
   | "missing-person"
@@ -7,45 +8,22 @@ export type CaseCategory =
   | "cold-case"
   | "general";
 
-const CATEGORY_CONFIG: Record<CaseCategory, { icon: typeof Search }> = {
-  "missing-person": { icon: Search },
-  "unsolved-murder": { icon: FileQuestion },
-  "court-case": { icon: Scale },
-  "cold-case": { icon: AlertTriangle },
-  "general": { icon: MapPin },
-};
-
 export function CaseVisual({
   category = "general",
-  imageUrl,
+  description,
   className = "",
 }: {
   category?: CaseCategory;
-  imageUrl?: string;
+  /** Pass the case's real researched description/summary so the illustration matches its content */
+  description?: string;
   className?: string;
 }) {
-  const { icon: Icon } = CATEGORY_CONFIG[category];
-
-  if (imageUrl) {
-    return (
-      <div className={`relative overflow-hidden bg-slate-900 ${className}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
-      </div>
-    );
-  }
+  const sceneKey = selectScene({ category, description });
+  const Scene = SCENES[sceneKey];
 
   return (
-    <div
-      className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 via-slate-900 to-black ${className}`}
-    >
-      <div className="absolute inset-0 opacity-[0.03] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:16px_16px]" />
-      <Icon className="h-16 w-16 text-slate-600" strokeWidth={1.25} />
+    <div className={`relative overflow-hidden ${className}`}>
+      <Scene />
     </div>
   );
 }
