@@ -43,6 +43,7 @@ export function ContinueWorking({ items }: { items: ContinueItem[] }) {
           >
             <div className="relative h-28 w-full overflow-hidden">
               <CaseVisual
+                caseId={item.id}
                 category={item.category}
                 description={item.description}
                 className="h-full w-full transition-transform duration-500 group-hover:scale-105"

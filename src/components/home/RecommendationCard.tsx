@@ -41,8 +41,10 @@ export function RecommendationCard({
     >
       <div className="relative h-56 w-full overflow-hidden sm:h-64">
         <CaseVisual
+          caseId={caseId}
           category={category}
           description={description}
+          allowVideo={true}
           className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.02]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/10 to-transparent" />
