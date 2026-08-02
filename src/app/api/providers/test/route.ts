@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { youtubeProvider } from "@/providers/youtube";
+import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
+import { withRotatingKey } from "@/lib/keyRotation";
 
 export async function GET() {
   const results: Record<string, unknown> = {};
@@ -12,32 +13,48 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
-        messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
-        max_tokens: 5,
-      }),
+    const data = await withRotatingKey("GROQ", async (apiKey) => {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+          max_tokens: 5,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const error = new Error("Groq test call failed") as Error & { status?: number };
+        error.status = res.status;
+        throw error;
+      }
+      return json;
     });
-    const data = await res.json();
-    results.groq = res.ok ? { ok: true, reply: data.choices?.[0]?.message?.content } : { ok: false, error: data };
+    results.groq = { ok: true, reply: data.choices?.[0]?.message?.content };
   } catch (err) {
     results.groq = { ok: false, error: err instanceof Error ? err.message : "failed" };
   }
 
   try {
-    const res = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: "test", max_results: 1 }),
+    const data = await withRotatingKey("TAVILY", async (apiKey) => {
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, query: "test", max_results: 1 }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const error = new Error("Tavily test call failed") as Error & { status?: number };
+        error.status = res.status;
+        throw error;
+      }
+      return json;
     });
-    const data = await res.json();
-    results.tavily = res.ok ? { ok: true, resultCount: data.results?.length } : { ok: false, error: data };
+    results.tavily = { ok: true, resultCount: data.results?.length };
   } catch (err) {
     results.tavily = { ok: false, error: err instanceof Error ? err.message : "failed" };
   }

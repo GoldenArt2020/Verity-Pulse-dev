@@ -1,37 +1,39 @@
 import type { AIProvider, AIGenerateOptions } from "./types";
+import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 async function callGroq(prompt: string, options?: AIGenerateOptions): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("Groq API key not configured");
+  return withRotatingKey("GROQ", async (apiKey) => {
+    const res = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: options?.temperature ?? 0.4,
+        max_tokens: options?.maxTokens ?? 1024,
+      }),
+    });
 
-  const res = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: options?.temperature ?? 0.4,
-      max_tokens: options?.maxTokens ?? 1024,
-    }),
+    if (!res.ok) {
+      const error = new Error(`Groq request failed: ${res.status} ${res.statusText}`) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? "";
   });
-
-  if (!res.ok) {
-    throw new Error(`Groq request failed: ${res.status} ${res.statusText}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
 }
 
 export const groqProvider: AIProvider = {
   name: "groq",
-  isConfigured: () => Boolean(process.env.GROQ_API_KEY),
+  isConfigured: () => hasAnyKey("GROQ"),
 
   async summarizeCase(rawText, options) {
     const prompt = `Summarize the following true crime case research into a concise, factual intelligence briefing (max 300 words). Do not speculate beyond what is stated. Write like an investigative briefing, not a Wikipedia article.\n\nSOURCE MATERIAL:\n${rawText}`;

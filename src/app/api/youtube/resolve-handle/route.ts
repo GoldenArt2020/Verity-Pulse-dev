@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 
 function parseChannelInput(raw: string): { type: "id" | "handle"; value: string } {
   const trimmed = raw.trim();
@@ -23,38 +24,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "handle is required" }, { status: 400 });
   }
 
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) {
+  if (!youtubeProvider.isConfigured()) {
     return NextResponse.json({ error: "YouTube provider not configured" }, { status: 503 });
   }
 
   const parsed = parseChannelInput(input);
 
   try {
-    const url =
+    const item =
       parsed.type === "id"
-        ? `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${parsed.value}&key=${apiKey}`
-        : `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle=${parsed.value}&key=${apiKey}`;
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`YouTube request failed: ${res.status}`);
-
-    const data = await res.json();
-    const item = data.items?.[0];
+        ? await youtubeProvider.getChannelSummaryById(parsed.value)
+        : await youtubeProvider.resolveHandle(parsed.value);
 
     if (!item) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
     return NextResponse.json({
-      channelId: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description ?? "",
-      thumbnail: item.snippet.thumbnails?.default?.url,
-      subscriberCount: item.statistics.subscriberCount,
-      videoCount: parseInt(item.statistics.videoCount ?? "0", 10),
-      viewCount: parseInt(item.statistics.viewCount ?? "0", 10),
-      uploadsPlaylistId: item.contentDetails?.relatedPlaylists?.uploads ?? "",
+      channelId: item.channelId,
+      title: item.title,
+      description: item.description ?? "",
+      thumbnail: item.thumbnailUrl,
+      subscriberCount: item.subscriberCount,
+      videoCount: item.videoCount,
+      viewCount: item.viewCount,
+      uploadsPlaylistId: item.uploadsPlaylistId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to resolve handle";

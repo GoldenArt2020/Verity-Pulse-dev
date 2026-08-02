@@ -4,13 +4,20 @@ import type {
   YouTubeChannelSummary,
   YouTubeVideoDetail,
 } from "./types";
+import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
 const BASE_URL = "https://www.googleapis.com/youtube/v3";
 
-function getApiKey(): string {
-  const key = process.env.YOUTUBE_API_KEY;
-  if (!key) throw new Error("YouTube API key not configured");
-  return key;
+async function fetchYouTube(urlWithoutKey: (key: string) => string): Promise<any> {
+  return withRotatingKey("YOUTUBE", async (apiKey) => {
+    const res = await fetch(urlWithoutKey(apiKey));
+    if (!res.ok) {
+      const error = new Error(`YouTube request failed: ${res.status}`) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
+    return res.json();
+  });
 }
 
 function parseDuration(iso: string): number {
@@ -39,13 +46,12 @@ function mapChannelSummary(item: any): YouTubeChannelSummary {
 
 export const youtubeProvider = {
   name: "youtube",
-  isConfigured: () => Boolean(process.env.YOUTUBE_API_KEY),
+  isConfigured: () => hasAnyKey("YOUTUBE"),
 
   async getChannelStats(channelId: string): Promise<YouTubeChannelStats> {
-    const key = getApiKey();
-    const res = await fetch(`${BASE_URL}/channels?part=statistics,snippet&id=${channelId}&key=${key}`);
-    if (!res.ok) throw new Error(`YouTube channel request failed: ${res.status}`);
-    const data = await res.json();
+    const data = await fetchYouTube(
+      (key) => `${BASE_URL}/channels?part=statistics,snippet&id=${channelId}&key=${key}`
+    );
     const item = data.items?.[0];
     if (!item) throw new Error("Channel not found");
     return {
@@ -58,12 +64,10 @@ export const youtubeProvider = {
   },
 
   async searchVideos(query: string, maxResults = 20): Promise<YouTubeVideoStats[]> {
-    const key = getApiKey();
-    const res = await fetch(
-      `${BASE_URL}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&key=${key}`
+    const data = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&key=${key}`
     );
-    if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
-    const data = await res.json();
     return (data.items ?? []).map(
       (item: { id: { videoId: string }; snippet: { title: string; publishedAt: string } }) => ({
         videoId: item.id.videoId,
@@ -80,27 +84,26 @@ export const youtubeProvider = {
    * Used once, at channel-connect time, in ChannelOnboarding.
    */
   async resolveHandle(rawHandle: string): Promise<YouTubeChannelSummary | null> {
-    const key = getApiKey();
     const handle = rawHandle.trim().startsWith("@") ? rawHandle.trim() : `@${rawHandle.trim()}`;
 
-    const directUrl = `${BASE_URL}/channels?part=snippet,statistics,contentDetails&forHandle=${encodeURIComponent(
-      handle
-    )}&key=${key}`;
-    const direct = await fetch(directUrl);
-    if (!direct.ok) throw new Error(`YouTube resolveHandle failed: ${direct.status}`);
-    const directData = await direct.json();
+    const directData = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/channels?part=snippet,statistics,contentDetails&forHandle=${encodeURIComponent(
+          handle
+        )}&key=${key}`
+    );
 
     if (directData.items?.length) {
       return mapChannelSummary(directData.items[0]);
     }
 
     // Fallback only if forHandle misses — costs 100 units, use sparingly
-    const searchUrl = `${BASE_URL}/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(
-      rawHandle
-    )}&key=${key}`;
-    const search = await fetch(searchUrl);
-    if (!search.ok) throw new Error(`YouTube handle search failed: ${search.status}`);
-    const searchData = await search.json();
+    const searchData = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(
+          rawHandle
+        )}&key=${key}`
+    );
 
     const channelId = searchData.items?.[0]?.snippet?.channelId;
     if (!channelId) return null;
@@ -109,11 +112,10 @@ export const youtubeProvider = {
   },
 
   async getChannelSummaryById(channelId: string): Promise<YouTubeChannelSummary | null> {
-    const key = getApiKey();
-    const url = `${BASE_URL}/channels?part=snippet,statistics,contentDetails&id=${channelId}&key=${key}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`YouTube channel lookup failed: ${res.status}`);
-    const data = await res.json();
+    const data = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/channels?part=snippet,statistics,contentDetails&id=${channelId}&key=${key}`
+    );
     if (!data.items?.length) return null;
     return mapChannelSummary(data.items[0]);
   },
@@ -124,18 +126,17 @@ export const youtubeProvider = {
    * For limit=50 this is ~2 units total — cheap. Used once at channel-connect for Creator DNA.
    */
   async getChannelVideos(uploadsPlaylistId: string, limit = 50): Promise<YouTubeVideoDetail[]> {
-    const key = getApiKey();
     const videoIds: string[] = [];
     let pageToken: string | undefined;
 
     while (videoIds.length < limit) {
       const pageSize = Math.min(50, limit - videoIds.length);
-      const url = `${BASE_URL}/playlistItems?part=contentDetails&maxResults=${pageSize}&playlistId=${uploadsPlaylistId}&key=${key}${
-        pageToken ? `&pageToken=${pageToken}` : ""
-      }`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`YouTube playlistItems failed: ${res.status}`);
-      const data = await res.json();
+      const data = await fetchYouTube(
+        (key) =>
+          `${BASE_URL}/playlistItems?part=contentDetails&maxResults=${pageSize}&playlistId=${uploadsPlaylistId}&key=${key}${
+            pageToken ? `&pageToken=${pageToken}` : ""
+          }`
+      );
       const ids = (data.items ?? []).map((i: any) => i.contentDetails.videoId);
       videoIds.push(...ids);
 
@@ -152,12 +153,10 @@ export const youtubeProvider = {
 
     const allVideos: YouTubeVideoDetail[] = [];
     for (const chunk of chunks) {
-      const url = `${BASE_URL}/videos?part=snippet,statistics,contentDetails&id=${chunk.join(
-        ","
-      )}&key=${key}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`YouTube videos.list failed: ${res.status}`);
-      const data = await res.json();
+      const data = await fetchYouTube(
+        (key) =>
+          `${BASE_URL}/videos?part=snippet,statistics,contentDetails&id=${chunk.join(",")}&key=${key}`
+      );
       for (const item of data.items ?? []) {
         allVideos.push({
           videoId: item.id,
@@ -184,23 +183,19 @@ export const youtubeProvider = {
    * re-search the same case. Capped at 50 results per call.
    */
   async searchCaseVideos(query: string, maxResults = 50): Promise<YouTubeVideoDetail[]> {
-    const key = getApiKey();
-    const searchUrl = `${BASE_URL}/search?part=snippet&type=video&maxResults=${Math.min(
-      maxResults,
-      50
-    )}&q=${encodeURIComponent(query)}&key=${key}`;
-    const searchRes = await fetch(searchUrl);
-    if (!searchRes.ok) throw new Error(`YouTube case search failed: ${searchRes.status}`);
-    const searchData = await searchRes.json();
+    const searchData = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/search?part=snippet&type=video&maxResults=${Math.min(
+          maxResults,
+          50
+        )}&q=${encodeURIComponent(query)}&key=${key}`
+    );
     const ids = (searchData.items ?? []).map((i: any) => i.id.videoId).filter(Boolean);
     if (ids.length === 0) return [];
 
-    const detailsUrl = `${BASE_URL}/videos?part=snippet,statistics,contentDetails&id=${ids.join(
-      ","
-    )}&key=${key}`;
-    const detailsRes = await fetch(detailsUrl);
-    if (!detailsRes.ok) throw new Error(`YouTube video details failed: ${detailsRes.status}`);
-    const detailsData = await detailsRes.json();
+    const detailsData = await fetchYouTube(
+      (key) => `${BASE_URL}/videos?part=snippet,statistics,contentDetails&id=${ids.join(",")}&key=${key}`
+    );
 
     return (detailsData.items ?? []).map((item: any) => ({
       videoId: item.id,
