@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
+import type { ChannelDNA } from "@/services/creatorDNA";
 
 export interface Recommendation {
   title: string;
@@ -32,9 +33,9 @@ List the distinct real case/person names you can confidently identify (max 10). 
 }
 
 function buildRecommendationPrompt(topics: string[], searchContext: string): string {
-  return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's top-performing videos covered these cases: ${topics.join(", ")}.
+  return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's content focuses on: ${topics.join(", ")}.
 
-Based on the following search results about SIMILAR but DIFFERENT true crime cases (not the ones already covered), recommend up to 5 cases this creator should cover next.
+Based on the following search results about true crime cases matching this creator's focus, recommend up to 5 cases this creator should cover next.
 
 SEARCH RESULTS:
 ${searchContext}
@@ -60,48 +61,53 @@ function parseJSON<T>(raw: string): T {
 
 /**
  * Computes personalized case recommendations based on the channel's
- * top-performing videos. Two Groq calls total (topic extraction, then
- * recommendation writing) + one Tavily search — NOT per-video.
- * Called server-side only (from /api/channel/connect and the refresh
- * route), never directly from the browser.
+ * top-performing videos. If video-based topic extraction doesn't yield
+ * enough (e.g. too few videos, or Groq can't confidently identify
+ * specific cases), falls back to the channel's cached ChannelDNA
+ * (preferredSubjects, typicalHooks) instead — this means recommendations
+ * still work for brand-new or small channels, not just established ones
+ * with a large video history.
  */
 export async function generateRecommendations(
   channelId: string,
-  videos: YouTubeVideoDetail[]
+  videos: YouTubeVideoDetail[],
+  channelDNA?: ChannelDNA | null
 ): Promise<Recommendation[]> {
-  console.log("DEBUG videos.length:", videos.length);
-
   if (!groqProvider.isConfigured()) {
     throw new Error("Groq is not configured — cannot generate recommendations");
   }
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot generate recommendations");
   }
-  if (videos.length === 0) {
-    console.log("DEBUG: returning early, videos.length === 0");
-    return [];
+
+  let topics: string[] = [];
+
+  if (videos.length > 0) {
+    const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
+      temperature: 0.2,
+      maxTokens: 400,
+    });
+    const parsed = parseJSON<TopicExtraction>(topicRaw);
+    topics = parsed.topics;
   }
 
-  const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
-    temperature: 0.2,
-    maxTokens: 400,
-  });
-  console.log("DEBUG topicRaw:", topicRaw);
-
-  const { topics } = parseJSON<TopicExtraction>(topicRaw);
-  console.log("DEBUG topics:", topics);
+  // Fallback: not enough videos, or Groq couldn't confidently identify
+  // specific cases from them — use the channel's DNA profile instead.
+  if (topics.length === 0 && channelDNA) {
+    topics = [
+      ...channelDNA.channelStyle.preferredSubjects,
+      ...channelDNA.channelStyle.typicalHooks,
+    ];
+  }
 
   if (topics.length === 0) {
-    console.log("DEBUG: returning early, topics.length === 0");
     return [];
   }
 
-  const searchQuery = `true crime cases similar to ${topics.slice(0, 5).join(", ")}`;
+  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
   const searchResults = await tavilyProvider.search(searchQuery, 8);
-  console.log("DEBUG searchResults.length:", searchResults.length);
 
   if (searchResults.length === 0) {
-    console.log("DEBUG: returning early, searchResults.length === 0");
     return [];
   }
 
@@ -113,10 +119,7 @@ export async function generateRecommendations(
     temperature: 0.4,
     maxTokens: 800,
   });
-  console.log("DEBUG recRaw:", recRaw);
-
   const { recommendations } = parseJSON<{ recommendations: Recommendation[] }>(recRaw);
-  console.log("DEBUG final recommendations:", recommendations);
 
   const supabase = await createClient();
   const { error } = await supabase

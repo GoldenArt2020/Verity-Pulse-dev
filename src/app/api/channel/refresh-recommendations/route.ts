@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateRecommendations } from "@/services/recommendations";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { createClient } from "@/lib/supabase/server";
+import type { ChannelDNA } from "@/services/creatorDNA";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,13 +15,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createClient();
 
-    // TEMPORARY DEBUG — remove after diagnosing
-    const { data: userData } = await supabase.auth.getUser();
-    console.error("DEBUG auth user:", userData?.user?.id ?? "NO USER");
-
     const { data: channelRow, error: channelError } = await supabase
       .from("channels")
-      .select("id")
+      .select("id, channel_dna")
       .eq("youtube_channel_id", youtubeChannelId)
       .single();
 
@@ -34,7 +31,8 @@ export async function POST(req: NextRequest) {
     }
 
     const videos = await youtubeProvider.getChannelVideos(summary.uploadsPlaylistId, 50);
-    const recommendations = await generateRecommendations(channelRow.id, videos);
+    const channelDNA = channelRow.channel_dna as unknown as ChannelDNA | null;
+    const recommendations = await generateRecommendations(channelRow.id, videos, channelDNA);
 
     return NextResponse.json({ recommendations });
   } catch (err) {
