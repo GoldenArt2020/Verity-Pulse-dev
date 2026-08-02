@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
-import { runCaseResearch } from "@/services/caseResearch";
 import { CaseHeader } from "@/components/case-intelligence/CaseHeader";
 import { CaseTabs } from "@/components/case-intelligence/CaseTabs";
 import { CaseTimeline } from "@/components/case-intelligence/CaseTimeline";
@@ -40,8 +39,16 @@ export default function CaseIntelligencePage() {
     setResearching(true);
     setResearchError(null);
 
-    runCaseResearch(caseData.id, caseData.name)
-      .then(() => setResearchDone(true))
+    fetch("/api/case/research", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseId: caseData.id, caseName: caseData.name }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Research failed");
+        setResearchDone(true);
+      })
       .catch((err) => {
         setResearchError(err instanceof Error ? err.message : "Research failed");
       })

@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getOrCreateCase } from "@/services/caseResearch";
+import { getOrCreateCase } from "@/services/getOrCreateCase";
 
-/**
- * Shared click-handler logic for anything that links to a case by name
- * (RecommendedForYou, OpportunityCard, search results, etc.).
- * Ensures a Case row exists before navigating, so /case-analyzer/[id]
- * never lands on a nonexistent id.
- */
 export function useCaseNavigation() {
   const router = useRouter();
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
