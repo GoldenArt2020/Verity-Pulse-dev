@@ -10,7 +10,6 @@ interface BriefContext {
 }
 
 interface DailyBrief {
-  eyebrow: string;
   greeting: string;
   subline: string;
 }
@@ -28,7 +27,6 @@ export function useDailyBrief(ctx: BriefContext): DailyBrief {
 
     if (ctx.newOpportunityScore && ctx.newOpportunityScore >= 90) {
       return {
-        eyebrow: "Your daily brief",
         greeting: `${timeGreeting}, ${ctx.userName}.`,
         subline: "I found one opportunity that stands above everything else today.",
       };
@@ -36,14 +34,12 @@ export function useDailyBrief(ctx: BriefContext): DailyBrief {
 
     if (ctx.hasUnfinishedWork && ctx.unfinishedCaseName) {
       return {
-        eyebrow: "Your daily brief",
         greeting: "Welcome back.",
         subline: `${ctx.unfinishedCaseName} is ready whenever you are.`,
       };
     }
 
     return {
-      eyebrow: "Your daily brief",
       greeting: `${timeGreeting}, ${ctx.userName}.`,
       subline: "Ready to create something exceptional today?",
     };

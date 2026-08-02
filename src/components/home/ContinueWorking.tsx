@@ -7,6 +7,7 @@ interface ContinueItem {
   id: string;
   name: string;
   category: CaseCategory;
+  imageUrl?: string;
   phase: string;
   phaseColor: string;
   progress: number;
@@ -43,6 +44,7 @@ export function ContinueWorking({ items }: { items: ContinueItem[] }) {
             <div className="relative h-28 w-full overflow-hidden">
               <CaseVisual
                 category={item.category}
+                imageUrl={item.imageUrl}
                 className="h-full w-full transition-transform duration-500 group-hover:scale-105"
               />
               <span

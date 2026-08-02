@@ -17,12 +17,28 @@ const CATEGORY_CONFIG: Record<CaseCategory, { icon: typeof Search }> = {
 
 export function CaseVisual({
   category = "general",
+  imageUrl,
   className = "",
 }: {
   category?: CaseCategory;
+  imageUrl?: string;
   className?: string;
 }) {
   const { icon: Icon } = CATEGORY_CONFIG[category];
+
+  if (imageUrl) {
+    return (
+      <div className={`relative overflow-hidden bg-slate-900 ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
 
   return (
     <div
