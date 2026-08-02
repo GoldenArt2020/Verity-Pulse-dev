@@ -16,6 +16,7 @@ interface RecommendationCardProps {
   potentialViews: string;
   aiConfidence: number;
   caseId: string;
+  allowVideo?: boolean;
 }
 
 export function RecommendationCard({
@@ -29,6 +30,7 @@ export function RecommendationCard({
   potentialViews,
   aiConfidence,
   caseId,
+  allowVideo = false,
 }: RecommendationCardProps) {
   const router = useRouter();
 
@@ -44,7 +46,7 @@ export function RecommendationCard({
           caseId={caseId}
           category={category}
           description={description}
-          allowVideo={true}
+          allowVideo={allowVideo}
           className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.02]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/10 to-transparent" />

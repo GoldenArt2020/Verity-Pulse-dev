@@ -12,11 +12,11 @@ import { PROJECT_STATS } from "@/constants/projects";
 
 export default function ProjectsPage() {
   return (
-    <div>
-      <div className="flex items-center justify-between border-b border-slate-800/60 bg-[rgb(4,9,22)] px-8 py-4">
+    <div className="bg-background">
+      <div className="flex items-center justify-between border-b border-border bg-background px-8 py-4">
         <div>
-          <h1 className="font-display text-lg font-bold text-white">Projects</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="font-display text-lg font-bold text-foreground">Projects</h1>
+          <p className="text-xs text-muted-foreground">
             Organize complex investigations and content series into structured projects.
           </p>
         </div>

@@ -10,12 +10,12 @@ export function ProjectsOverviewDonut() {
   let cumulative = 0;
 
   return (
-    <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-      <h3 className="text-[13px] font-semibold text-white">Projects Overview</h3>
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <h3 className="text-[13px] font-semibold text-foreground">Projects Overview</h3>
 
       <div className="mt-3 flex items-center gap-4">
         <svg viewBox="0 0 100 100" className="h-28 w-28 shrink-0 -rotate-90">
-          <circle cx="50" cy="50" r={radius} fill="none" stroke="rgba(148,163,184,0.1)" strokeWidth="12" />
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--border)" strokeWidth="12" />
           {PROJECTS_OVERVIEW_DONUT.map((d) => {
             const dash = (d.value / total) * circumference;
             const el = (
@@ -41,8 +41,8 @@ export function ProjectsOverviewDonut() {
           {PROJECTS_OVERVIEW_DONUT.map((d) => (
             <div key={d.label} className="flex items-center gap-2 text-[11.5px]">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: d.color }} />
-              <span className="flex-1 text-slate-400">{d.label}</span>
-              <span className="font-medium text-slate-300">
+              <span className="flex-1 text-muted-foreground">{d.label}</span>
+              <span className="font-medium text-foreground/80">
                 {d.value} ({d.pct}%)
               </span>
             </div>
@@ -50,7 +50,7 @@ export function ProjectsOverviewDonut() {
         </div>
       </div>
 
-      <button className="mt-3 w-full text-center text-[12px] font-medium text-blue-400 hover:text-blue-300">
+      <button className="mt-3 w-full text-center text-[12px] font-medium text-brand hover:opacity-80">
         View Full Analytics →
       </button>
     </div>

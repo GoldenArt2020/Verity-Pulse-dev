@@ -6,11 +6,11 @@ export function TeamAvatarStack({ count, extra }: { count: number; extra?: numbe
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="-ml-2 h-7 w-7 rounded-full border-2 border-slate-900 bg-gradient-to-br from-slate-600 to-slate-700 first:ml-0"
+          className="-ml-2 h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-muted to-muted-foreground/20 first:ml-0"
         />
       ))}
       {extra ? (
-        <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-slate-900 bg-slate-800 text-[10px] font-semibold text-slate-300">
+        <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-semibold text-foreground/80">
           +{extra}
         </div>
       ) : null}

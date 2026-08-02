@@ -1,13 +1,13 @@
 "use client";
 
 import { useDailyBrief } from "@/hooks/useDailyBrief";
+import { useChannelId } from "@/hooks/useChannelId";
 import { RecommendationCard } from "@/components/home/RecommendationCard";
 import { ContinueWorking } from "@/components/home/ContinueWorking";
 
 const MOCK_RECOMMENDATION = {
   caseId: "andrew-gosden",
   category: "missing-person" as const,
-  imageUrl: "https://picsum.photos/seed/andrew-gosden/1200/800",
   title: "The Disappearance of Andrew Gosden",
   description:
     "High search momentum following renewed public interest while long-form competition remains unusually low.",
@@ -24,7 +24,6 @@ const MOCK_CONTINUE_WORKING = [
     id: "1",
     name: "Andrew Gosden",
     category: "missing-person" as const,
-    imageUrl: "https://picsum.photos/seed/andrew-gosden/400/300",
     phase: "Research",
     phaseColor: "#7C3AED",
     progress: 72,
@@ -35,7 +34,6 @@ const MOCK_CONTINUE_WORKING = [
     id: "2",
     name: "Jeremy Bamber",
     category: "court-case" as const,
-    imageUrl: "https://picsum.photos/seed/jeremy-bamber/400/300",
     phase: "Script",
     phaseColor: "#F97316",
     progress: 43,
@@ -46,7 +44,6 @@ const MOCK_CONTINUE_WORKING = [
     id: "3",
     name: "Ashley Dale",
     category: "unsolved-murder" as const,
-    imageUrl: "https://picsum.photos/seed/ashley-dale/400/300",
     phase: "Optimization",
     phaseColor: "#16A34A",
     progress: 91,
@@ -56,6 +53,8 @@ const MOCK_CONTINUE_WORKING = [
 ];
 
 export default function DashboardPage() {
+  const { channelId } = useChannelId();
+
   const brief = useDailyBrief({
     userName: "Creator",
     hasUnfinishedWork: true,
@@ -65,15 +64,15 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl px-8 pb-24 pt-20 sm:px-10">
-        <h1 className="font-display text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+        <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
           {brief.greeting}
         </h1>
-        <p className="mt-3 text-lg text-slate-500">{brief.subline}</p>
+        <p className="mt-3 text-lg text-muted-foreground">{brief.subline}</p>
 
         <div className="mt-14">
-          <RecommendationCard {...MOCK_RECOMMENDATION} />
+          <RecommendationCard {...MOCK_RECOMMENDATION} allowVideo={!!channelId} />
         </div>
 
         <ContinueWorking items={MOCK_CONTINUE_WORKING} />

@@ -17,8 +17,8 @@ export function ProjectsTabsBar() {
             onClick={() => setActiveTab(idx)}
             className={`rounded-xl px-3.5 py-2 text-[13px] font-medium transition-colors ${
               activeTab === idx
-                ? "bg-blue-500/15 text-blue-400"
-                : "text-slate-400 hover:bg-slate-800/50"
+                ? "bg-brand/10 text-brand"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             {tab.label} ({tab.count})
@@ -27,11 +27,11 @@ export function ProjectsTabsBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900/60 p-0.5">
+        <div className="flex items-center rounded-xl border border-border bg-muted/40 p-0.5">
           <button
             onClick={() => setView("board")}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium ${
-              view === "board" ? "bg-slate-800 text-white" : "text-slate-500"
+              view === "board" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
             }`}
           >
             <LayoutGrid className="h-3.5 w-3.5" /> Board
@@ -39,18 +39,18 @@ export function ProjectsTabsBar() {
           <button
             onClick={() => setView("list")}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium ${
-              view === "list" ? "bg-slate-800 text-white" : "text-slate-500"
+              view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
             }`}
           >
             <List className="h-3.5 w-3.5" /> List
           </button>
         </div>
 
-        <button className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-[12.5px] font-medium text-slate-300 hover:bg-slate-800/50">
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Filter <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+        <button className="flex items-center gap-1.5 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[12.5px] font-medium text-foreground/80 hover:bg-muted">
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Filter <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
 
-        <button className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-blue-600">
+        <button className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-brand-foreground hover:opacity-90">
           <Plus className="h-3.5 w-3.5" /> New Project
         </button>
       </div>
