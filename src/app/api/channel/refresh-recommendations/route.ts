@@ -13,6 +13,11 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
+
+    // TEMPORARY DEBUG — remove after diagnosing
+    const { data: userData } = await supabase.auth.getUser();
+    console.error("DEBUG auth user:", userData?.user?.id ?? "NO USER");
+
     const { data: channelRow, error: channelError } = await supabase
       .from("channels")
       .select("id")
