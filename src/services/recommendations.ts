@@ -69,6 +69,8 @@ export async function generateRecommendations(
   channelId: string,
   videos: YouTubeVideoDetail[]
 ): Promise<Recommendation[]> {
+  console.log("DEBUG videos.length:", videos.length);
+
   if (!groqProvider.isConfigured()) {
     throw new Error("Groq is not configured — cannot generate recommendations");
   }
@@ -76,6 +78,7 @@ export async function generateRecommendations(
     throw new Error("Tavily is not configured — cannot generate recommendations");
   }
   if (videos.length === 0) {
+    console.log("DEBUG: returning early, videos.length === 0");
     return [];
   }
 
@@ -83,16 +86,22 @@ export async function generateRecommendations(
     temperature: 0.2,
     maxTokens: 400,
   });
+  console.log("DEBUG topicRaw:", topicRaw);
+
   const { topics } = parseJSON<TopicExtraction>(topicRaw);
+  console.log("DEBUG topics:", topics);
 
   if (topics.length === 0) {
+    console.log("DEBUG: returning early, topics.length === 0");
     return [];
   }
 
   const searchQuery = `true crime cases similar to ${topics.slice(0, 5).join(", ")}`;
   const searchResults = await tavilyProvider.search(searchQuery, 8);
+  console.log("DEBUG searchResults.length:", searchResults.length);
 
   if (searchResults.length === 0) {
+    console.log("DEBUG: returning early, searchResults.length === 0");
     return [];
   }
 
@@ -104,7 +113,10 @@ export async function generateRecommendations(
     temperature: 0.4,
     maxTokens: 800,
   });
+  console.log("DEBUG recRaw:", recRaw);
+
   const { recommendations } = parseJSON<{ recommendations: Recommendation[] }>(recRaw);
+  console.log("DEBUG final recommendations:", recommendations);
 
   const supabase = await createClient();
   const { error } = await supabase
