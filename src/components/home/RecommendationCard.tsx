@@ -7,29 +7,19 @@ import { CaseVisual, type CaseCategory } from "./CaseVisual";
 
 interface RecommendationCardProps {
   title: string;
-  description: string;
-  category: CaseCategory;
-  opportunityScore: number;
-  opportunityLabel: string;
-  searchGrowth: string;
-  competition: string;
-  potentialViews: string;
-  aiConfidence: number;
+  reason: string;
+  audienceMatch: number;
   caseId: string;
+  category?: CaseCategory;
   allowVideo?: boolean;
 }
 
 export function RecommendationCard({
   title,
-  description,
-  category,
-  opportunityScore,
-  opportunityLabel,
-  searchGrowth,
-  competition,
-  potentialViews,
-  aiConfidence,
+  reason,
+  audienceMatch,
   caseId,
+  category = "general",
   allowVideo = false,
 }: RecommendationCardProps) {
   const router = useRouter();
@@ -45,7 +35,7 @@ export function RecommendationCard({
         <CaseVisual
           caseId={caseId}
           category={category}
-          description={description}
+          description={reason}
           allowVideo={allowVideo}
           className="h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.02]"
         />
@@ -57,9 +47,9 @@ export function RecommendationCard({
 
         <div className="absolute right-6 top-6 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-right backdrop-blur-sm">
           <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-            AI confidence
+            Audience match
           </p>
-          <p className="text-xl font-semibold text-white">{aiConfidence}%</p>
+          <p className="text-xl font-semibold text-white">{audienceMatch}%</p>
         </div>
       </div>
 
@@ -68,42 +58,13 @@ export function RecommendationCard({
           {title}
         </h2>
         <p className="mt-3 max-w-2xl leading-relaxed text-slate-400">
-          {description}
+          {reason}
         </p>
-
-        <div className="mt-8 grid grid-cols-2 gap-6 border-t border-white/10 pt-8 sm:grid-cols-4">
-          <Stat label="Opportunity score" value={String(opportunityScore)} emphasize sub={opportunityLabel} />
-          <Stat label="Search growth" value={searchGrowth} sub="vs last 30 days" />
-          <Stat label="Competition" value={competition} sub="Very few long-form videos" />
-          <Stat label="Potential views" value={potentialViews} sub="Estimated range" />
-        </div>
       </div>
 
       <div className="absolute bottom-8 right-8 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-purple-600 text-white transition-transform duration-200 group-hover:translate-x-0.5">
         <ArrowRight className="h-4 w-4" />
       </div>
     </motion.button>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  emphasize = false,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${emphasize ? "text-purple-400" : "text-white"}`}>
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
-    </div>
   );
 }

@@ -1,66 +1,36 @@
 "use client";
 
+import { useMemo } from "react";
 import { useDailyBrief } from "@/hooks/useDailyBrief";
 import { useChannelId } from "@/hooks/useChannelId";
+import { useRecommendations } from "@/hooks/useRecommendations";
+import { useContinueWorking } from "@/hooks/useContinueWorking";
 import { RecommendationCard } from "@/components/home/RecommendationCard";
 import { ContinueWorking } from "@/components/home/ContinueWorking";
 
-const MOCK_RECOMMENDATION = {
-  caseId: "andrew-gosden",
-  category: "missing-person" as const,
-  title: "The Disappearance of Andrew Gosden",
-  description:
-    "High search momentum following renewed public interest while long-form competition remains unusually low.",
-  opportunityScore: 92,
-  opportunityLabel: "Exceptional",
-  searchGrowth: "+240%",
-  competition: "Low",
-  potentialViews: "120K – 380K",
-  aiConfidence: 96,
-};
-
-const MOCK_CONTINUE_WORKING = [
-  {
-    id: "1",
-    name: "Andrew Gosden",
-    category: "missing-person" as const,
-    phase: "Research",
-    phaseColor: "#7C3AED",
-    progress: 72,
-    lastEdited: "2 hours ago",
-    href: "/research/andrew-gosden",
-  },
-  {
-    id: "2",
-    name: "Jeremy Bamber",
-    category: "court-case" as const,
-    phase: "Script",
-    phaseColor: "#F97316",
-    progress: 43,
-    lastEdited: "Yesterday",
-    href: "/create/jeremy-bamber",
-  },
-  {
-    id: "3",
-    name: "Ashley Dale",
-    category: "unsolved-murder" as const,
-    phase: "Optimization",
-    phaseColor: "#16A34A",
-    progress: 91,
-    lastEdited: "3 days ago",
-    href: "/optimize/ashley-dale",
-  },
-];
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
 
 export default function DashboardPage() {
   const { channelId } = useChannelId();
+  const { recommendations, loading: recsLoading } = useRecommendations();
+  const { items: continueItems, loading: continueLoading } = useContinueWorking();
+
+  const topRecommendation = useMemo(() => {
+    if (recommendations.length === 0) return null;
+    return [...recommendations].sort((a, b) => b.audienceMatch - a.audienceMatch)[0];
+  }, [recommendations]);
 
   const brief = useDailyBrief({
     userName: "Creator",
-    hasUnfinishedWork: true,
-    unfinishedCaseName: "Andrew Gosden",
-    unfinishedProgress: 72,
-    newOpportunityScore: MOCK_RECOMMENDATION.opportunityScore,
+    hasUnfinishedWork: continueItems.length > 0,
+    unfinishedCaseName: continueItems[0]?.name,
+    unfinishedProgress: continueItems[0]?.progress,
+    newOpportunityScore: topRecommendation?.audienceMatch,
   });
 
   return (
@@ -72,10 +42,30 @@ export default function DashboardPage() {
         <p className="mt-3 text-lg text-muted-foreground">{brief.subline}</p>
 
         <div className="mt-14">
-          <RecommendationCard {...MOCK_RECOMMENDATION} allowVideo={!!channelId} />
+          {recsLoading ? (
+            <div className="h-64 animate-pulse rounded-3xl bg-muted sm:h-80" />
+          ) : topRecommendation ? (
+            <RecommendationCard
+              title={topRecommendation.title}
+              reason={topRecommendation.reason}
+              audienceMatch={topRecommendation.audienceMatch}
+              caseId={slugify(topRecommendation.title)}
+              allowVideo={!!channelId}
+            />
+          ) : (
+            <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {channelId
+                  ? "No recommendations yet — check back after your channel finishes analyzing."
+                  : "Connect your channel to get personalized recommendations."}
+              </p>
+            </div>
+          )}
         </div>
 
-        <ContinueWorking items={MOCK_CONTINUE_WORKING} />
+        {!continueLoading && continueItems.length > 0 && (
+          <ContinueWorking items={continueItems} />
+        )}
       </div>
     </div>
   );
