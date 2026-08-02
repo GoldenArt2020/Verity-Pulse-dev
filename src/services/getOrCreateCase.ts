@@ -12,6 +12,8 @@ export interface CaseStub {
  */
 export async function getOrCreateCase(name: string): Promise<CaseStub> {
   const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+    console.log("Current user in getOrCreateCase:", user);
   const trimmedName = name.trim();
 
   if (!trimmedName) {
