@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
 import { CaseHeader } from "@/components/case-intelligence/CaseHeader";
@@ -28,14 +28,22 @@ export default function CaseIntelligencePage() {
   const [researchError, setResearchError] = useState<string | null>(null);
   const [researchDone, setResearchDone] = useState(false);
 
+  // Hard guard against re-triggering research. This is a ref, not state —
+  // it persists across renders without causing re-renders itself, so it
+  // reliably blocks duplicate calls even if `caseData` changes reference
+  // on refetch. Without this, a runaway effect can hammer Tavily/Groq
+  // repeatedly per second (this happened once already — see build log).
+  const researchTriggeredRef = useRef(false);
+
   // A "stub" case has no summary yet — meaning it was just created via
   // getOrCreateCase and hasn't been researched. Trigger research once,
   // the first time this page sees a stub.
   const isStub = !loading && !!caseData && caseData.summary === null;
 
   useEffect(() => {
-    if (!isStub || researching || researchDone || !caseData) return;
+    if (!isStub || !caseData || researchTriggeredRef.current) return;
 
+    researchTriggeredRef.current = true;
     setResearching(true);
     setResearchError(null);
 
@@ -53,7 +61,7 @@ export default function CaseIntelligencePage() {
         setResearchError(err instanceof Error ? err.message : "Research failed");
       })
       .finally(() => setResearching(false));
-  }, [isStub, researching, researchDone, caseData]);
+  }, [isStub, caseData]);
 
   return (
     <div>
