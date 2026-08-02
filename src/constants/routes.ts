@@ -1,5 +1,6 @@
 import {
   Home,
+  Search,
   Compass,
   FolderKanban,
   Wand2,
@@ -10,6 +11,7 @@ import {
 
 export const NAV_ITEMS = [
   { label: "Home", href: "/dashboard", icon: Home },
+  { label: "Research", href: "/research", icon: Search },
   { label: "Discover", href: "/discover", icon: Compass },
   { label: "Workspace", href: "/projects", icon: FolderKanban },
   { label: "Create", href: "/angle-builder", icon: Wand2 },

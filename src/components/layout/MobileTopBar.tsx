@@ -1,19 +1,22 @@
 "use client";
 
 import { Menu } from "lucide-react";
-import { Logo } from "@/components/homepage/Logo";
 import { useUIStore } from "@/store/useUIStore";
 
 export function MobileTopBar() {
   const { toggleMobileNav } = useUIStore();
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-800/60 bg-[rgb(4,9,22)] px-4 py-3 md:hidden">
-      <button onClick={toggleMobileNav} className="text-slate-300" aria-label="Open menu">
+    <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-3 md:hidden">
+      <button onClick={toggleMobileNav} className="text-slate-500" aria-label="Open menu">
         <Menu className="h-5 w-5" />
       </button>
-      <Logo className="h-6 w-6" />
-      <span className="font-display text-sm font-bold text-white">VERITYPULSE</span>
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-violet-600">
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-white" fill="currentColor">
+          <path d="M12 2L3 6v6c0 5 3.8 9.4 9 11 5.2-1.6 9-6 9-11V6l-9-4z" />
+        </svg>
+      </div>
+      <span className="font-display text-sm font-bold text-slate-900">VerityPulse</span>
     </div>
   );
 }
