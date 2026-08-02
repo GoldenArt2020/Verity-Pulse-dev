@@ -65,7 +65,8 @@ export async function withRotatingKey<T>(
       const status = (err as { status?: number; response?: { status?: number } })?.status
         ?? (err as { response?: { status?: number } })?.response?.status;
 
-      const isRateLimitOrServerError = status === 429 || (typeof status === "number" && status >= 500);
+      const isRateLimitOrServerError =
+  status === 429 || status === 401 || (typeof status === "number" && status >= 500);
 
       if (!isRateLimitOrServerError) {
         // Not a rate-limit/server issue — don't burn through keys for
