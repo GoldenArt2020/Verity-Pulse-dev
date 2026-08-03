@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Bookmark } from "lucide-react";
+import { Bookmark, Users, BarChart3, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { useCaseVisual } from "@/hooks/useCaseVisual";
 
 interface OpportunityCardV2Props {
@@ -19,6 +19,12 @@ interface OpportunityCardV2Props {
 
 function scoreColor(score: number) {
   return score >= 90 ? "#10B981" : score >= 75 ? "#34D399" : score >= 50 ? "#F59E0B" : "#F43F5E";
+}
+
+function TrendIcon({ trend }: { trend: "Rising" | "Steady" | "Falling" }) {
+  if (trend === "Rising") return <TrendingUp className="h-3 w-3 shrink-0" />;
+  if (trend === "Falling") return <TrendingDown className="h-3 w-3 shrink-0" />;
+  return <Minus className="h-3 w-3 shrink-0" />;
 }
 
 export function OpportunityCardV2({
@@ -70,16 +76,27 @@ export function OpportunityCardV2({
 
         <div className="mt-3 grid grid-cols-3 gap-1 border-t border-white/[0.06] pt-3">
           <div className="min-w-0">
-            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Audience</p>
-            <p className="whitespace-nowrap text-xs font-medium text-emerald-400">{audienceMatch}%</p>
+            <p className="truncate text-[10px] text-[#71717A]">Audience Match</p>
+            <p className="mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-emerald-400">
+              <Users className="h-3 w-3 shrink-0" />
+              {audienceMatch}%
+            </p>
           </div>
           <div className="min-w-0">
-            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Competition</p>
-            <p className="whitespace-nowrap text-xs font-medium text-[#FAFAFA]">{competition}</p>
+            <p className="truncate text-[10px] text-[#71717A]">Competition</p>
+            <p className="mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-[#FAFAFA]">
+              <BarChart3 className="h-3 w-3 shrink-0" />
+              {competition}
+            </p>
           </div>
-          <div className="min-w-0 text-right">
-            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Trend</p>
-            <p className={`whitespace-nowrap text-xs font-medium ${searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"}`}>
+          <div className="min-w-0">
+            <p className="truncate text-[10px] text-[#71717A]">Search Trend</p>
+            <p
+              className={`mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${
+                searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"
+              }`}
+            >
+              <TrendIcon trend={searchTrend} />
               {searchTrend}
             </p>
           </div>
