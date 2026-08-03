@@ -33,29 +33,31 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="relative bg-transparent">
-      <IntelligenceGridBackground />
+    <div className="relative w-full max-w-full overflow-x-hidden bg-transparent">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <IntelligenceGridBackground />
+      </div>
 
-      <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-8 py-12 lg:flex-row lg:justify-center">
-        <div className="flex min-w-0 flex-1 flex-col gap-12 lg:max-w-3xl">
+      <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-center lg:px-8 lg:py-12">
+        <div className="flex min-w-0 flex-1 flex-col gap-8 lg:max-w-3xl lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
             <DiscoverHero />
           </motion.div>
 
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }}>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
-                <p className="text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
+                <p className="truncate text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
               </div>
               {researchedCases.length > 0 && (
-                <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+                <button className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
                   View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
                 </button>
               )}
             </div>
 
-            <div className="mt-5 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-5 flex w-full gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
@@ -104,13 +106,13 @@ export default function DiscoverPage() {
           </motion.div>
 
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
-                <p className="text-xs text-[#71717A]">Explore by theme and category</p>
+                <p className="truncate text-xs text-[#71717A]">Explore by theme and category</p>
               </div>
-              <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
-                View all collections <ArrowRight className="h-3 w-3" />
+              <button className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+                View all <ArrowRight className="h-3 w-3" />
               </button>
             </div>
             <div className="mt-5">
@@ -124,7 +126,7 @@ export default function DiscoverPage() {
           initial="hidden"
           animate="show"
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="hidden w-full flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:w-[320px] lg:shrink-0 lg:self-start xl:w-[380px]"
+          className="hidden min-w-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:w-[320px] lg:shrink-0 lg:self-start xl:w-[380px]"
         >
           <ChannelStatusPanel />
           <AIInsightCard />
