@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
@@ -11,6 +11,15 @@ export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToCase, navigatingTo } = useCaseNavigation();
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Sort recommendations so the highest ranking match score comes first
+  const sortedRecommendations = useMemo(() => {
+    return [...recommendations].sort((a: any, b: any) => {
+      const scoreA = a.audienceMatch ?? 0;
+      const scoreB = b.audienceMatch ?? 0;
+      return scoreB - scoreA;
+    });
+  }, [recommendations]);
 
   return (
     <section className="w-full min-w-0">
@@ -50,7 +59,7 @@ export function RecommendationsRowV2() {
       )}
 
       {/* 3. Empty State */}
-      {!loading && recommendations.length === 0 && (
+      {!loading && sortedRecommendations.length === 0 && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-[22px] border border-dashed border-white/[0.12] bg-[#111114]/50 p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.08] bg-[#18181C]">
             <Tv className="h-5 w-5 text-blue-400" />
@@ -79,7 +88,7 @@ export function RecommendationsRowV2() {
           ))}
 
         {!loading &&
-          recommendations.map((r) => {
+          sortedRecommendations.map((r) => {
             const item = r as any;
             const isExpanded = expanded === r.title;
             const matchScore = r.audienceMatch ?? 96;
