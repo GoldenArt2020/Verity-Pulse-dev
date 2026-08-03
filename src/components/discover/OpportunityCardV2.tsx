@@ -68,18 +68,18 @@ export function OpportunityCardV2({
         <p className="mt-0.5 text-xs text-[#71717A]">{location}</p>
         <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#A1A1AA]">{description}</p>
 
-        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3 text-xs">
-          <div>
-            <p className="text-[10px] text-[#71717A]">Audience Match</p>
-            <p className="font-medium text-emerald-400">{audienceMatch}%</p>
+        <div className="mt-3 grid grid-cols-3 gap-1 border-t border-white/[0.06] pt-3">
+          <div className="min-w-0">
+            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Audience</p>
+            <p className="whitespace-nowrap text-xs font-medium text-emerald-400">{audienceMatch}%</p>
           </div>
-          <div>
-            <p className="text-[10px] text-[#71717A]">Competition</p>
-            <p className="font-medium text-[#FAFAFA]">{competition}</p>
+          <div className="min-w-0">
+            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Competition</p>
+            <p className="whitespace-nowrap text-xs font-medium text-[#FAFAFA]">{competition}</p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-[#71717A]">Search Trend</p>
-            <p className={`font-medium ${searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"}`}>
+          <div className="min-w-0 text-right">
+            <p className="whitespace-nowrap text-[9px] uppercase tracking-wide text-[#71717A]">Trend</p>
+            <p className={`whitespace-nowrap text-xs font-medium ${searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"}`}>
               {searchTrend}
             </p>
           </div>
