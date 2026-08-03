@@ -3,7 +3,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { DiscoverHero } from "@/components/discover/DiscoverHero";
-import { DiscoverHeroImage } from "@/components/discover/DiscoverHeroImage";
 import { ChannelStatusPanel } from "@/components/discover/ChannelStatusPanel";
 import { AIInsightCard } from "@/components/discover/AIInsightCard";
 import { AudienceBreakdown } from "@/components/discover/AudienceBreakdown";
@@ -117,7 +116,7 @@ export default function DiscoverPage() {
         </motion.div>
       </div>
 
-      {/* Right rail — fixed width, always aligned to top, never scrolls with main content */}
+      {/* Right rail — persistent channel/AI/audience intelligence column, fixed width, always aligned to top */}
       <motion.div
         variants={fadeUp}
         initial="hidden"
@@ -125,7 +124,6 @@ export default function DiscoverPage() {
         transition={{ duration: 0.3, delay: 0.1 }}
         className="hidden w-[420px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start"
       >
-        <DiscoverHeroImage />
         <ChannelStatusPanel />
         <AIInsightCard />
         <AudienceBreakdown />
