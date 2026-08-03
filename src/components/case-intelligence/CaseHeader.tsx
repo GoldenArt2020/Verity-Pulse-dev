@@ -6,7 +6,6 @@ import {
   Bookmark,
   BookmarkCheck,
   Sparkles,
-  ChevronDown,
   Mail,
   MessageCircle,
   Link2,
@@ -15,16 +14,18 @@ import {
   X,
 } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
+import { useChannelId } from "@/hooks/useChannelId";
 
-const ANGLE_TYPES = [
-  { id: "victim-centered", label: "Victim-Centered" },
-  { id: "investigative", label: "Investigative Deep-Dive" },
-  { id: "systemic-failure", label: "Systemic / Institutional Failure" },
-  { id: "family-impact", label: "Family & Community Impact" },
-  { id: "courtroom", label: "Legal / Courtroom Drama" },
-] as const;
+const LENS_LABELS: Record<string, string> = {
+  "victim-centered": "Victim-Centered",
+  investigative: "Investigative Deep-Dive",
+  "systemic-failure": "Systemic / Institutional Failure",
+  "family-impact": "Family & Community Impact",
+  courtroom: "Legal / Courtroom Drama",
+};
 
 interface GeneratedAngle {
+  lens: string;
   title: string;
   hook: string;
   rationale: string;
@@ -32,6 +33,8 @@ interface GeneratedAngle {
 }
 
 export function CaseHeader({ caseData }: { caseData: CaseRow }) {
+  const { channelId } = useChannelId();
+
   // ---- Share dropdown ----
   const [shareOpen, setShareOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -42,20 +45,14 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // ---- Generate Angle ----
-  const [angleMenuOpen, setAngleMenuOpen] = useState(false);
   const [angleLoading, setAngleLoading] = useState(false);
   const [angleError, setAngleError] = useState<string | null>(null);
-  const [angleResult, setAngleResult] = useState<GeneratedAngle | null>(null);
-  const angleRef = useRef<HTMLDivElement>(null);
+  const [angleResults, setAngleResults] = useState<GeneratedAngle[] | null>(null);
 
-  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
         setShareOpen(false);
-      }
-      if (angleRef.current && !angleRef.current.contains(e.target as Node)) {
-        setAngleMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -93,7 +90,6 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
     if (saveState === "saving" || saveState === "saved") return;
     setSaveState("saving");
     setSaveError(null);
-
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -109,23 +105,22 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
     }
   }
 
-  async function handleGenerateAngle(angleTypeId: string) {
-    setAngleMenuOpen(false);
+  async function handleGenerateAngles() {
     setAngleLoading(true);
     setAngleError(null);
-    setAngleResult(null);
+    setAngleResults(null);
 
     try {
       const res = await fetch("/api/case/generate-angle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId: caseData.id, angleType: angleTypeId }),
+        body: JSON.stringify({ caseId: caseData.id, channelId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate angle");
-      setAngleResult(data);
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate angles");
+      setAngleResults(data.angles ?? []);
     } catch (err) {
-      setAngleError(err instanceof Error ? err.message : "Failed to generate angle");
+      setAngleError(err instanceof Error ? err.message : "Failed to generate angles");
     } finally {
       setAngleLoading(false);
     }
@@ -145,16 +140,11 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
               </span>
             )}
           </div>
-          {caseData.country && (
-            <p className="mt-1 text-xs text-slate-500">{caseData.country}</p>
-          )}
-          {caseData.summary && (
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">{caseData.summary}</p>
-          )}
+          {caseData.country && <p className="mt-1 text-xs text-slate-500">{caseData.country}</p>}
+          {caseData.summary && <p className="mt-2 max-w-2xl text-sm text-slate-400">{caseData.summary}</p>}
         </div>
 
         <div className="flex shrink-0 gap-2">
-          {/* Share */}
           <div className="relative" ref={shareRef}>
             <button
               onClick={() => setShareOpen((o) => !o)}
@@ -162,7 +152,6 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
             >
               <Share2 className="h-3.5 w-3.5" /> Share
             </button>
-
             {shareOpen && (
               <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
                 <button
@@ -192,7 +181,6 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
             )}
           </div>
 
-          {/* Save Case */}
           <button
             onClick={handleSaveCase}
             disabled={saveState === "saving"}
@@ -201,9 +189,7 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
           >
             {saveState === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {saveState === "saved" && <BookmarkCheck className="h-3.5 w-3.5 text-emerald-400" />}
-            {(saveState === "idle" || saveState === "error") && (
-              <Bookmark className="h-3.5 w-3.5" />
-            )}
+            {(saveState === "idle" || saveState === "error") && <Bookmark className="h-3.5 w-3.5" />}
             {saveState === "saved"
               ? "Saved"
               : saveState === "saving"
@@ -213,42 +199,22 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
                   : "Save Case"}
           </button>
 
-          {/* Generate Angle */}
-          <div className="relative" ref={angleRef}>
-            <button
-              onClick={() => setAngleMenuOpen((o) => !o)}
-              disabled={angleLoading}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
-            >
-              {angleLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {angleLoading ? "Generating..." : "Generate Angle"}
-              <ChevronDown className="h-3 w-3" />
-            </button>
-
-            {angleMenuOpen && (
-              <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
-                {ANGLE_TYPES.map((angle) => (
-                  <button
-                    key={angle.id}
-                    onClick={() => handleGenerateAngle(angle.id)}
-                    className="flex w-full items-center px-3 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-800"
-                  >
-                    {angle.label}
-                  </button>
-                ))}
-              </div>
+          <button
+            onClick={handleGenerateAngles}
+            disabled={angleLoading}
+            className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
+          >
+            {angleLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
             )}
-          </div>
+            {angleLoading ? "Analyzing coverage..." : "Find Uncovered Angles"}
+          </button>
         </div>
       </div>
 
-      {angleError && (
-        <p className="mt-3 text-xs text-rose-400">{angleError}</p>
-      )}
+      {angleError && <p className="mt-3 text-xs text-rose-400">{angleError}</p>}
 
       <div className="mt-5 grid grid-cols-3 gap-4 border-t border-slate-800/60 pt-5">
         <div className="text-center">
@@ -290,43 +256,54 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
         </div>
       </div>
 
-      {/* Generated Angle modal */}
-      {angleResult && (
+      {angleResults && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
-          onClick={() => setAngleResult(null)}
+          onClick={() => setAngleResults(null)}
         >
           <div
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6"
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
-              <h2 className="font-display text-lg font-bold text-white">{angleResult.title}</h2>
+              <h2 className="font-display text-lg font-bold text-white">
+                {angleResults.length > 0 ? `${angleResults.length} Uncovered Angle${angleResults.length === 1 ? "" : "s"} Found` : "No Strong Angles Found"}
+              </h2>
               <button
-                onClick={() => setAngleResult(null)}
+                onClick={() => setAngleResults(null)}
                 className="shrink-0 rounded-lg p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="mt-3 text-sm italic text-blue-300">{angleResult.hook}</p>
-            <p className="mt-3 text-sm text-slate-400">{angleResult.rationale}</p>
-
-            {angleResult.keyBeats?.length > 0 && (
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Key Beats to Explore
-                </p>
-                <ul className="space-y-1.5">
-                  {angleResult.keyBeats.map((beat, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-slate-300">
-                      <span className="text-blue-400">•</span> {beat}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {angleResults.length === 0 && (
+              <p className="mt-3 text-sm text-slate-400">
+                Every lens appears well-covered on YouTube for this case already.
+              </p>
             )}
+
+            <div className="mt-4 space-y-4">
+              {angleResults.map((angle, i) => (
+                <div key={i} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <span className="inline-block rounded-md bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-400">
+                    {LENS_LABELS[angle.lens] ?? angle.lens}
+                  </span>
+                  <p className="mt-2 font-display text-base font-bold text-white">{angle.title}</p>
+                  <p className="mt-1.5 text-sm italic text-blue-300">{angle.hook}</p>
+                  <p className="mt-2 text-sm text-slate-400">{angle.rationale}</p>
+                  {angle.keyBeats?.length > 0 && (
+                    <ul className="mt-3 space-y-1">
+                      {angle.keyBeats.map((beat, j) => (
+                        <li key={j} className="flex gap-2 text-sm text-slate-300">
+                          <span className="text-blue-400">•</span> {beat}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

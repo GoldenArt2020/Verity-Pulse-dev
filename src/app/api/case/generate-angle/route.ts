@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
+import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
+import type { LensPerformance, ChannelDNA } from "@/services/creatorDNA";
 
 const ANGLE_LABELS: Record<string, string> = {
   "victim-centered": "Victim-Centered",
@@ -11,48 +13,80 @@ const ANGLE_LABELS: Record<string, string> = {
 };
 
 interface GeneratedAngle {
+  lens: string;
   title: string;
   hook: string;
   rationale: string;
   keyBeats: string[];
 }
 
-function buildAnglePrompt(
+function buildPrompt(
   caseName: string,
   summary: string,
-  angleLabel: string
+  youtubeTitles: string[],
+  lensPerformance: LensPerformance[]
 ): string {
-  return `You are an editorial producer for a true crime YouTube documentary channel. For the case "${caseName}", generate ONE specific documentary angle using a "${angleLabel}" lens.
+  const coverageBlock =
+    youtubeTitles.length > 0
+      ? `EXISTING YOUTUBE COVERAGE for this case (titles already published):\n${youtubeTitles
+          .map((t, i) => `${i + 1}. ${t}`)
+          .join("\n")}`
+      : `No existing YouTube coverage data is available for this case.`;
+
+  const performanceBlock =
+    lensPerformance.length > 0
+      ? `THIS CREATOR'S HISTORICAL LENS PERFORMANCE (based on their own past videos):\n${lensPerformance
+          .map(
+            (p) =>
+              `- ${ANGLE_LABELS[p.lens] ?? p.lens}: ${p.avgViewsRelativeToChannel} performance (${p.videoCount} past videos in this lens)`
+          )
+          .join("\n")}`
+      : `No historical performance data available for this creator yet.`;
+
+  return `You are an editorial producer for a true crime YouTube documentary channel. For the case "${caseName}", identify which of the 5 documentary lenses below are BOTH underexplored on YouTube for this case AND likely to perform well for this specific creator.
+
+THE 5 LENSES:
+- victim-centered: Victim-Centered
+- investigative: Investigative Deep-Dive
+- systemic-failure: Systemic / Institutional Failure
+- family-impact: Family & Community Impact
+- courtroom: Legal / Courtroom Drama
 
 CASE SUMMARY:
 ${summary}
 
+${coverageBlock}
+
+${performanceBlock}
+
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
-  "title": string (a compelling episode/angle title, max 12 words),
-  "hook": string (a single punchy sentence that would open the episode, written in narrator voice),
-  "rationale": string (2-3 sentences explaining why this angle works for THIS case specifically, grounded in the summary — not generic advice),
-  "keyBeats": string[] (4-6 short specific story beats or sequences this angle would cover, drawn from the case facts)
+  "angles": [
+    {
+      "lens": string (one of the 5 lens ids above),
+      "title": string (a compelling episode/angle title, max 12 words),
+      "hook": string (a single punchy sentence that would open the episode, narrator voice),
+      "rationale": string (2-3 sentences: why this angle works for THIS case, why it's underexplored on YouTube if coverage data was provided, AND why it fits this creator's proven strengths if performance data was provided),
+      "keyBeats": string[] (4-6 short specific story beats drawn from the case facts)
+    }
+  ]
 }
 
-Return ONLY the JSON object.`;
+Only include lenses that are genuinely underexplored for this case — skip any lens that's already saturated in the existing coverage. Prioritize lenses where this creator has "above average" historical performance, but you may still include a strong uncovered lens even without performance data. Return between 1 and 5 angles, ordered best-fit first. Return ONLY the JSON object.`;
 }
 
-function parseAngle(raw: string): GeneratedAngle {
+function parseAngles(raw: string): GeneratedAngle[] {
   let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
-
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
-
   if (firstBrace === -1 || lastBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
   }
-
   cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-
   try {
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    return parsed.angles ?? [];
   } catch (err) {
     throw new Error(
       `Failed to parse AI JSON response: ${(err as Error).message}\nRaw (first 500 chars): ${raw.slice(0, 500)}`
@@ -62,22 +96,18 @@ function parseAngle(raw: string): GeneratedAngle {
 
 /**
  * POST /api/case/generate-angle
- * Body: { caseId: string, angleType: string }
- * Generates a single documentary angle pitch for a case, using the
- * case's existing summary (from prior research) as grounding context.
+ * Body: { caseId: string, channelId?: string }
+ * Generates 1-5 documentary angles for a case — only lenses that are both
+ * underexplored on YouTube for this case AND (if a connected channel is
+ * provided) match this creator's historically strongest-performing lenses.
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const caseId = body?.caseId as string | undefined;
-  const angleType = body?.angleType as string | undefined;
+  const channelId = body?.channelId as string | undefined;
 
-  if (!caseId || !angleType) {
-    return NextResponse.json({ error: "caseId and angleType are required" }, { status: 400 });
-  }
-
-  const angleLabel = ANGLE_LABELS[angleType];
-  if (!angleLabel) {
-    return NextResponse.json({ error: "Unknown angleType" }, { status: 400 });
+  if (!caseId) {
+    return NextResponse.json({ error: "caseId is required" }, { status: 400 });
   }
 
   if (!groqProvider.isConfigured()) {
@@ -103,12 +133,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const youtubeTitles = await getOrFetchYouTubeCoverage(caseId, caseRow.name);
+
+    let lensPerformance: LensPerformance[] = [];
+    if (channelId) {
+      const { data: channelRow } = await supabase
+        .from("channels")
+        .select("channel_dna")
+        .eq("youtube_channel_id", channelId)
+        .maybeSingle();
+      const dna = channelRow?.channel_dna as unknown as ChannelDNA | undefined;
+      lensPerformance = dna?.lensPerformance ?? [];
+    }
+
     const raw = await groqProvider.generateText(
-      buildAnglePrompt(caseRow.name, caseRow.summary, angleLabel),
-      { temperature: 0.6, maxTokens: 600 }
+      buildPrompt(caseRow.name, caseRow.summary, youtubeTitles, lensPerformance),
+      { temperature: 0.6, maxTokens: 1400 }
     );
-    const angle = parseAngle(raw);
-    return NextResponse.json(angle);
+    const angles = parseAngles(raw);
+    return NextResponse.json({ angles });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to generate angle" },
