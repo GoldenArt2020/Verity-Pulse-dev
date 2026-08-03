@@ -1,24 +1,46 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star } from "lucide-react";
+import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star, FolderKanban } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
+
+// Mock data for the Searched Cases section
+const SEARCHED_CATEGORIES = [
+  {
+    name: "Murder Investigation",
+    count: 142,
+    bgImage: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=800",
+  },
+  {
+    name: "Missing Person",
+    count: 89,
+    bgImage: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=800",
+  },
+  {
+    name: "Cold Cases",
+    count: 64,
+    bgImage: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=800",
+  },
+  {
+    name: "Organized Crime",
+    count: 112,
+    bgImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800",
+  },
+];
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToCase, navigatingTo } = useCaseNavigation();
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Sort recommendations so the highest ranking match score comes first
-  const sortedRecommendations = useMemo(() => {
-    return [...recommendations].sort((a: any, b: any) => {
-      const scoreA = a.audienceMatch ?? 0;
-      const scoreB = b.audienceMatch ?? 0;
-      return scoreB - scoreA;
-    });
+  // Sort by highest match score and slice to EXACTLY 4 cards
+  const topRecommendations = useMemo(() => {
+    return [...recommendations]
+      .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0))
+      .slice(0, 4);
   }, [recommendations]);
 
   return (
@@ -59,7 +81,7 @@ export function RecommendationsRowV2() {
       )}
 
       {/* 3. Empty State */}
-      {!loading && sortedRecommendations.length === 0 && (
+      {!loading && topRecommendations.length === 0 && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-[22px] border border-dashed border-white/[0.12] bg-[#111114]/50 p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.08] bg-[#18181C]">
             <Tv className="h-5 w-5 text-blue-400" />
@@ -77,18 +99,18 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Responsive Auto-Wrapping CSS Grid */}
-      <div className="mt-6 grid w-full gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]">
+      {/* 4. Strict 4-Card Responsive Grid Layout */}
+      <div className="mt-6 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {loading &&
           [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-[390px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
+              className="h-[460px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
         {!loading &&
-          sortedRecommendations.map((r) => {
+          topRecommendations.map((r) => {
             const item = r as any;
             const isExpanded = expanded === r.title;
             const matchScore = r.audienceMatch ?? 96;
@@ -98,16 +120,16 @@ export function RecommendationsRowV2() {
                 key={r.title}
                 whileHover={{ y: -4 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group relative flex h-full w-full min-w-0 flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-5 shadow-xl transition-all hover:border-blue-500/40"
+                className="group relative flex h-[460px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-5 shadow-xl transition-all hover:border-blue-500/40"
               >
-                <div>
+                <div className="flex flex-col overflow-hidden">
                   {/* Rating Header */}
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, idx) => (
                         <Star key={idx} className="h-3 w-3 fill-amber-400 text-amber-400" />
                       ))}
-                      <span className="ml-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
+                      <span className="ml-1 text-[9px] font-bold tracking-wider text-emerald-400 uppercase">
                         PERFECT MATCH
                       </span>
                     </div>
@@ -116,9 +138,9 @@ export function RecommendationsRowV2() {
                     </button>
                   </div>
 
-                  {/* Case Info */}
-                  <div className="mt-4">
-                    <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
+                  {/* Title & Metadata */}
+                  <div className="mt-3">
+                    <h3 className="line-clamp-2 text-sm font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
                       {r.title}
                     </h3>
                     <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
@@ -133,32 +155,32 @@ export function RecommendationsRowV2() {
                   </div>
 
                   {/* Match Score */}
-                  <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
-                    <span className="text-xl font-black text-emerald-400">{matchScore}</span>
-                    <span className="text-xs font-medium text-[#71717A]">Match Score</span>
+                  <div className="mt-3 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-2.5">
+                    <span className="text-lg font-black text-emerald-400">{matchScore}</span>
+                    <span className="text-[11px] font-medium text-[#71717A]">Match Score</span>
                   </div>
 
                   {/* Scannable Signals */}
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                       <span>Growing Search Demand</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                       <span>Low Competition</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                       <span>5 Untouched Angles</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                       <span>High Audience Fit</span>
                     </div>
                   </div>
 
-                  {/* Context Panel */}
+                  {/* Expandable Explanation Panel */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -166,7 +188,7 @@ export function RecommendationsRowV2() {
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="overflow-hidden border-t border-white/[0.06] mt-4 pt-3 text-xs leading-relaxed text-[#A1A1AA]"
+                        className="overflow-y-auto max-h-24 border-t border-white/[0.06] mt-3 pt-2 text-[11px] leading-relaxed text-[#A1A1AA]"
                       >
                         {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
                       </motion.div>
@@ -174,11 +196,11 @@ export function RecommendationsRowV2() {
                   </AnimatePresence>
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="mt-6 pt-2">
+                {/* Bottom Actions - Aligned horizontally across all cards */}
+                <div className="pt-2 border-t border-white/[0.04] mt-auto">
                   <button
                     onClick={() => setExpanded(isExpanded ? null : r.title)}
-                    className="mb-3 block w-full text-left text-[11px] font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
+                    className="mb-2 block w-full text-left text-[11px] font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
                   >
                     {isExpanded ? "Hide breakdown" : "Why we recommend this →"}
                   </button>
@@ -195,6 +217,46 @@ export function RecommendationsRowV2() {
               </motion.div>
             );
           })}
+      </div>
+
+      {/* 5. Searched Cases Section */}
+      <div className="mt-16 border-t border-white/[0.06] pt-12">
+        <div className="max-w-2xl">
+          <h2 className="text-2xl font-bold tracking-tight text-[#FAFAFA]">
+            Searched Cases
+          </h2>
+          <p className="mt-1 text-xs text-[#A1A1AA] sm:text-sm">
+            Explore by theme and category
+          </p>
+        </div>
+
+        {/* 4 Category Cards */}
+        <div className="mt-6 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {SEARCHED_CATEGORIES.map((cat) => (
+            <div
+              key={cat.name}
+              className="group relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-[22px] border border-white/[0.08] p-5 transition-all hover:border-white/[0.2] cursor-pointer"
+            >
+              {/* Image Background */}
+              <div
+                className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+                style={{ backgroundImage: `url(${cat.bgImage})` }}
+              />
+              {/* Dark Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-transparent" />
+
+              {/* Content */}
+              <div className="relative z-10">
+                <h3 className="text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
+                  {cat.name}
+                </h3>
+                <p className="mt-1 text-xs font-medium text-[#A1A1AA]">
+                  {cat.count} cases
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
