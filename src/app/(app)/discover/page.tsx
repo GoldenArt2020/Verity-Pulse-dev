@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { IntelligenceGridBackground } from "@/components/background/IntelligenceGridBackground";
@@ -21,6 +22,7 @@ const fadeUp = {
 };
 
 export default function DiscoverPage() {
+  const router = useRouter();
   const { channelId } = useChannelId();
   const { cases, loading, error } = useCases();
 
@@ -44,20 +46,30 @@ export default function DiscoverPage() {
             <DiscoverHero />
           </motion.div>
 
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }}>
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.15 }}
+            className="min-w-0"
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
                 <p className="truncate text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
               </div>
               {researchedCases.length > 0 && (
-                <button className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+                <button
+                  onClick={() => router.push("/discover/opportunities")}
+                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300"
+                >
                   View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
                 </button>
               )}
             </div>
 
-           <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
@@ -74,20 +86,49 @@ export default function DiscoverPage() {
                 </div>
               )}
 
-              
+              {!loading &&
+                !error &&
+                researchedCases.map((c, i) => (
+                  <OpportunityCardV2
+                    key={c.id}
+                    id={c.id}
+                    rank={i + 1}
+                    title={c.name}
+                    location={c.country ?? ""}
+                    category={c.category ?? ""}
+                    score={c.opportunity_score ?? 0}
+                    audienceMatch={c.opportunity_score ?? 0}
+                  />
+                ))}
             </div>
           </motion.div>
 
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }} className="min-w-0">
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.25 }}
+            className="min-w-0"
+          >
+            <RecommendationsRowV2 />
           </motion.div>
 
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.35 }}
+            className="min-w-0"
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
                 <p className="truncate text-xs text-[#71717A]">Explore by theme and category</p>
               </div>
-              <button className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+              <button
+                onClick={() => router.push("/discover/collections")}
+                className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300"
+              >
                 View all <ArrowRight className="h-3 w-3" />
               </button>
             </div>
