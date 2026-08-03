@@ -93,7 +93,7 @@ export function RecommendationsRowV2() {
                   onClick={() => setExpanded(isExpanded ? null : r.title)}
                   className="mt-3 flex w-full items-center justify-between border-t border-white/[0.06] pt-3 text-xs font-medium text-blue-400 hover:text-blue-300"
                 >
-                  Why AI picked this
+                  Why we picked this
                   <ChevronDown
                     className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
                   />
