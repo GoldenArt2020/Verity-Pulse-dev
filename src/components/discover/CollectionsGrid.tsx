@@ -23,7 +23,7 @@ function CollectionTile({ label, count }: { label: string; count: number }) {
   return (
     <button
       onClick={() => router.push(`/discover/collection/${encodeURIComponent(label)}`)}
-      className="group relative h-40 w-[240px] shrink-0 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+      className="group relative h-40 w-[200px] sm:w-[240px] shrink-0 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
     >
       {url && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -55,11 +55,11 @@ export function CollectionsGrid() {
 
   if (loading) {
     return (
-      <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex w-full min-w-0 max-w-full gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="h-40 w-[240px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
+            className="h-40 w-[200px] sm:w-[240px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
           />
         ))}
       </div>
@@ -68,14 +68,14 @@ export function CollectionsGrid() {
 
   if (categories.length === 0) {
     return (
-      <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center">
+      <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center">
         <p className="text-sm text-[#A1A1AA]">No categorized cases yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex w-full min-w-0 max-w-full gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {categories.map((c) => (
         <CollectionTile key={c.label} label={c.label} count={c.count} />
       ))}
