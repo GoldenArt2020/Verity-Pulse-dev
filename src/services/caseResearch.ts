@@ -34,12 +34,24 @@ If the source material is too thin to determine a field confidently, use reasona
 }
 
 function parseAnalysis(raw: string): ResearchAnalysis {
-  const cleaned = raw
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-  return JSON.parse(cleaned);
+  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
+  }
+
+  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse AI JSON response: ${(err as Error).message}\nRaw (first 500 chars): ${raw.slice(0, 500)}`
+    );
+  }
 }
 
 /**
