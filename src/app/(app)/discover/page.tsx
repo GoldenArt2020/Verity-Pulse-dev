@@ -75,15 +75,28 @@ export default function DiscoverPage() {
 
       <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
+          {/* Hero Header */}
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
           </motion.div>
 
+          {/* 1. Recommended For Your Audience (Now First) */}
           <motion.div
             variants={fadeUp}
             initial="hidden"
             animate="show"
             transition={{ duration: 0.3, delay: 0.15 }}
+            className="w-full min-w-0"
+          >
+            <RecommendationsRowV2 />
+          </motion.div>
+
+          {/* 2. Today's Opportunities (Now Second with Tighter 3-Column Width) */}
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.25 }}
             className="w-full min-w-0"
           >
             <div className="flex items-center justify-between gap-3">
@@ -102,7 +115,8 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Changed from sm:grid-cols-2 to sm:grid-cols-2 md:grid-cols-3 for smaller card widths */}
+            <div className="mt-5 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
               {(loading || !mounted) && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {!loading && mounted && error && (
@@ -137,16 +151,7 @@ export default function DiscoverPage() {
             </div>
           </motion.div>
 
-          <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ duration: 0.3, delay: 0.25 }}
-            className="w-full min-w-0"
-          >
-            <RecommendationsRowV2 />
-          </motion.div>
-
+          {/* 3. Browse Collections */}
           <motion.div
             variants={fadeUp}
             initial="hidden"
@@ -172,6 +177,7 @@ export default function DiscoverPage() {
           </motion.div>
         </div>
 
+        {/* Sidebar */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
