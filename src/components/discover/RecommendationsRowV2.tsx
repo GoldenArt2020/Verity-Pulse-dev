@@ -13,7 +13,7 @@ export function RecommendationsRowV2() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-lg font-semibold text-[#FAFAFA]">Recommended For Your Audience</p>
@@ -29,18 +29,18 @@ export function RecommendationsRowV2() {
         </button>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 w-full min-w-0">
         <AudienceSignalPanel />
       </div>
 
       {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 
-      <div className="mt-4 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-4 flex w-full min-w-0 max-w-full gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {loading &&
           [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-44 w-[340px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
+              className="h-44 w-[280px] sm:w-[340px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
@@ -63,7 +63,7 @@ export function RecommendationsRowV2() {
                 key={r.title}
                 whileHover={{ y: -6 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="w-[340px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-5 transition-colors duration-200 hover:border-blue-500/30"
+                className="w-[280px] sm:w-[340px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-5 transition-colors duration-200 hover:border-blue-500/30"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
