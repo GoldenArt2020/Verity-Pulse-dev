@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
@@ -21,6 +22,17 @@ const fadeUp = {
   show: { opacity: 1, y: 0 },
 };
 
+// Deterministic hash based on today's UTC date string (YYYY-MM-DD)
+function getDailySeed(): number {
+  const todayStr = new Date().toISOString().split("T")[0];
+  let hash = 0;
+  for (let i = 0; i < todayStr.length; i++) {
+    hash = (hash << 5) - hash + todayStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 export default function DiscoverPage() {
   const router = useRouter();
   const { channelId } = useChannelId();
@@ -30,9 +42,25 @@ export default function DiscoverPage() {
     return <ChannelOnboarding />;
   }
 
+  // Filter researched cases
   const researchedCases = cases.filter(
     (c) => (c.opportunity_score ?? 0) > 0 && c.summary && c.summary.trim().length > 0
   );
+
+  // Daily dynamic rotation at 12 AM UTC
+  const dailyCases = useMemo(() => {
+    if (researchedCases.length === 0) return [];
+    const seed = getDailySeed();
+    const rotated = [...researchedCases].sort((a, b) => {
+      const hashA = (a.id.charCodeAt(0) || 0) + seed;
+      const hashB = (b.id.charCodeAt(0) || 0) + seed;
+      return (hashA % 100) - (hashB % 100);
+    });
+    return rotated;
+  }, [researchedCases]);
+
+  // Display top 4 cases for today
+  const todaysFeatured = dailyCases.slice(0, 4);
 
   return (
     <div className="relative w-full max-w-full overflow-hidden bg-transparent">
@@ -40,10 +68,8 @@ export default function DiscoverPage() {
         <IntelligenceGridBackground />
       </div>
 
-      {/* Grid container handles sidebar and main column allocation seamlessly */}
       <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
-        
-        {/* Main Left Column (Takes 8 out of 12 columns on large screens) */}
+        {/* Main Column */}
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
@@ -59,7 +85,7 @@ export default function DiscoverPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
-                <p className="truncate text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
+                <p className="truncate text-xs text-[#71717A]">4 fresh picks for today · Rotates daily at 12:00 AM</p>
               </div>
               {researchedCases.length > 0 && (
                 <button
@@ -71,7 +97,8 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* Scroll Container */}
+            <div className="mt-5 flex w-full min-w-0 gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
@@ -81,7 +108,7 @@ export default function DiscoverPage() {
                 </div>
               )}
 
-              {!loading && !error && researchedCases.length === 0 && (
+              {!loading && !error && todaysFeatured.length === 0 && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
                   <p className="text-sm text-[#A1A1AA]">
                     No opportunities yet. Search for a case above to get started.
@@ -91,7 +118,7 @@ export default function DiscoverPage() {
 
               {!loading &&
                 !error &&
-                researchedCases.map((c, i) => (
+                todaysFeatured.map((c, i) => (
                   <OpportunityCardV2
                     key={c.id}
                     id={c.id}
@@ -141,7 +168,7 @@ export default function DiscoverPage() {
           </motion.div>
         </div>
 
-        {/* Right Sidebar Column (Takes 4 out of 12 columns on large screens) */}
+        {/* Right Sidebar */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
