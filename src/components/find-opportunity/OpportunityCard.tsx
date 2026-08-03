@@ -36,7 +36,7 @@ export function OpportunityCard({
   return (
     <Link
       href={`/case-analyzer/${id ?? ""}`}
-      className="group relative block overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] p-5 transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+      className="group relative block w-[280px] sm:w-[320px] shrink-0 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] p-5 transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
     >
       {rank !== undefined && (
         <span className="absolute left-4 top-4 z-10 rounded-md bg-blue-500 px-2 py-0.5 text-xs font-bold text-white">
@@ -55,9 +55,9 @@ export function OpportunityCard({
       <div className="relative h-32 w-full overflow-hidden rounded-xl bg-gradient-to-br from-slate-800 to-slate-900" />
 
       <div className="mt-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-bold text-[#FAFAFA]">{title}</h3>
-          <p className="mt-0.5 text-xs text-[#71717A]">{location} · {category}</p>
+          <p className="mt-0.5 truncate text-xs text-[#71717A]">{location} · {category}</p>
         </div>
         <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
           <svg viewBox="0 0 64 64" className="h-11 w-11 -rotate-90">
