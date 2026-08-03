@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
@@ -22,27 +22,18 @@ const fadeUp = {
   show: { opacity: 1, y: 0 },
 };
 
-// Safe seed derived from today's date string (YYYY-MM-DD UTC)
-function getDailySeed(): number {
-  const todayStr = new Date().toISOString().split("T")[0];
-  let hash = 0;
-  for (let i = 0; i < todayStr.length; i++) {
-    hash = (hash << 5) - hash + todayStr.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 export default function DiscoverPage() {
   const router = useRouter();
   const { channelId } = useChannelId();
   const { cases, loading, error } = useCases();
+  const [mounted, setMounted] = useState(false);
 
-  if (!channelId) {
-    return <ChannelOnboarding />;
-  }
+  // Prevent hydration mismatch by confirming client mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  // Filter researched cases safely
+  // Filter valid researched cases
   const researchedCases = useMemo(() => {
     if (!Array.isArray(cases)) return [];
     return cases.filter(
@@ -50,10 +41,17 @@ export default function DiscoverPage() {
     );
   }, [cases]);
 
-  // Safe rotation formula (prevents crashes on non-string IDs)
+  // Deterministic daily rotation safe for client execution
   const todaysFeatured = useMemo(() => {
-    if (researchedCases.length === 0) return [];
-    const seed = getDailySeed();
+    if (!mounted || researchedCases.length === 0) return researchedCases.slice(0, 4);
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    let seed = 0;
+    for (let i = 0; i < todayStr.length; i++) {
+      seed = (seed << 5) - seed + todayStr.charCodeAt(i);
+      seed |= 0;
+    }
+    seed = Math.abs(seed);
 
     const sorted = [...researchedCases].sort((a, b) => {
       const idA = String(a.id ?? "");
@@ -64,7 +62,11 @@ export default function DiscoverPage() {
     });
 
     return sorted.slice(0, 4);
-  }, [researchedCases]);
+  }, [researchedCases, mounted]);
+
+  if (!channelId) {
+    return <ChannelOnboarding />;
+  }
 
   return (
     <div className="relative w-full max-w-full overflow-hidden bg-transparent">
@@ -73,7 +75,7 @@ export default function DiscoverPage() {
       </div>
 
       <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
-        {/* Main Content Area */}
+        {/* Main Content Column */}
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
@@ -102,15 +104,15 @@ export default function DiscoverPage() {
             </div>
 
             <div className="mt-5 flex w-full min-w-0 gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+              {(loading || !mounted) && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
-              {error && (
+              {!loading && mounted && error && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
                   We couldn&apos;t load opportunities right now.
                 </div>
               )}
 
-              {!loading && !error && todaysFeatured.length === 0 && (
+              {!loading && mounted && !error && todaysFeatured.length === 0 && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
                   <p className="text-sm text-[#A1A1AA]">
                     No opportunities yet. Search for a case above to get started.
@@ -119,6 +121,7 @@ export default function DiscoverPage() {
               )}
 
               {!loading &&
+                mounted &&
                 !error &&
                 todaysFeatured.map((c, i) => (
                   <OpportunityCardV2
