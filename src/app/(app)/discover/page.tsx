@@ -33,7 +33,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex justify-center gap-8 px-8 py-12">
-      <div className="flex min-w-0 max-w-5xl flex-1 flex-col gap-12">
+      <div className="flex min-w-0 max-w-7xl flex-1 flex-col gap-12">
         <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
           <DiscoverHero />
         </motion.div>
