@@ -47,12 +47,12 @@ export function CreatorDNACard() {
 
   return (
     <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-6">
-      <p className="text-sm text-[#A1A1AA]">We&apos;ve analyzed your channel.</p>
-      <h3 className="mt-1 text-lg font-semibold text-[#FAFAFA]">Here&apos;s what we learned.</h3>
+      <p className="text-sm font-semibold text-[#FAFAFA]">Your Audience</p>
+      <p className="text-xs text-[#71717A]">Based on your channel&apos;s Creator DNA</p>
 
       <div className="mt-5 grid grid-cols-2 gap-6">
         <div>
-          <p className="text-xs font-medium text-[#71717A]">Your audience responds best to</p>
+          <p className="text-xs font-medium text-emerald-400">What works best</p>
           <div className="mt-3 space-y-2">
             {dna.strengths.map((s) => (
               <div key={s} className="flex items-center gap-2 text-sm text-[#FAFAFA]">
@@ -64,7 +64,7 @@ export function CreatorDNACard() {
         </div>
 
         <div>
-          <p className="text-xs font-medium text-[#71717A]">Less successful topics</p>
+          <p className="text-xs font-medium text-rose-400">What works less</p>
           <div className="mt-3 space-y-2">
             {dna.weaknesses.map((w) => (
               <div key={w} className="flex items-center gap-2 text-sm text-[#A1A1AA]">
