@@ -3,33 +3,35 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const CATEGORIES = [
-  "Missing Persons",
-  "Institutional Failures",
-  "Organized Crime",
-  "Police Corruption",
-  "Cold Cases",
-];
+export interface CategoryCount {
+  label: string;
+  count: number;
+}
 
 export function useCategoryCounts() {
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [categories, setCategories] = useState<CategoryCount[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     async function load() {
       const supabase = createClient();
-      const results = await Promise.all(
-        CATEGORIES.map(async (cat) => {
-          const { count } = await supabase
-            .from("cases")
-            .select("*", { count: "exact", head: true })
-            .eq("category", cat);
-          return [cat, count ?? 0] as const;
-        })
-      );
+      const { data, error } = await supabase.from("cases").select("category");
       if (!active) return;
-      setCounts(Object.fromEntries(results));
+      if (error || !data) {
+        setLoading(false);
+        return;
+      }
+      const counts = new Map<string, number>();
+      for (const row of data) {
+        const label = row.category?.trim();
+        if (!label) continue; // skip nulls
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+      }
+      const sorted = Array.from(counts.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+      setCategories(sorted);
       setLoading(false);
     }
     load();
@@ -38,5 +40,5 @@ export function useCategoryCounts() {
     };
   }, []);
 
-  return { counts, loading };
+  return { categories, loading };
 }

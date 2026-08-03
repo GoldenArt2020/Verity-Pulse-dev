@@ -14,6 +14,7 @@ interface OpportunityCardV2Props {
   score: number;
   competition: string;
   searchTrend: "Rising" | "Steady" | "Falling";
+  audienceMatch: number;
 }
 
 function scoreColor(score: number) {
@@ -30,6 +31,7 @@ export function OpportunityCardV2({
   score,
   competition,
   searchTrend,
+  audienceMatch,
 }: OpportunityCardV2Props) {
   const router = useRouter();
   const { url: imageUrl, loading: imageLoading } = useCaseVisual(id, category, false);
@@ -66,7 +68,11 @@ export function OpportunityCardV2({
         <p className="mt-0.5 text-xs text-[#71717A]">{location}</p>
         <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#A1A1AA]">{description}</p>
 
-        <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3 text-xs">
+        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3 text-xs">
+          <div>
+            <p className="text-[10px] text-[#71717A]">Audience Match</p>
+            <p className="font-medium text-emerald-400">{audienceMatch}%</p>
+          </div>
           <div>
             <p className="text-[10px] text-[#71717A]">Competition</p>
             <p className="font-medium text-[#FAFAFA]">{competition}</p>
