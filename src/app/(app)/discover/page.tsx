@@ -32,15 +32,15 @@ export default function DiscoverPage() {
     setMounted(true);
   }, []);
 
-  const researchedCases = useMemo(() => {
+  // Fetch real database cases directly
+  const realCases = useMemo(() => {
     if (!Array.isArray(cases)) return [];
-    return cases.filter(
-      (c) => (c?.opportunity_score ?? 0) > 0 && c?.summary && c.summary.trim().length > 0
-    );
+    return cases;
   }, [cases]);
 
+  // Deterministic daily midnight rotation
   const todaysFeatured = useMemo(() => {
-    if (!mounted || researchedCases.length === 0) return researchedCases.slice(0, 4);
+    if (!mounted || realCases.length === 0) return realCases.slice(0, 4);
 
     const todayStr = new Date().toISOString().split("T")[0];
     let seed = 0;
@@ -50,7 +50,7 @@ export default function DiscoverPage() {
     }
     seed = Math.abs(seed);
 
-    const sorted = [...researchedCases].sort((a, b) => {
+    const sorted = [...realCases].sort((a, b) => {
       const idA = String(a.id ?? "");
       const idB = String(b.id ?? "");
       const valA = (idA.charCodeAt(0) || 0) + seed;
@@ -59,10 +59,9 @@ export default function DiscoverPage() {
     });
 
     return sorted.slice(0, 4);
-  }, [researchedCases, mounted]);
+  }, [realCases, mounted]);
 
-  // Count remaining cases that are not featured today
-  const remainingCount = Math.max(0, researchedCases.length - todaysFeatured.length);
+  const remainingCount = Math.max(0, realCases.length - todaysFeatured.length);
 
   if (!channelId) {
     return <ChannelOnboarding />;
@@ -93,7 +92,6 @@ export default function DiscoverPage() {
                 <p className="truncate text-xs text-[#71717A]">4 daily selections · Rotates at 12:00 AM UTC</p>
               </div>
               
-              {/* Only renders "View all" if there are untouched cases beyond today's 4 picks */}
               {remainingCount > 0 && (
                 <button
                   onClick={() => router.push("/discover/opportunities")}
