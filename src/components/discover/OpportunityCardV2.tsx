@@ -45,9 +45,9 @@ export function OpportunityCardV2({
   return (
     <button
       onClick={() => router.push(`/case-analyzer/${id}`)}
-      className="group flex w-full flex-col overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+      className="group flex h-[420px] w-[320px] shrink-0 flex-col overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
     >
-      <div className="relative h-36 w-full overflow-hidden bg-[#18181B]">
+      <div className="relative h-36 w-full shrink-0 overflow-hidden bg-[#18181B]">
         {imageUrl && !imageLoading && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -69,12 +69,12 @@ export function OpportunityCardV2({
         </div>
       </div>
 
-      <div className="p-4 pt-6">
+      <div className="flex flex-1 flex-col p-4 pt-6">
         <p className="font-semibold text-[#FAFAFA]">{title}</p>
         <p className="mt-0.5 text-xs text-[#71717A]">{location}</p>
-        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#A1A1AA]">{description}</p>
+        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[#A1A1AA]">{description}</p>
 
-        <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+        <div className="mt-auto space-y-2 border-t border-white/[0.06] pt-3">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1.5 text-[#71717A]">
               <Users className="h-3.5 w-3.5 shrink-0" />

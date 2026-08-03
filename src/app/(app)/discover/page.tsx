@@ -33,123 +33,103 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-12">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
-        {/* Main column — runs the full page */}
-        <div className="min-w-0">
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
-            <DiscoverHero />
-          </motion.div>
+    <div className="flex justify-center gap-8 px-8 py-12">
+      {/* Main column — fixed max-width, never stretches to fill the right rail's space */}
+      <div className="flex min-w-0 max-w-[1200px] flex-1 flex-col gap-12">
+        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
+          <DiscoverHero />
+        </motion.div>
 
-          <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ duration: 0.3, delay: 0.15 }}
-            className="mt-10"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
-                <p className="text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
-              </div>
-              {researchedCases.length > 0 && (
-                <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
-                  View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
-                </button>
-              )}
+        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
+              <p className="text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
             </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
-
-              {error && (
-                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
-                  We couldn&apos;t load opportunities right now.{" "}
-                  <button className="text-blue-400 hover:text-blue-300">Retry</button>
-                </div>
-              )}
-
-              {!loading && !error && researchedCases.length === 0 && (
-                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
-                  <p className="text-sm text-[#A1A1AA]">
-                    No opportunities yet. Search for a case above to get started.
-                  </p>
-                </div>
-              )}
-
-              {!loading &&
-                !error &&
-                researchedCases.map((c, i) => (
-                  <OpportunityCardV2
-                    key={c.id}
-                    id={c.id}
-                    rank={i + 1}
-                    title={c.name}
-                    location={c.country ?? ""}
-                    category={c.category ?? ""}
-                    description={c.summary ?? ""}
-                    score={c.opportunity_score ?? 0}
-                    competition={
-                      (c.competition_score ?? 0) >= 66
-                        ? "High"
-                        : (c.competition_score ?? 0) >= 33
-                        ? "Medium"
-                        : "Low"
-                    }
-                    searchTrend="Steady"
-                    audienceMatch={c.opportunity_score ?? 0}
-                  />
-                ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ duration: 0.3, delay: 0.25 }}
-            className="mt-14"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
-                <p className="text-xs text-[#71717A]">Explore by theme and category</p>
-              </div>
+            {researchedCases.length > 0 && (
               <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
-                View all collections <ArrowRight className="h-3 w-3" />
+                View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
               </button>
-            </div>
-            <div className="mt-5">
-              <CollectionsGrid />
-            </div>
-          </motion.div>
+            )}
+          </div>
 
-          <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ duration: 0.3, delay: 0.35 }}
-            className="mt-14"
-          >
-            <RecommendationsRowV2 />
-          </motion.div>
-        </div>
+          <div className="mt-5 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
-        {/* Sidebar — hero image + channel cards, stacked from the top */}
-        <motion.div
-          variants={fadeUp}
-          initial="hidden"
-          animate="show"
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className="hidden flex-col gap-6 lg:flex lg:sticky lg:top-8 lg:self-start"
-        >
-          <DiscoverHeroImage />
-          <ChannelStatusPanel />
-          <AIInsightCard />
-          <AudienceBreakdown />
+            {error && (
+              <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
+                We couldn&apos;t load opportunities right now.{" "}
+                <button className="text-blue-400 hover:text-blue-300">Retry</button>
+              </div>
+            )}
+
+            {!loading && !error && researchedCases.length === 0 && (
+              <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
+                <p className="text-sm text-[#A1A1AA]">
+                  No opportunities yet. Search for a case above to get started.
+                </p>
+              </div>
+            )}
+
+            {!loading &&
+              !error &&
+              researchedCases.map((c, i) => (
+                <OpportunityCardV2
+                  key={c.id}
+                  id={c.id}
+                  rank={i + 1}
+                  title={c.name}
+                  location={c.country ?? ""}
+                  category={c.category ?? ""}
+                  description={c.summary ?? ""}
+                  score={c.opportunity_score ?? 0}
+                  competition={
+                    (c.competition_score ?? 0) >= 66
+                      ? "High"
+                      : (c.competition_score ?? 0) >= 33
+                      ? "Medium"
+                      : "Low"
+                  }
+                  searchTrend="Steady"
+                  audienceMatch={c.opportunity_score ?? 0}
+                />
+              ))}
+          </div>
+        </motion.div>
+
+        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.25 }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
+              <p className="text-xs text-[#71717A]">Explore by theme and category</p>
+            </div>
+            <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+              View all collections <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="mt-5">
+            <CollectionsGrid />
+          </div>
+        </motion.div>
+
+        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
+          <RecommendationsRowV2 />
         </motion.div>
       </div>
+
+      {/* Right rail — fixed width, always aligned to top, never scrolls with main content */}
+      <motion.div
+        variants={fadeUp}
+        initial="hidden"
+        animate="show"
+        transition={{ duration: 0.3, delay: 0.1 }}
+        className="hidden w-[420px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start"
+      >
+        <DiscoverHeroImage />
+        <ChannelStatusPanel />
+        <AIInsightCard />
+        <AudienceBreakdown />
+      </motion.div>
     </div>
   );
 }

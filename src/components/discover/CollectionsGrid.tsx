@@ -21,9 +21,12 @@ export function CollectionsGrid() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-24 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]" />
+          <div
+            key={i}
+            className="h-24 w-[240px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
+          />
         ))}
       </div>
     );
@@ -38,14 +41,14 @@ export function CollectionsGrid() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {categories.map((c) => {
         const { icon: Icon, color, bg } = ICONS[c.label] ?? DEFAULT_ICON;
         return (
           <button
             key={c.label}
             onClick={() => router.push(`/discover/collection/${encodeURIComponent(c.label)}`)}
-            className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+            className="w-[240px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
           >
             <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bg}`}>
               <Icon className={`h-4 w-4 ${color}`} />

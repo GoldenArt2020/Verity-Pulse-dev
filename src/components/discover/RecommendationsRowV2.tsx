@@ -32,14 +32,17 @@ export function RecommendationsRowV2() {
 
       {error && <p className="mt-2 text-sm text-rose-400">{error}</p>}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {loading &&
           [1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-28 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]" />
+            <div
+              key={i}
+              className="h-28 w-[320px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
+            />
           ))}
 
         {!loading && recommendations.length === 0 && (
-          <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center">
+          <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center">
             <p className="text-sm text-[#A1A1AA]">
               No recommendations yet.{" "}
               <button onClick={refresh} className="text-blue-400 hover:text-blue-300">
@@ -55,7 +58,7 @@ export function RecommendationsRowV2() {
               key={r.title}
               onClick={() => goToCase(r.title)}
               disabled={!!navigatingTo}
-              className="group relative rounded-[18px] border border-white/[0.06] bg-[#111114] p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30 disabled:opacity-60"
+              className="group relative w-[320px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30 disabled:opacity-60"
             >
               <Bookmark className="absolute right-4 top-4 h-4 w-4 text-[#71717A]" />
               <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-500 text-xs font-bold text-emerald-400">
