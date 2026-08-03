@@ -68,13 +68,13 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Responsive CSS Grid for Cards */}
-      <div className="mt-6 grid w-full gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))]">
+      {/* 4. Responsive Auto-Wrapping CSS Grid */}
+      <div className="mt-6 grid w-full gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]">
         {loading &&
-          [1, 2, 3].map((i) => (
+          [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-[390px] w-full min-w-[340px] max-w-[420px] justify-self-center animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
+              className="h-[390px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
@@ -89,7 +89,7 @@ export function RecommendationsRowV2() {
                 key={r.title}
                 whileHover={{ y: -4 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group relative flex h-full w-full min-w-[340px] max-w-[420px] justify-self-center flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-5 shadow-xl transition-all hover:border-blue-500/40"
+                className="group relative flex h-full w-full min-w-0 flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-5 shadow-xl transition-all hover:border-blue-500/40"
               >
                 <div>
                   {/* Rating Header */}
