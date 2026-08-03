@@ -22,7 +22,7 @@ const fadeUp = {
   show: { opacity: 1, y: 0 },
 };
 
-// Deterministic hash based on today's UTC date string (YYYY-MM-DD)
+// Safe seed derived from today's date string (YYYY-MM-DD UTC)
 function getDailySeed(): number {
   const todayStr = new Date().toISOString().split("T")[0];
   let hash = 0;
@@ -42,25 +42,29 @@ export default function DiscoverPage() {
     return <ChannelOnboarding />;
   }
 
-  // Filter researched cases
-  const researchedCases = cases.filter(
-    (c) => (c.opportunity_score ?? 0) > 0 && c.summary && c.summary.trim().length > 0
-  );
+  // Filter researched cases safely
+  const researchedCases = useMemo(() => {
+    if (!Array.isArray(cases)) return [];
+    return cases.filter(
+      (c) => (c?.opportunity_score ?? 0) > 0 && c?.summary && c.summary.trim().length > 0
+    );
+  }, [cases]);
 
-  // Daily dynamic rotation at 12 AM UTC
-  const dailyCases = useMemo(() => {
+  // Safe rotation formula (prevents crashes on non-string IDs)
+  const todaysFeatured = useMemo(() => {
     if (researchedCases.length === 0) return [];
     const seed = getDailySeed();
-    const rotated = [...researchedCases].sort((a, b) => {
-      const hashA = (a.id.charCodeAt(0) || 0) + seed;
-      const hashB = (b.id.charCodeAt(0) || 0) + seed;
-      return (hashA % 100) - (hashB % 100);
-    });
-    return rotated;
-  }, [researchedCases]);
 
-  // Display top 4 cases for today
-  const todaysFeatured = dailyCases.slice(0, 4);
+    const sorted = [...researchedCases].sort((a, b) => {
+      const idA = String(a.id ?? "");
+      const idB = String(b.id ?? "");
+      const valA = (idA.charCodeAt(0) || 0) + seed;
+      const valB = (idB.charCodeAt(0) || 0) + seed;
+      return (valA % 100) - (valB % 100);
+    });
+
+    return sorted.slice(0, 4);
+  }, [researchedCases]);
 
   return (
     <div className="relative w-full max-w-full overflow-hidden bg-transparent">
@@ -69,7 +73,7 @@ export default function DiscoverPage() {
       </div>
 
       <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
-        {/* Main Column */}
+        {/* Main Content Area */}
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
@@ -85,7 +89,7 @@ export default function DiscoverPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
-                <p className="truncate text-xs text-[#71717A]">4 fresh picks for today · Rotates daily at 12:00 AM</p>
+                <p className="truncate text-xs text-[#71717A]">4 daily selections · Rotates at 12:00 AM UTC</p>
               </div>
               {researchedCases.length > 0 && (
                 <button
@@ -97,14 +101,12 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            {/* Scroll Container */}
             <div className="mt-5 flex w-full min-w-0 gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
-                  We couldn&apos;t load opportunities right now.{" "}
-                  <button className="text-blue-400 hover:text-blue-300">Retry</button>
+                  We couldn&apos;t load opportunities right now.
                 </div>
               )}
 
@@ -120,7 +122,7 @@ export default function DiscoverPage() {
                 !error &&
                 todaysFeatured.map((c, i) => (
                   <OpportunityCardV2
-                    key={c.id}
+                    key={c.id ?? i}
                     id={c.id}
                     rank={i + 1}
                     title={c.name}
