@@ -75,13 +75,13 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Vertically Stacked Cards Container (1 Column) */}
-      <div className="mt-6 grid w-full grid-cols-1 gap-6">
+      {/* 4. Strict 2x2 Grid Layout for Desktop/Tablet */}
+      <div className="mt-6 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
         {loading &&
           [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-[280px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
+              className="h-[420px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
@@ -94,14 +94,14 @@ export function RecommendationsRowV2() {
             return (
               <motion.div
                 key={r.title}
-                whileHover={{ y: -2 }}
+                whileHover={{ y: -4 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group relative flex w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
+                className="group relative flex h-[420px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
               >
-                <div>
-                  {/* Rating Header & Actions */}
+                <div className="flex flex-col overflow-hidden">
+                  {/* Rating Header */}
                   <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, idx) => (
                         <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                       ))}
@@ -114,12 +114,12 @@ export function RecommendationsRowV2() {
                     </button>
                   </div>
 
-                  {/* Title & Location / Category */}
-                  <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <h3 className="text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
+                  {/* Title & Metadata */}
+                  <div className="mt-4">
+                    <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
                       {r.title}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-xs text-[#71717A]">
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
                       <span>{item.country || "United Kingdom"}</span>
                       {item.category && (
                         <>
@@ -130,34 +130,33 @@ export function RecommendationsRowV2() {
                     </div>
                   </div>
 
-                  {/* Match Score & Signals */}
-                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-white/[0.06] pt-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-black text-emerald-400">{matchScore}</span>
-                      <span className="text-xs font-medium text-[#71717A]">Match Score</span>
-                    </div>
+                  {/* Match Score */}
+                  <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
+                    <span className="text-xl font-black text-emerald-400">{matchScore}</span>
+                    <span className="text-xs font-medium text-[#71717A]">Match Score</span>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:flex sm:items-center sm:gap-6">
-                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        <span>Growing Demand</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        <span>Low Competition</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        <span>5 Untouched Angles</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        <span>High Audience Fit</span>
-                      </div>
+                  {/* Scannable Signals Grid */}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="truncate">Growing Search Demand</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="truncate">Low Competition</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="truncate">5 Untouched Angles</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="truncate">High Audience Fit</span>
                     </div>
                   </div>
 
-                  {/* Expandable Explanation Panel */}
+                  {/* Context Panel */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -165,7 +164,7 @@ export function RecommendationsRowV2() {
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="overflow-hidden border-t border-white/[0.06] mt-4 pt-3 text-xs leading-relaxed text-[#A1A1AA]"
+                        className="overflow-y-auto max-h-20 border-t border-white/[0.06] mt-3 pt-2 text-xs leading-relaxed text-[#A1A1AA]"
                       >
                         {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
                       </motion.div>
@@ -173,11 +172,11 @@ export function RecommendationsRowV2() {
                   </AnimatePresence>
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-white/[0.04] pt-4">
+                {/* Bottom Actions - Aligned at card base */}
+                <div className="pt-3 border-t border-white/[0.04] mt-auto">
                   <button
                     onClick={() => setExpanded(isExpanded ? null : r.title)}
-                    className="text-left text-xs font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
+                    className="mb-3 block w-full text-left text-xs font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
                   >
                     {isExpanded ? "Hide breakdown" : "Why we recommend this →"}
                   </button>
@@ -185,7 +184,7 @@ export function RecommendationsRowV2() {
                   <button
                     onClick={() => goToCase(r.title)}
                     disabled={!!navigatingTo}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 px-5 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 sm:w-auto"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
                   >
                     {navigatingTo === r.title ? "Opening Brief…" : "View Brief"}
                     <ArrowRight className="h-3.5 w-3.5" />
