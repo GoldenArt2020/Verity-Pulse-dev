@@ -32,8 +32,8 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-[1600px] justify-center gap-8 px-8 py-12">
-      <div className="flex min-w-0 max-w-5xl flex-1 flex-col gap-12">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-8 py-12 lg:flex-row lg:justify-center">
+      <div className="flex min-w-0 flex-1 flex-col gap-12 lg:max-w-3xl">
         <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
           <DiscoverHero />
         </motion.div>
@@ -120,7 +120,7 @@ export default function DiscoverPage() {
         initial="hidden"
         animate="show"
         transition={{ duration: 0.3, delay: 0.1 }}
-        className="hidden w-[420px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start"
+        className="hidden w-full flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:w-[320px] lg:shrink-0 lg:self-start xl:w-[380px]"
       >
         <ChannelStatusPanel />
         <AIInsightCard />
