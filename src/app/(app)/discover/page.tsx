@@ -35,14 +35,14 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="relative w-full max-w-full overflow-x-clip bg-transparent">
+    <div className="relative w-full max-w-full overflow-hidden bg-transparent">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <IntelligenceGridBackground />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-center lg:px-8 lg:py-12">
-        {/* Main Left Column */}
-        <div className="flex w-full min-w-0 flex-1 flex-col gap-8 lg:max-w-3xl lg:gap-12">
+      <div className="relative mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-between lg:px-8 lg:py-12">
+        {/* MAIN CONTENT COLUMN - Strict CSS calculation fixes the sidebar displacement */}
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-8 lg:w-[calc(100%-340px)] xl:w-[calc(100%-400px)] lg:gap-12 overflow-x-hidden">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
             <DiscoverHero />
           </motion.div>
@@ -139,13 +139,13 @@ export default function DiscoverPage() {
           </motion.div>
         </div>
 
-        {/* Right Sidebar */}
+        {/* RIGHT SIDEBAR - Fixed width constraint */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
           animate="show"
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="hidden w-[320px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start xl:w-[380px]"
+          className="hidden w-[320px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start xl:w-[360px]"
         >
           <ChannelStatusPanel />
           <AIInsightCard />
