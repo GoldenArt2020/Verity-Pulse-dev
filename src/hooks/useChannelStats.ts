@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface ChannelStats {
   channelId: string;
@@ -14,16 +14,15 @@ export function useChannelStats(channelId?: string) {
   const [stats, setStats] = useState<ChannelStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
     if (!channelId) {
       setLoading(false);
       return;
     }
-
     let active = true;
     setLoading(true);
-
     fetch(`/api/youtube/channel-stats?channelId=${channelId}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -41,11 +40,14 @@ export function useChannelStats(channelId?: string) {
       .finally(() => {
         if (active) setLoading(false);
       });
-
     return () => {
       active = false;
     };
-  }, [channelId]);
+  }, [channelId, refreshCount]);
 
-  return { stats, loading, error };
+  const refresh = useCallback(() => {
+    setRefreshCount((n) => n + 1);
+  }, []);
+
+  return { stats, loading, error, refresh };
 }

@@ -6,8 +6,8 @@ import { useChannelStats } from "@/hooks/useChannelStats";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
 
 export function ChannelStatusPanel() {
-  const { channelHandle } = useChannelId();
-  const { stats, loading: statsLoading, refresh } = useChannelStats();
+  const { channelId, channelHandle } = useChannelId();
+  const { stats, loading: statsLoading, refresh } = useChannelStats(channelId);
   const { dna, loading: dnaLoading } = useChannelDNA();
 
   return (
