@@ -22,9 +22,9 @@ function scoreColor(score: number) {
 }
 
 function TrendIcon({ trend }: { trend: "Rising" | "Steady" | "Falling" }) {
-  if (trend === "Rising") return <TrendingUp className="h-3 w-3 shrink-0" />;
-  if (trend === "Falling") return <TrendingDown className="h-3 w-3 shrink-0" />;
-  return <Minus className="h-3 w-3 shrink-0" />;
+  if (trend === "Rising") return <TrendingUp className="h-3.5 w-3.5 shrink-0" />;
+  if (trend === "Falling") return <TrendingDown className="h-3.5 w-3.5 shrink-0" />;
+  return <Minus className="h-3.5 w-3.5 shrink-0" />;
 }
 
 export function OpportunityCardV2({
@@ -74,31 +74,29 @@ export function OpportunityCardV2({
         <p className="mt-0.5 text-xs text-[#71717A]">{location}</p>
         <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#A1A1AA]">{description}</p>
 
-        <div className="mt-3 grid grid-cols-3 gap-1 border-t border-white/[0.06] pt-3">
-          <div className="min-w-0">
-            <p className="truncate text-[10px] text-[#71717A]">Audience Match</p>
-            <p className="mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-emerald-400">
-              <Users className="h-3 w-3 shrink-0" />
-              {audienceMatch}%
-            </p>
+        <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-[#71717A]">
+              <Users className="h-3.5 w-3.5 shrink-0" />
+              Audience Match
+            </span>
+            <span className="font-medium text-emerald-400">{audienceMatch}%</span>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-[10px] text-[#71717A]">Competition</p>
-            <p className="mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-[#FAFAFA]">
-              <BarChart3 className="h-3 w-3 shrink-0" />
-              {competition}
-            </p>
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-[#71717A]">
+              <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+              Competition
+            </span>
+            <span className="font-medium text-[#FAFAFA]">{competition}</span>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-[10px] text-[#71717A]">Search Trend</p>
-            <p
-              className={`mt-1 flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${
-                searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"
-              }`}
-            >
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-[#71717A]">
               <TrendIcon trend={searchTrend} />
+              Search Trend
+            </span>
+            <span className={`font-medium ${searchTrend === "Rising" ? "text-emerald-400" : "text-[#FAFAFA]"}`}>
               {searchTrend}
-            </p>
+            </span>
           </div>
         </div>
       </div>
