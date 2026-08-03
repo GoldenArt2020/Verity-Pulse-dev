@@ -35,13 +35,14 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="relative w-full max-w-full overflow-x-hidden bg-transparent">
+    <div className="relative w-full max-w-full overflow-x-clip bg-transparent">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <IntelligenceGridBackground />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-center lg:px-8 lg:py-12">
-        <div className="flex min-w-0 flex-1 flex-col gap-8 lg:max-w-3xl lg:gap-12">
+      <div className="relative mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-center lg:px-8 lg:py-12">
+        {/* Main Left Column */}
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-8 lg:max-w-3xl lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
             <DiscoverHero />
           </motion.div>
@@ -51,7 +52,7 @@ export default function DiscoverPage() {
             initial="hidden"
             animate="show"
             transition={{ duration: 0.3, delay: 0.15 }}
-            className="min-w-0"
+            className="w-full min-w-0"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -68,7 +69,7 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-5 flex w-full min-w-0 max-w-full gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
@@ -108,7 +109,7 @@ export default function DiscoverPage() {
             initial="hidden"
             animate="show"
             transition={{ duration: 0.3, delay: 0.25 }}
-            className="min-w-0"
+            className="w-full min-w-0"
           >
             <RecommendationsRowV2 />
           </motion.div>
@@ -118,7 +119,7 @@ export default function DiscoverPage() {
             initial="hidden"
             animate="show"
             transition={{ duration: 0.3, delay: 0.35 }}
-            className="min-w-0"
+            className="w-full min-w-0"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -132,18 +133,19 @@ export default function DiscoverPage() {
                 View all <ArrowRight className="h-3 w-3" />
               </button>
             </div>
-            <div className="mt-5">
+            <div className="mt-5 w-full min-w-0">
               <CollectionsGrid />
             </div>
           </motion.div>
         </div>
 
+        {/* Right Sidebar */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
           animate="show"
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="hidden min-w-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:w-[320px] lg:shrink-0 lg:self-start xl:w-[380px]"
+          className="hidden w-[320px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start xl:w-[380px]"
         >
           <ChannelStatusPanel />
           <AIInsightCard />
