@@ -40,10 +40,12 @@ export default function DiscoverPage() {
         <IntelligenceGridBackground />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:justify-between lg:px-8 lg:py-12">
-        {/* MAIN CONTENT COLUMN - Strict CSS calculation fixes the sidebar displacement */}
-        <div className="flex w-full min-w-0 max-w-full flex-col gap-8 lg:w-[calc(100%-340px)] xl:w-[calc(100%-400px)] lg:gap-12 overflow-x-hidden">
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
+      {/* Grid container handles sidebar and main column allocation seamlessly */}
+      <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
+        
+        {/* Main Left Column (Takes 8 out of 12 columns on large screens) */}
+        <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
+          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
           </motion.div>
 
@@ -69,7 +71,7 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 flex w-full min-w-0 max-w-full gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
@@ -139,18 +141,19 @@ export default function DiscoverPage() {
           </motion.div>
         </div>
 
-        {/* RIGHT SIDEBAR - Fixed width constraint */}
+        {/* Right Sidebar Column (Takes 4 out of 12 columns on large screens) */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
           animate="show"
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="hidden w-[320px] shrink-0 flex-col gap-6 lg:sticky lg:top-8 lg:flex lg:self-start xl:w-[360px]"
+          className="hidden flex-col gap-6 lg:col-span-4 lg:flex lg:sticky lg:top-8 lg:self-start"
         >
           <ChannelStatusPanel />
           <AIInsightCard />
           <AudienceBreakdown />
         </motion.div>
+
       </div>
     </div>
   );
