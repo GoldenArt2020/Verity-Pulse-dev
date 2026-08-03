@@ -33,7 +33,6 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex justify-center gap-8 px-8 py-12">
-      {/* Main column — fixed max-width, never stretches to fill the right rail's space */}
       <div className="flex min-w-0 max-w-[1200px] flex-1 flex-col gap-12">
         <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }}>
           <DiscoverHero />
@@ -97,6 +96,10 @@ export default function DiscoverPage() {
         </motion.div>
 
         <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.25 }}>
+          <RecommendationsRowV2 />
+        </motion.div>
+
+        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
@@ -110,13 +113,8 @@ export default function DiscoverPage() {
             <CollectionsGrid />
           </div>
         </motion.div>
-
-        <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
-          <RecommendationsRowV2 />
-        </motion.div>
       </div>
 
-      {/* Right rail — persistent channel/AI/audience intelligence column, fixed width, always aligned to top */}
       <motion.div
         variants={fadeUp}
         initial="hidden"

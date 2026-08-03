@@ -1,12 +1,16 @@
 "use client";
 
-import { RefreshCw, Bookmark, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { RefreshCw, Bookmark, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
+import { AudienceSignalPanel } from "./AudienceSignalPanel";
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToCase, navigatingTo } = useCaseNavigation();
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <div>
@@ -15,29 +19,28 @@ export function RecommendationsRowV2() {
           <p className="text-lg font-semibold text-[#FAFAFA]">Recommended For Your Audience</p>
           <p className="text-xs text-[#71717A]">Handpicked based on your channel DNA and viewer behaviour</p>
         </div>
-        <div className="flex items-center gap-4">
-          <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
-            View all recommendations <ArrowRight className="h-3 w-3" />
-          </button>
-          <button
-            onClick={refresh}
-            disabled={refreshing || loading}
-            className="flex items-center gap-1.5 text-xs font-medium text-[#71717A] hover:text-blue-400 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
+        <button
+          onClick={refresh}
+          disabled={refreshing || loading}
+          className="flex items-center gap-1.5 text-xs font-medium text-[#71717A] hover:text-blue-400 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
 
-      {error && <p className="mt-2 text-sm text-rose-400">{error}</p>}
+      <div className="mt-4">
+        <AudienceSignalPanel />
+      </div>
+
+      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 
       <div className="mt-4 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {loading &&
           [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-28 w-[320px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
+              className="h-44 w-[340px] shrink-0 animate-pulse rounded-[18px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
@@ -53,23 +56,65 @@ export function RecommendationsRowV2() {
         )}
 
         {!loading &&
-          recommendations.map((r) => (
-            <button
-              key={r.title}
-              onClick={() => goToCase(r.title)}
-              disabled={!!navigatingTo}
-              className="group relative w-[320px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-4 text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30 disabled:opacity-60"
-            >
-              <Bookmark className="absolute right-4 top-4 h-4 w-4 text-[#71717A]" />
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-500 text-xs font-bold text-emerald-400">
-                {r.audienceMatch}
-              </div>
-              <p className="mt-3 pr-6 text-sm font-semibold leading-snug text-[#FAFAFA]">
-                {navigatingTo === r.title ? "Opening…" : r.title}
-              </p>
-              <p className="mt-1.5 line-clamp-2 text-xs text-[#A1A1AA]">{r.reason}</p>
-            </button>
-          ))}
+          recommendations.map((r) => {
+            const isExpanded = expanded === r.title;
+            return (
+              <motion.div
+                key={r.title}
+                whileHover={{ y: -6 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="w-[340px] shrink-0 rounded-[18px] border border-white/[0.06] bg-[#111114] p-5 transition-colors duration-200 hover:border-blue-500/30"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-emerald-500 text-xs font-bold text-emerald-400">
+                      {r.audienceMatch}
+                    </div>
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-emerald-400">
+                      Perfect Match
+                    </span>
+                  </div>
+                  <button className="text-[#71717A] hover:text-blue-400" aria-label="Save">
+                    <Bookmark className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => goToCase(r.title)}
+                  disabled={!!navigatingTo}
+                  className="mt-3 block w-full text-left disabled:opacity-60"
+                >
+                  <p className="text-base font-semibold leading-snug text-[#FAFAFA]">
+                    {navigatingTo === r.title ? "Opening…" : r.title}
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setExpanded(isExpanded ? null : r.title)}
+                  className="mt-3 flex w-full items-center justify-between border-t border-white/[0.06] pt-3 text-xs font-medium text-blue-400 hover:text-blue-300"
+                >
+                  Why AI picked this
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden text-xs leading-relaxed text-[#A1A1AA]"
+                    >
+                      <span className="mt-2 block">{r.reason}</span>
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
       </div>
     </div>
   );
