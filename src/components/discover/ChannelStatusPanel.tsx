@@ -4,11 +4,13 @@ import { RefreshCw } from "lucide-react";
 import { useChannelId } from "@/hooks/useChannelId";
 import { useChannelStats } from "@/hooks/useChannelStats";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
 
 export function ChannelStatusPanel() {
   const { channelId, channelHandle } = useChannelId();
-  const { stats, loading: statsLoading, refresh } = useChannelStats(channelId);
+  const { stats, loading: statsLoading, refresh, lastSyncedAt } = useChannelStats(channelId);
   const { dna, loading: dnaLoading } = useChannelDNA();
+  const relativeSync = useRelativeTime(lastSyncedAt);
 
   return (
     <div className="rounded-[18px] border border-white/[0.06] bg-[#111114] p-6">
@@ -47,6 +49,10 @@ export function ChannelStatusPanel() {
           <p className="text-[10px] text-[#71717A]">Views</p>
         </div>
       </div>
+
+      <p className="mt-4 text-xs text-[#71717A]">
+        {statsLoading ? "Syncing…" : relativeSync ? `Last synced ${relativeSync}` : "Not yet synced"}
+      </p>
 
       <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4">
         <div>

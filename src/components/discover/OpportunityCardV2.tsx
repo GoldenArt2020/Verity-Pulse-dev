@@ -39,7 +39,7 @@ export function OpportunityCardV2({
   return (
     <button
       onClick={() => router.push(`/case-analyzer/${id}`)}
-      className="group flex w-72 shrink-0 flex-col overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
+      className="group flex w-full flex-col overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
     >
       <div className="relative h-36 w-full overflow-hidden bg-[#18181B]">
         {imageUrl && !imageLoading && (

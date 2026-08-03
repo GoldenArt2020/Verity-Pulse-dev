@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, ArrowRight } from "lucide-react";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
 
 export function AIInsightCard() {
@@ -13,11 +13,23 @@ export function AIInsightCard() {
 
   return (
     <div className="rounded-[18px] border border-blue-500/20 bg-blue-500/[0.04] p-6">
-      <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/20">
-          <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500/20">
+            <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+          </div>
+          <p className="text-sm font-semibold text-blue-400">Today&apos;s AI Insight</p>
         </div>
-        <p className="text-sm font-semibold text-blue-400">Today&apos;s AI Insight</p>
+        <svg width="72" height="28" viewBox="0 0 72 28" fill="none">
+          <path
+            d="M2 20 L14 16 L22 18 L32 10 L42 12 L52 4 L62 6 L70 2"
+            stroke="#60A5FA"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="70" cy="2" r="2.5" fill="#60A5FA" />
+        </svg>
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-[#A1A1AA]">
@@ -44,6 +56,10 @@ export function AIInsightCard() {
       {topStrength && (
         <p className="mt-3 text-xs text-[#71717A]">Based on your strength in {topStrength}.</p>
       )}
+
+      <button className="mt-4 flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+        View full insight <ArrowRight className="h-3 w-3" />
+      </button>
     </div>
   );
 }

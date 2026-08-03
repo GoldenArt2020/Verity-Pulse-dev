@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Bookmark } from "lucide-react";
+import { RefreshCw, Bookmark, ArrowRight } from "lucide-react";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
 
@@ -15,14 +15,19 @@ export function RecommendationsRowV2() {
           <p className="text-lg font-semibold text-[#FAFAFA]">Recommended For Your Audience</p>
           <p className="text-xs text-[#71717A]">Handpicked based on your channel DNA and viewer behaviour</p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={refreshing || loading}
-          className="flex items-center gap-1.5 text-xs font-medium text-[#71717A] hover:text-blue-400 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+            View all recommendations <ArrowRight className="h-3 w-3" />
+          </button>
+          <button
+            onClick={refresh}
+            disabled={refreshing || loading}
+            className="flex items-center gap-1.5 text-xs font-medium text-[#71717A] hover:text-blue-400 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {error && <p className="mt-2 text-sm text-rose-400">{error}</p>}

@@ -15,6 +15,7 @@ export function useChannelStats(channelId?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!channelId) {
@@ -32,7 +33,10 @@ export function useChannelStats(channelId?: string) {
         return res.json();
       })
       .then((data) => {
-        if (active) setStats(data);
+        if (active) {
+          setStats(data);
+          setLastSyncedAt(new Date());
+        }
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : "Failed to fetch channel stats.");
@@ -49,5 +53,5 @@ export function useChannelStats(channelId?: string) {
     setRefreshCount((n) => n + 1);
   }, []);
 
-  return { stats, loading, error, refresh };
+  return { stats, loading, error, refresh, lastSyncedAt };
 }

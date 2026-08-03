@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
 import { DiscoverHero } from "@/components/discover/DiscoverHero";
 import { DiscoverHeroImage } from "@/components/discover/DiscoverHeroImage";
 import { ChannelStatusPanel } from "@/components/discover/ChannelStatusPanel";
@@ -48,24 +49,29 @@ export default function DiscoverPage() {
             className="mt-10"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
+                <p className="text-xs text-[#71717A]">Ranked by opportunity score and audience fit</p>
+              </div>
               {researchedCases.length > 0 && (
-                <span className="text-xs text-[#71717A]">Ranked by opportunity score</span>
+                <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+                  View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
+                </button>
               )}
             </div>
 
-            <div className="mt-5 flex gap-4 overflow-x-auto pb-2">
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {error && (
-                <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
+                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
                   We couldn&apos;t load opportunities right now.{" "}
                   <button className="text-blue-400 hover:text-blue-300">Retry</button>
                 </div>
               )}
 
               {!loading && !error && researchedCases.length === 0 && (
-                <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
+                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
                   <p className="text-sm text-[#A1A1AA]">
                     No opportunities yet. Search for a case above to get started.
                   </p>
@@ -105,7 +111,15 @@ export default function DiscoverPage() {
             transition={{ duration: 0.3, delay: 0.25 }}
             className="mt-14"
           >
-            <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-[#FAFAFA]">Browse Collections</h2>
+                <p className="text-xs text-[#71717A]">Explore by theme and category</p>
+              </div>
+              <button className="flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300">
+                View all collections <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
             <div className="mt-5">
               <CollectionsGrid />
             </div>
