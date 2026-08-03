@@ -57,7 +57,7 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+           <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
               {error && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
@@ -74,34 +74,11 @@ export default function DiscoverPage() {
                 </div>
               )}
 
-              {!loading &&
-                !error &&
-                researchedCases.map((c, i) => (
-                  <OpportunityCardV2
-                    key={c.id}
-                    id={c.id}
-                    rank={i + 1}
-                    title={c.name}
-                    location={c.country ?? ""}
-                    category={c.category ?? ""}
-                    description={c.summary ?? ""}
-                    score={c.opportunity_score ?? 0}
-                    competition={
-                      (c.competition_score ?? 0) >= 66
-                        ? "High"
-                        : (c.competition_score ?? 0) >= 33
-                        ? "Medium"
-                        : "Low"
-                    }
-                    searchTrend="Steady"
-                    audienceMatch={c.opportunity_score ?? 0}
-                  />
-                ))}
+              
             </div>
           </motion.div>
 
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }} className="min-w-0">
-            <RecommendationsRowV2 />
           </motion.div>
 
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.35 }}>
