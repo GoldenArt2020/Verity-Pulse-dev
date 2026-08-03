@@ -57,8 +57,7 @@ export default function DiscoverPage() {
               )}
             </div>
 
-            <div className="mt-5 flex w-full gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {loading && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+            <div className="mt-5 flex w-full min-w-0 gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
               {error && (
                 <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
@@ -101,7 +100,7 @@ export default function DiscoverPage() {
             </div>
           </motion.div>
 
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.25 }}>
+          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3, delay: 0.15 }} className="min-w-0">
             <RecommendationsRowV2 />
           </motion.div>
 
