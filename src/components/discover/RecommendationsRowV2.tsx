@@ -1,35 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star, FolderKanban } from "lucide-react";
+import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
-
-// Mock data for the Searched Cases section
-const SEARCHED_CATEGORIES = [
-  {
-    name: "Murder Investigation",
-    count: 142,
-    bgImage: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=800",
-  },
-  {
-    name: "Missing Person",
-    count: 89,
-    bgImage: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=800",
-  },
-  {
-    name: "Cold Cases",
-    count: 64,
-    bgImage: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=800",
-  },
-  {
-    name: "Organized Crime",
-    count: 112,
-    bgImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800",
-  },
-];
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
@@ -99,7 +75,7 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Strict 4-Card Responsive Grid Layout */}
+      {/* 4. Strict 4-Card Responsive Grid Layout (Single Row on Desktop) */}
       <div className="mt-6 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {loading &&
           [1, 2, 3, 4].map((i) => (
@@ -217,46 +193,6 @@ export function RecommendationsRowV2() {
               </motion.div>
             );
           })}
-      </div>
-
-      {/* 5. Searched Cases Section */}
-      <div className="mt-16 border-t border-white/[0.06] pt-12">
-        <div className="max-w-2xl">
-          <h2 className="text-2xl font-bold tracking-tight text-[#FAFAFA]">
-            Searched Cases
-          </h2>
-          <p className="mt-1 text-xs text-[#A1A1AA] sm:text-sm">
-            Explore by theme and category
-          </p>
-        </div>
-
-        {/* 4 Category Cards */}
-        <div className="mt-6 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {SEARCHED_CATEGORIES.map((cat) => (
-            <div
-              key={cat.name}
-              className="group relative flex h-48 w-full flex-col justify-end overflow-hidden rounded-[22px] border border-white/[0.08] p-5 transition-all hover:border-white/[0.2] cursor-pointer"
-            >
-              {/* Image Background */}
-              <div
-                className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-                style={{ backgroundImage: `url(${cat.bgImage})` }}
-              />
-              {/* Dark Gradient Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-transparent" />
-
-              {/* Content */}
-              <div className="relative z-10">
-                <h3 className="text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
-                  {cat.name}
-                </h3>
-                <p className="mt-1 text-xs font-medium text-[#A1A1AA]">
-                  {cat.count} cases
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </section>
   );
