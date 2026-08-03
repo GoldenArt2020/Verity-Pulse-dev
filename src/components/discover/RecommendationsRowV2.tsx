@@ -75,13 +75,13 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Strict 4-Card Responsive Grid Layout (Single Row on Desktop) */}
-      <div className="mt-6 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* 4. Vertically Stacked Cards Container (1 Column) */}
+      <div className="mt-6 grid w-full grid-cols-1 gap-6">
         {loading &&
           [1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-[460px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
+              className="h-[280px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
             />
           ))}
 
@@ -94,18 +94,18 @@ export function RecommendationsRowV2() {
             return (
               <motion.div
                 key={r.title}
-                whileHover={{ y: -4 }}
+                whileHover={{ y: -2 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group relative flex h-[460px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-5 shadow-xl transition-all hover:border-blue-500/40"
+                className="group relative flex w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
               >
-                <div className="flex flex-col overflow-hidden">
-                  {/* Rating Header */}
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                    <div className="flex items-center gap-1">
+                <div>
+                  {/* Rating Header & Actions */}
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
+                    <div className="flex items-center gap-1.5">
                       {[...Array(5)].map((_, idx) => (
-                        <Star key={idx} className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                       ))}
-                      <span className="ml-1 text-[9px] font-bold tracking-wider text-emerald-400 uppercase">
+                      <span className="ml-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
                         PERFECT MATCH
                       </span>
                     </div>
@@ -114,12 +114,12 @@ export function RecommendationsRowV2() {
                     </button>
                   </div>
 
-                  {/* Title & Metadata */}
-                  <div className="mt-3">
-                    <h3 className="line-clamp-2 text-sm font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
+                  {/* Title & Location / Category */}
+                  <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
                       {r.title}
                     </h3>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
+                    <div className="flex items-center gap-1.5 text-xs text-[#71717A]">
                       <span>{item.country || "United Kingdom"}</span>
                       {item.category && (
                         <>
@@ -130,29 +130,30 @@ export function RecommendationsRowV2() {
                     </div>
                   </div>
 
-                  {/* Match Score */}
-                  <div className="mt-3 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-2.5">
-                    <span className="text-lg font-black text-emerald-400">{matchScore}</span>
-                    <span className="text-[11px] font-medium text-[#71717A]">Match Score</span>
-                  </div>
+                  {/* Match Score & Signals */}
+                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-white/[0.06] pt-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-emerald-400">{matchScore}</span>
+                      <span className="text-xs font-medium text-[#71717A]">Match Score</span>
+                    </div>
 
-                  {/* Scannable Signals */}
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span>Growing Search Demand</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span>Low Competition</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span>5 Untouched Angles</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span>High Audience Fit</span>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:flex sm:items-center sm:gap-6">
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <span>Growing Demand</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <span>Low Competition</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <span>5 Untouched Angles</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <span>High Audience Fit</span>
+                      </div>
                     </div>
                   </div>
 
@@ -164,7 +165,7 @@ export function RecommendationsRowV2() {
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="overflow-y-auto max-h-24 border-t border-white/[0.06] mt-3 pt-2 text-[11px] leading-relaxed text-[#A1A1AA]"
+                        className="overflow-hidden border-t border-white/[0.06] mt-4 pt-3 text-xs leading-relaxed text-[#A1A1AA]"
                       >
                         {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
                       </motion.div>
@@ -172,11 +173,11 @@ export function RecommendationsRowV2() {
                   </AnimatePresence>
                 </div>
 
-                {/* Bottom Actions - Aligned horizontally across all cards */}
-                <div className="pt-2 border-t border-white/[0.04] mt-auto">
+                {/* Bottom Actions */}
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-white/[0.04] pt-4">
                   <button
                     onClick={() => setExpanded(isExpanded ? null : r.title)}
-                    className="mb-2 block w-full text-left text-[11px] font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
+                    className="text-left text-xs font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
                   >
                     {isExpanded ? "Hide breakdown" : "Why we recommend this →"}
                   </button>
@@ -184,7 +185,7 @@ export function RecommendationsRowV2() {
                   <button
                     onClick={() => goToCase(r.title)}
                     disabled={!!navigatingTo}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 px-5 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 sm:w-auto"
                   >
                     {navigatingTo === r.title ? "Opening Brief…" : "View Brief"}
                     <ArrowRight className="h-3.5 w-3.5" />
