@@ -28,12 +28,10 @@ export default function DiscoverPage() {
   const { cases, loading, error } = useCases();
   const [mounted, setMounted] = useState(false);
 
-  // Prevent hydration mismatch by confirming client mount
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Filter valid researched cases
   const researchedCases = useMemo(() => {
     if (!Array.isArray(cases)) return [];
     return cases.filter(
@@ -41,7 +39,6 @@ export default function DiscoverPage() {
     );
   }, [cases]);
 
-  // Deterministic daily rotation safe for client execution
   const todaysFeatured = useMemo(() => {
     if (!mounted || researchedCases.length === 0) return researchedCases.slice(0, 4);
 
@@ -64,6 +61,9 @@ export default function DiscoverPage() {
     return sorted.slice(0, 4);
   }, [researchedCases, mounted]);
 
+  // Count remaining cases that are not featured today
+  const remainingCount = Math.max(0, researchedCases.length - todaysFeatured.length);
+
   if (!channelId) {
     return <ChannelOnboarding />;
   }
@@ -75,7 +75,6 @@ export default function DiscoverPage() {
       </div>
 
       <div className="relative mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12 lg:px-8 lg:py-12">
-        {/* Main Content Column */}
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 lg:gap-12">
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
@@ -93,27 +92,29 @@ export default function DiscoverPage() {
                 <h2 className="text-lg font-semibold text-[#FAFAFA]">Today&apos;s Opportunities</h2>
                 <p className="truncate text-xs text-[#71717A]">4 daily selections · Rotates at 12:00 AM UTC</p>
               </div>
-              {researchedCases.length > 0 && (
+              
+              {/* Only renders "View all" if there are untouched cases beyond today's 4 picks */}
+              {remainingCount > 0 && (
                 <button
                   onClick={() => router.push("/discover/opportunities")}
                   className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300"
                 >
-                  View all ({researchedCases.length}) <ArrowRight className="h-3 w-3" />
+                  View all ({remainingCount}) <ArrowRight className="h-3 w-3" />
                 </button>
               )}
             </div>
 
-            <div className="mt-5 flex w-full min-w-0 gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mt-5 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
               {(loading || !mounted) && [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
 
               {!loading && mounted && error && (
-                <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
+                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-8 text-center text-sm text-[#A1A1AA]">
                   We couldn&apos;t load opportunities right now.
                 </div>
               )}
 
               {!loading && mounted && !error && todaysFeatured.length === 0 && (
-                <div className="w-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
+                <div className="col-span-full rounded-[18px] border border-white/[0.06] bg-[#111114] p-10 text-center">
                   <p className="text-sm text-[#A1A1AA]">
                     No opportunities yet. Search for a case above to get started.
                   </p>
@@ -173,7 +174,6 @@ export default function DiscoverPage() {
           </motion.div>
         </div>
 
-        {/* Right Sidebar */}
         <motion.div
           variants={fadeUp}
           initial="hidden"
@@ -185,7 +185,6 @@ export default function DiscoverPage() {
           <AIInsightCard />
           <AudienceBreakdown />
         </motion.div>
-
       </div>
     </div>
   );
