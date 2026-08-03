@@ -5,18 +5,15 @@ import { AppProviders } from "@/providers/AppProviders";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
-
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-body",
 });
-
 const interTight = Inter_Tight({
   subsets: ["latin"],
   weight: ["600", "700", "800"],
   variable: "--font-display",
 });
-
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
