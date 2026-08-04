@@ -11,43 +11,22 @@ import {
   Link2,
   Check,
   Loader2,
-  X,
 } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
-import { useChannelId } from "@/hooks/useChannelId";
 
-const LENS_LABELS: Record<string, string> = {
-  "victim-centered": "Victim-Centered",
-  investigative: "Investigative Deep-Dive",
-  "systemic-failure": "Systemic / Institutional Failure",
-  "family-impact": "Family & Community Impact",
-  courtroom: "Legal / Courtroom Drama",
-};
-
-interface GeneratedAngle {
-  lens: string;
-  title: string;
-  hook: string;
-  rationale: string;
-  keyBeats: string[];
+interface CaseHeaderProps {
+  caseData: CaseRow;
+  onGenerateAngles: () => void;
+  anglesLoading: boolean;
 }
 
-export function CaseHeader({ caseData }: { caseData: CaseRow }) {
-  const { channelId } = useChannelId();
-
-  // ---- Share dropdown ----
+export function CaseHeader({ caseData, onGenerateAngles, anglesLoading }: CaseHeaderProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
 
-  // ---- Save Case ----
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // ---- Generate Angle ----
-  const [angleLoading, setAngleLoading] = useState(false);
-  const [angleError, setAngleError] = useState<string | null>(null);
-  const [angleResults, setAngleResults] = useState<GeneratedAngle[] | null>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -102,27 +81,6 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
     } catch (err) {
       setSaveState("error");
       setSaveError(err instanceof Error ? err.message : "Failed to save case");
-    }
-  }
-
-  async function handleGenerateAngles() {
-    setAngleLoading(true);
-    setAngleError(null);
-    setAngleResults(null);
-
-    try {
-      const res = await fetch("/api/case/generate-angle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId: caseData.id, channelId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate angles");
-      setAngleResults(data.angles ?? []);
-    } catch (err) {
-      setAngleError(err instanceof Error ? err.message : "Failed to generate angles");
-    } finally {
-      setAngleLoading(false);
     }
   }
 
@@ -200,21 +158,19 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
           </button>
 
           <button
-            onClick={handleGenerateAngles}
-            disabled={angleLoading}
+            onClick={onGenerateAngles}
+            disabled={anglesLoading}
             className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
           >
-            {angleLoading ? (
+            {anglesLoading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Sparkles className="h-3.5 w-3.5" />
             )}
-            {angleLoading ? "Analyzing coverage..." : "Find Uncovered Angles"}
+            {anglesLoading ? "Analyzing coverage..." : "Find Uncovered Angles"}
           </button>
         </div>
       </div>
-
-      {angleError && <p className="mt-3 text-xs text-rose-400">{angleError}</p>}
 
       <div className="mt-5 grid grid-cols-3 gap-4 border-t border-slate-800/60 pt-5">
         <div className="text-center">
@@ -255,58 +211,6 @@ export function CaseHeader({ caseData }: { caseData: CaseRow }) {
           </p>
         </div>
       </div>
-
-      {angleResults && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
-          onClick={() => setAngleResults(null)}
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <h2 className="font-display text-lg font-bold text-white">
-                {angleResults.length > 0 ? `${angleResults.length} Uncovered Angle${angleResults.length === 1 ? "" : "s"} Found` : "No Strong Angles Found"}
-              </h2>
-              <button
-                onClick={() => setAngleResults(null)}
-                className="shrink-0 rounded-lg p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {angleResults.length === 0 && (
-              <p className="mt-3 text-sm text-slate-400">
-                Every lens appears well-covered on YouTube for this case already.
-              </p>
-            )}
-
-            <div className="mt-4 space-y-4">
-              {angleResults.map((angle, i) => (
-                <div key={i} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                  <span className="inline-block rounded-md bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-400">
-                    {LENS_LABELS[angle.lens] ?? angle.lens}
-                  </span>
-                  <p className="mt-2 font-display text-base font-bold text-white">{angle.title}</p>
-                  <p className="mt-1.5 text-sm italic text-blue-300">{angle.hook}</p>
-                  <p className="mt-2 text-sm text-slate-400">{angle.rationale}</p>
-                  {angle.keyBeats?.length > 0 && (
-                    <ul className="mt-3 space-y-1">
-                      {angle.keyBeats.map((beat, j) => (
-                        <li key={j} className="flex gap-2 text-sm text-slate-300">
-                          <span className="text-blue-400">•</span> {beat}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

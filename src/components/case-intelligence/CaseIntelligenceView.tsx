@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
+import { useChannelId } from "@/hooks/useChannelId";
 import { CaseHeader } from "@/components/case-intelligence/CaseHeader";
 import { CaseTabs } from "@/components/case-intelligence/CaseTabs";
 import { CaseTimeline } from "@/components/case-intelligence/CaseTimeline";
@@ -24,27 +25,29 @@ interface CaseIntelligenceViewProps {
   backLabel: string;
 }
 
-/**
- * Full case-intelligence body: research trigger, loading/error states, and
- * the header/tabs/timeline/analytics grid. Shared by both the standalone
- * case-analyzer route and the projects detail route, so a case looks and
- * behaves identically whether you got there from Discover or from a saved
- * Project — only the "back" link differs.
- */
+interface Angle {
+  lens: string;
+  title: string;
+  hook: string;
+  rationale: string;
+  keyBeats: string[];
+}
+
 export function CaseIntelligenceView({ caseId, backHref, backLabel }: CaseIntelligenceViewProps) {
   const { caseData, loading, error } = useCase(caseId);
+  const { channelId } = useChannelId();
 
   const [researching, setResearching] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
   const [researchDone, setResearchDone] = useState(false);
-
-  // Hard guard against re-triggering research. This is a ref, not state —
-  // it persists across renders without causing re-renders itself, so it
-  // reliably blocks duplicate calls even if `caseData` changes reference
-  // on refetch.
   const researchTriggeredRef = useRef(false);
 
+  const [angles, setAngles] = useState<Angle[] | null>(null);
+  const [anglesLoading, setAnglesLoading] = useState(false);
+  const [anglesError, setAnglesError] = useState<string | null>(null);
+
   const isStub = !loading && !!caseData && caseData.summary === null;
+  const researched = !isStub || researchDone;
 
   useEffect(() => {
     if (!isStub || !caseData || researchTriggeredRef.current) return;
@@ -68,6 +71,27 @@ export function CaseIntelligenceView({ caseId, backHref, backLabel }: CaseIntell
       })
       .finally(() => setResearching(false));
   }, [isStub, caseData]);
+
+  async function handleGenerateAngles() {
+    if (!caseData) return;
+    setAnglesLoading(true);
+    setAnglesError(null);
+
+    try {
+      const res = await fetch("/api/case/generate-angle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: caseData.id, channelId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate angles");
+      setAngles(data.angles ?? []);
+    } catch (err) {
+      setAnglesError(err instanceof Error ? err.message : "Failed to generate angles");
+    } finally {
+      setAnglesLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -109,16 +133,19 @@ export function CaseIntelligenceView({ caseId, backHref, backLabel }: CaseIntell
               This usually takes under a minute.
             </p>
           </div>
-          {researchError && (
-            <p className="mt-2 text-sm text-rose-400">{researchError}</p>
-          )}
+          {researchError && <p className="mt-2 text-sm text-rose-400">{researchError}</p>}
         </div>
       )}
 
-      {!loading && !error && caseData && (!isStub || researchDone) && (
+      {!loading && !error && caseData && researched && (
         <div className="grid grid-cols-[1fr_340px] gap-4 p-6">
           <div className="space-y-4">
-            <CaseHeader caseData={caseData} />
+            <CaseHeader
+              caseData={caseData}
+              onGenerateAngles={handleGenerateAngles}
+              anglesLoading={anglesLoading}
+            />
+            {anglesError && <p className="text-xs text-rose-400">{anglesError}</p>}
             <CaseTabs />
             <CaseTimeline caseId={caseData.id} />
 
@@ -140,8 +167,8 @@ export function CaseIntelligenceView({ caseId, backHref, backLabel }: CaseIntell
           </div>
 
           <div className="space-y-4">
-            <QuickIntelligence />
-            <NarrativeGapsFound />
+            <QuickIntelligence caseId={caseData.id} researched={researched} />
+            <NarrativeGapsFound angles={angles} loading={anglesLoading} />
             <AudienceInterestChart />
           </div>
         </div>
