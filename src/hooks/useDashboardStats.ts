@@ -14,7 +14,12 @@ interface DashboardStats {
   lowestScore: number;
   lowestScoreCase: string | null;
   categoryBreakdown: { category: string; count: number }[];
+  totalCasesSparkline: { v: number }[];
+  highOpportunitySparkline: { v: number }[];
+  avgScoreSparkline: { v: number }[];
 }
+
+const SPARKLINE_DAYS = 7;
 
 export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -31,7 +36,7 @@ export function useDashboardStats() {
         const supabase = createClient();
         const { data, error: dbError } = await supabase
           .from("cases")
-          .select("name, category, opportunity_score");
+          .select("name, category, opportunity_score, created_at");
 
         if (!active) return;
         if (dbError) {
@@ -67,6 +72,40 @@ export function useDashboardStats() {
           .map(([category, count]) => ({ category, count }))
           .sort((a, b) => b.count - a.count);
 
+        // Build last-N-day buckets (cumulative) for sparklines
+        const dayKeys: string[] = [];
+        const today = new Date();
+        for (let i = SPARKLINE_DAYS - 1; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          dayKeys.push(d.toISOString().slice(0, 10)); // "YYYY-MM-DD"
+        }
+
+        const withDates = scored
+          .filter((c) => !!c.created_at)
+          .map((c) => ({
+            day: (c.created_at as string).slice(0, 10),
+            score: c.opportunity_score as number,
+          }));
+
+        const totalCasesSparkline: { v: number }[] = [];
+        const highOpportunitySparkline: { v: number }[] = [];
+        const avgScoreSparkline: { v: number }[] = [];
+
+        for (const day of dayKeys) {
+          const upToDay = withDates.filter((c) => c.day <= day);
+          const cumulativeTotal = upToDay.length;
+          const cumulativeHigh = upToDay.filter((c) => c.score >= 80).length;
+          const cumulativeAvg =
+            cumulativeTotal > 0
+              ? Math.round(upToDay.reduce((a, c) => a + c.score, 0) / cumulativeTotal)
+              : 0;
+
+          totalCasesSparkline.push({ v: cumulativeTotal });
+          highOpportunitySparkline.push({ v: cumulativeHigh });
+          avgScoreSparkline.push({ v: cumulativeAvg });
+        }
+
         setStats({
           totalCases: total,
           highOpportunityCases: high,
@@ -78,6 +117,9 @@ export function useDashboardStats() {
           lowestScore: total > 0 ? lowest.score : 0,
           lowestScoreCase: lowest.name,
           categoryBreakdown,
+          totalCasesSparkline,
+          highOpportunitySparkline,
+          avgScoreSparkline,
         });
       } catch (err) {
         if (active) {

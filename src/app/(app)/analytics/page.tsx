@@ -14,9 +14,33 @@ export default function AnalyticsPage() {
   const { stats, loading } = useDashboardStats();
 
   const caseStats = [
-    { icon: Target, iconColor: "bg-blue-500/15 text-blue-400", label: "Total Cases Researched", value: String(stats?.totalCases ?? 0), change: "—", period: "live" },
-    { icon: Star, iconColor: "bg-emerald-500/15 text-emerald-400", label: "High Opportunity Cases", value: String(stats?.highOpportunityCases ?? 0), change: "—", period: "live" },
-    { icon: TrendingUp, iconColor: "bg-blue-500/15 text-blue-400", label: "Avg. Opportunity Score", value: String(stats?.avgOpportunityScore ?? 0), change: "—", period: "live" },
+    {
+      icon: Target,
+      iconColor: "bg-blue-500/15 text-blue-400",
+      label: "Total Cases Researched",
+      value: String(stats?.totalCases ?? 0),
+      change: "—",
+      period: "live",
+      sparkline: stats?.totalCasesSparkline ?? [],
+    },
+    {
+      icon: Star,
+      iconColor: "bg-emerald-500/15 text-emerald-400",
+      label: "High Opportunity Cases",
+      value: String(stats?.highOpportunityCases ?? 0),
+      change: "—",
+      period: "live",
+      sparkline: stats?.highOpportunitySparkline ?? [],
+    },
+    {
+      icon: TrendingUp,
+      iconColor: "bg-blue-500/15 text-blue-400",
+      label: "Avg. Opportunity Score",
+      value: String(stats?.avgOpportunityScore ?? 0),
+      change: "—",
+      period: "live",
+      sparkline: stats?.avgScoreSparkline ?? [],
+    },
   ];
 
   return (
