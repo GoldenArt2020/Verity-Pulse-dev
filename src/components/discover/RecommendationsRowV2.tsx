@@ -9,10 +9,9 @@ import { AudienceSignalPanel } from "./AudienceSignalPanel";
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
-  const { goToCase, navigatingTo } = useCaseNavigation();
+  const { goToAngleBuilder, navigatingTo } = useCaseNavigation();
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Sort by highest match score and slice to EXACTLY 4 cards
   const topRecommendations = useMemo(() => {
     return [...recommendations]
       .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0))
@@ -21,7 +20,6 @@ export function RecommendationsRowV2() {
 
   return (
     <section className="w-full min-w-0">
-      {/* 1. Header & Concept Intro */}
       <div className="flex flex-col gap-4 border-b border-white/[0.06] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
           <span className="text-[11px] font-bold tracking-wider text-blue-400 uppercase">
@@ -45,7 +43,6 @@ export function RecommendationsRowV2() {
         </button>
       </div>
 
-      {/* 2. Signals Panel Context */}
       <div className="mt-6 w-full min-w-0">
         <AudienceSignalPanel />
       </div>
@@ -56,7 +53,6 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 3. Empty State */}
       {!loading && topRecommendations.length === 0 && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-[22px] border border-dashed border-white/[0.12] bg-[#111114]/50 p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.08] bg-[#18181C]">
@@ -75,14 +71,10 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {/* 4. Strict 2x2 Grid Layout for Desktop/Tablet */}
       <div className="mt-6 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
         {loading &&
           [1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-[420px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]"
-            />
+            <div key={i} className="h-[420px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]" />
           ))}
 
         {!loading &&
@@ -99,7 +91,6 @@ export function RecommendationsRowV2() {
                 className="group relative flex h-[420px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
               >
                 <div className="flex flex-col overflow-hidden">
-                  {/* Rating Header */}
                   <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, idx) => (
@@ -114,7 +105,6 @@ export function RecommendationsRowV2() {
                     </button>
                   </div>
 
-                  {/* Title & Metadata */}
                   <div className="mt-4">
                     <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
                       {r.title}
@@ -130,13 +120,11 @@ export function RecommendationsRowV2() {
                     </div>
                   </div>
 
-                  {/* Match Score */}
                   <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
                     <span className="text-xl font-black text-emerald-400">{matchScore}</span>
                     <span className="text-xs font-medium text-[#71717A]">Match Score</span>
                   </div>
 
-                  {/* Scannable Signals Grid */}
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
@@ -156,7 +144,6 @@ export function RecommendationsRowV2() {
                     </div>
                   </div>
 
-                  {/* Context Panel */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -172,7 +159,6 @@ export function RecommendationsRowV2() {
                   </AnimatePresence>
                 </div>
 
-                {/* Bottom Actions - Aligned at card base */}
                 <div className="pt-3 border-t border-white/[0.04] mt-auto">
                   <button
                     onClick={() => setExpanded(isExpanded ? null : r.title)}
@@ -182,7 +168,7 @@ export function RecommendationsRowV2() {
                   </button>
 
                   <button
-                    onClick={() => goToCase(r.title)}
+                    onClick={() => goToAngleBuilder(r.title)}
                     disabled={!!navigatingTo}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
                   >

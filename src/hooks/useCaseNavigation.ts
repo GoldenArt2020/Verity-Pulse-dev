@@ -1,3 +1,4 @@
+// src/hooks/useCaseNavigation.ts
 "use client";
 
 import { useState } from "react";
@@ -21,5 +22,17 @@ export function useCaseNavigation() {
     }
   }
 
-  return { goToCase, navigatingTo, error };
+  async function goToAngleBuilder(caseName: string) {
+    setNavigatingTo(caseName);
+    setError(null);
+    try {
+      const caseStub = await getOrCreateCase(caseName);
+      router.push(`/angle-builder/${caseStub.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open case");
+      setNavigatingTo(null);
+    }
+  }
+
+  return { goToCase, goToAngleBuilder, navigatingTo, error };
 }
