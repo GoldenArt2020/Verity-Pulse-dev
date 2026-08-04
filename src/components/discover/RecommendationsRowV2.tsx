@@ -6,6 +6,7 @@ import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star } from "lucide-
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
+import { useChannelId } from "@/hooks/useChannelId";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
 import { RecommendationHistorySection } from "./RecommendationHistorySection";
 
@@ -18,6 +19,7 @@ const BADGE_LABEL: Record<string, string> = {
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToAngleBuilder, navigatingTo } = useCaseNavigation();
+  const { clearChannel } = useChannelId();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const topRecommendations = useMemo(() => {
@@ -71,7 +73,10 @@ export function RecommendationsRowV2() {
             Connect your YouTube channel and allow VerityPulse to analyze your audience. The more we learn about your content, the better our recommendations become.
           </p>
           <button
-            onClick={refresh}
+            onClick={() => {
+              clearChannel();
+              window.location.reload();
+            }}
             className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-blue-500 shadow-lg shadow-blue-500/20"
           >
             Connect Channel

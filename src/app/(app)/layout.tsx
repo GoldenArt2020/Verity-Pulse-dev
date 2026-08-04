@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TwoFactorPrompt } from "@/components/auth/TwoFactorPrompt";
 import { MobileTopBar } from "@/components/layout/MobileTopBar";
 import { DesktopTopBar } from "@/components/layout/DesktopTopBar";
+import { OnboardingGate } from "@/components/layout/OnboardingGate";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen flex-1 flex-col">
         <MobileTopBar />
         <DesktopTopBar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto">
+          <OnboardingGate>{children}</OnboardingGate>
+        </main>
       </div>
       <TwoFactorPrompt />
     </div>

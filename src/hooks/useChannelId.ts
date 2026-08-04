@@ -8,12 +8,14 @@ const HANDLE_KEY = "vp_channel_handle";
 export function useChannelId() {
   const [channelId, setChannelId] = useState<string | undefined>(undefined);
   const [channelHandle, setChannelHandle] = useState<string | undefined>(undefined);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const storedId = localStorage.getItem(STORAGE_KEY);
     const storedHandle = localStorage.getItem(HANDLE_KEY);
     if (storedId) setChannelId(storedId);
     if (storedHandle) setChannelHandle(storedHandle);
+    setLoaded(true);
   }, []);
 
   function saveChannel(id: string, handle: string) {
@@ -30,5 +32,5 @@ export function useChannelId() {
     setChannelHandle(undefined);
   }
 
-  return { channelId, channelHandle, saveChannel, clearChannel };
+  return { channelId, channelHandle, loaded, saveChannel, clearChannel };
 }
