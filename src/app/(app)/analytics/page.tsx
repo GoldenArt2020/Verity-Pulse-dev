@@ -6,20 +6,17 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { ChannelStatCards } from "@/components/dashboard/ChannelStatCards";
 import { OpportunityOverview } from "@/components/dashboard/OpportunityOverview";
 import { OpportunityGauge } from "@/components/dashboard/OpportunityGauge";
-import { TrendingOpportunities } from "@/components/dashboard/TrendingOpportunities";
+import { RecommendationConversionCard } from "@/components/dashboard/RecommendationConversionCard";
 import { RecentCases } from "@/components/dashboard/RecentCases";
-import { RecentResearch } from "@/components/dashboard/RecentResearch";
-import { IntelligenceFeedStrip } from "@/components/dashboard/IntelligenceFeedStrip";
-import { STATS } from "@/constants/dashboardStats";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 
 export default function AnalyticsPage() {
   const { stats, loading } = useDashboardStats();
 
   const caseStats = [
-    { icon: Target, iconColor: "bg-blue-500/15 text-blue-400", label: "Total Opportunities", value: String(stats?.totalCases ?? 0), change: "—", period: "live", sparkline: STATS[0].sparkline },
-    { icon: Star, iconColor: "bg-emerald-500/15 text-emerald-400", label: "High Opportunity Cases", value: String(stats?.highOpportunityCases ?? 0), change: "—", period: "live", sparkline: STATS[1].sparkline },
-    { icon: TrendingUp, iconColor: "bg-blue-500/15 text-blue-400", label: "Avg. Opportunity Score", value: String(stats?.avgOpportunityScore ?? 0), change: "—", period: "live", sparkline: STATS[2].sparkline },
+    { icon: Target, iconColor: "bg-blue-500/15 text-blue-400", label: "Total Cases Researched", value: String(stats?.totalCases ?? 0), change: "—", period: "live" },
+    { icon: Star, iconColor: "bg-emerald-500/15 text-emerald-400", label: "High Opportunity Cases", value: String(stats?.highOpportunityCases ?? 0), change: "—", period: "live" },
+    { icon: TrendingUp, iconColor: "bg-blue-500/15 text-blue-400", label: "Avg. Opportunity Score", value: String(stats?.avgOpportunityScore ?? 0), change: "—", period: "live" },
   ];
 
   return (
@@ -39,13 +36,11 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-3 gap-4">
           <OpportunityOverview />
           <OpportunityGauge />
-          <TrendingOpportunities />
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <RecentCases />
-          <RecentResearch />
+          <RecommendationConversionCard />
         </div>
-        <IntelligenceFeedStrip />
       </div>
     </div>
   );

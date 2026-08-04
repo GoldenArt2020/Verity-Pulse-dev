@@ -11,6 +11,7 @@ interface CaseRow {
   opportunity_score: number | null;
   competition_score: number | null;
   summary: string | null;
+  created_at: string | null;
 }
 
 export function useCases() {

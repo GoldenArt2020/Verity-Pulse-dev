@@ -1,71 +1,64 @@
 "use client";
 
-import { Info } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-
-const DATA = [
-  { date: "Apr 21", score: 42 }, { date: "Apr 28", score: 48 }, { date: "May 5", score: 55 },
-  { date: "May 12", score: 60 }, { date: "May 19", score: 58 }, { date: "May 26", score: 66 },
-  { date: "Jun 2", score: 72 }, { date: "Jun 9", score: 80 }, { date: "Jun 16", score: 92 },
-];
+import { useDashboardStats } from "@/hooks/useDashboardStats";
 
 export function OpportunityOverview() {
+  const { stats, loading, error } = useDashboardStats();
+
+  if (loading) return <div className="col-span-2 h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
+  if (error || !stats) {
+    return (
+      <div className="glass-card col-span-2 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-sm text-slate-400">
+        Couldn't load opportunity data.
+      </div>
+    );
+  }
+
+  const topCategory = stats.categoryBreakdown[0];
+
   return (
     <div className="glass-card col-span-2 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <h3 className="text-base font-semibold text-white">Opportunity Overview</h3>
-          <Info className="h-3.5 w-3.5 text-slate-500" />
-        </div>
-        <div className="flex items-center gap-2">
-          <select className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300">
-            <option>Opportunity Score</option>
-          </select>
-          <select className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300">
-            <option>Last 30 Days</option>
-          </select>
-        </div>
-      </div>
+      <h3 className="text-base font-semibold text-white">Opportunity Overview</h3>
+      <p className="text-xs text-slate-500">Based on {stats.totalCases} researched case{stats.totalCases === 1 ? "" : "s"}</p>
 
-      <div className="mt-4 h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={DATA}>
-            <defs>
-              <linearGradient id="scoreFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-            <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 12 }} />
-            <Area type="monotone" dataKey="score" stroke="#3B82F6" strokeWidth={2} fill="url(#scoreFill)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="mt-4 grid grid-cols-4 gap-4 border-t border-slate-800/60 pt-4">
+      <div className="mt-5 grid grid-cols-4 gap-4">
         <div>
           <p className="text-[11px] text-slate-500">Average Opportunity Score</p>
-          <p className="text-lg font-semibold text-white">72 <span className="text-xs text-emerald-400">↑14%</span></p>
+          <p className="text-lg font-semibold text-white">{stats.avgOpportunityScore}</p>
         </div>
         <div>
           <p className="text-[11px] text-slate-500">Highest Score</p>
-          <p className="text-lg font-semibold text-white">98</p>
-          <p className="text-[11px] text-slate-500">The Isabella Gardner Heist</p>
+          <p className="text-lg font-semibold text-white">{stats.highestScore}</p>
+          <p className="truncate text-[11px] text-slate-500">{stats.highestScoreCase ?? "—"}</p>
         </div>
         <div>
           <p className="text-[11px] text-slate-500">Lowest Score</p>
-          <p className="text-lg font-semibold text-white">28</p>
-          <p className="text-[11px] text-slate-500">Local Case Files</p>
+          <p className="text-lg font-semibold text-white">{stats.lowestScore}</p>
+          <p className="truncate text-[11px] text-slate-500">{stats.lowestScoreCase ?? "—"}</p>
         </div>
         <div>
-          <p className="text-[11px] text-slate-500">Standout Category</p>
-          <p className="text-lg font-semibold text-white">Missing Persons</p>
-          <p className="text-[11px] text-emerald-400">↑26% Opportunity</p>
+          <p className="text-[11px] text-slate-500">Top Category</p>
+          <p className="text-lg font-semibold text-white">{topCategory?.category ?? "—"}</p>
+          <p className="text-[11px] text-slate-500">{topCategory ? `${topCategory.count} case${topCategory.count === 1 ? "" : "s"}` : ""}</p>
         </div>
       </div>
+
+      {stats.categoryBreakdown.length > 0 && (
+        <div className="mt-5 space-y-2 border-t border-slate-800/60 pt-4">
+          {stats.categoryBreakdown.slice(0, 5).map((c) => (
+            <div key={c.category} className="flex items-center gap-3 text-xs">
+              <span className="w-32 shrink-0 truncate text-slate-400">{c.category}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-blue-500"
+                  style={{ width: `${(c.count / stats.totalCases) * 100}%` }}
+                />
+              </div>
+              <span className="w-6 shrink-0 text-right text-slate-300">{c.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

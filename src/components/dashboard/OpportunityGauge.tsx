@@ -1,23 +1,31 @@
 "use client";
 
-import { Info } from "lucide-react";
-
-const BREAKDOWN = [
-  { label: "High Opportunity", range: "80 - 100", pct: 36, color: "bg-emerald-500", dot: "bg-emerald-400" },
-  { label: "Medium Opportunity", range: "50 - 79", pct: 42, color: "bg-amber-500", dot: "bg-amber-400" },
-  { label: "Low Opportunity", range: "0 - 49", pct: 22, color: "bg-rose-500", dot: "bg-rose-400" },
-];
+import { useDashboardStats } from "@/hooks/useDashboardStats";
 
 export function OpportunityGauge() {
-  const score = 72;
-  const angle = (score / 100) * 180;
+  const { stats, loading, error } = useDashboardStats();
+
+  if (loading) return <div className="h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
+  if (error || !stats) {
+    return (
+      <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-sm text-slate-400">
+        Couldn't load distribution.
+      </div>
+    );
+  }
+
+  const { totalCases, avgOpportunityScore, highOpportunityCases, mediumOpportunityCases, lowOpportunityCases } = stats;
+  const angle = (avgOpportunityScore / 100) * 180;
+  const pct = (n: number) => (totalCases > 0 ? Math.round((n / totalCases) * 100) : 0);
+
+  const label =
+    avgOpportunityScore >= 80 ? "Excellent Opportunity" :
+    avgOpportunityScore >= 50 ? "Good Opportunity" :
+    totalCases > 0 ? "Needs Improvement" : "No Data Yet";
 
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
-      <div className="flex items-center gap-1.5">
-        <h3 className="text-base font-semibold text-white">Opportunity Score Distribution</h3>
-        <Info className="h-3.5 w-3.5 text-slate-500" />
-      </div>
+      <h3 className="text-base font-semibold text-white">Opportunity Score Distribution</h3>
 
       <div className="relative mx-auto mt-4 h-[130px] w-[220px]">
         <svg viewBox="0 0 220 130" className="h-full w-full">
@@ -39,27 +47,41 @@ export function OpportunityGauge() {
           </defs>
         </svg>
         <div className="absolute inset-x-0 bottom-2 flex flex-col items-center">
-          <span className="font-mono-vp text-4xl font-bold text-white">{score}</span>
-          <span className="text-xs text-emerald-400">Good Opportunity</span>
+          <span className="font-mono-vp text-4xl font-bold text-white">{avgOpportunityScore}</span>
+          <span className="text-xs text-emerald-400">{label}</span>
         </div>
       </div>
 
       <div className="mt-2 space-y-2.5">
-        {BREAKDOWN.map((b) => (
-          <div key={b.label} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${b.dot}`} />
-              <span className="text-slate-400">{b.range}</span>
-              <span className="text-slate-300">{b.label}</span>
-            </div>
-            <span className="font-medium text-white">{b.pct}%</span>
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="text-slate-400">80 - 100</span>
+            <span className="text-slate-300">High Opportunity</span>
           </div>
-        ))}
+          <span className="font-medium text-white">{pct(highOpportunityCases)}%</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            <span className="text-slate-400">50 - 79</span>
+            <span className="text-slate-300">Medium Opportunity</span>
+          </div>
+          <span className="font-medium text-white">{pct(mediumOpportunityCases)}%</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-rose-400" />
+            <span className="text-slate-400">0 - 49</span>
+            <span className="text-slate-300">Low Opportunity</span>
+          </div>
+          <span className="font-medium text-white">{pct(lowOpportunityCases)}%</span>
+        </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-slate-800/60 pt-3 text-xs">
         <span className="text-slate-500">Total Analyzed</span>
-        <span className="font-semibold text-white">248</span>
+        <span className="font-semibold text-white">{totalCases}</span>
       </div>
     </div>
   );
