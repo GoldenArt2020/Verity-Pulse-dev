@@ -1,3 +1,4 @@
+// src/app/api/channel/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getOrBuildChannelDNA } from "@/services/creatorDNA";
 import { generateRecommendations } from "@/services/recommendations";
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ dna, recommendations: null });
     }
 
-    const recommendations = await generateRecommendations(channelRow.id, videos);
+    const recommendations = await generateRecommendations(supabase, channelRow.id, videos);
 
     return NextResponse.json({ dna, recommendations });
   } catch (err) {

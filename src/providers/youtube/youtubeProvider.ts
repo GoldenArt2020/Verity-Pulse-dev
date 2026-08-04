@@ -1,3 +1,4 @@
+// src/providers/youtube/youtubeProvider.ts
 import type {
   YouTubeChannelStats,
   YouTubeVideoStats,
@@ -68,6 +69,36 @@ export const youtubeProvider = {
       (key) =>
         `${BASE_URL}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&key=${key}`
     );
+    return (data.items ?? []).map(
+      (item: { id: { videoId: string }; snippet: { title: string; publishedAt: string } }) => ({
+        videoId: item.id.videoId,
+        title: item.snippet.title,
+        viewCount: 0,
+        publishedAt: item.snippet.publishedAt,
+      })
+    );
+  },
+
+  /**
+   * Searches YouTube for videos matching a query, sorted by view count and
+   * restricted to videos published within the last `publishedAfterDays`
+   * days — used as a real trending signal (not just search snippets).
+   * Cost: 100 units per call, same as searchVideos. Callers should cache
+   * and avoid calling this more than once per query per cron run.
+   */
+  async searchTrendingVideos(
+    query: string,
+    publishedAfterDays = 7,
+    maxResults = 15
+  ): Promise<YouTubeVideoStats[]> {
+    const publishedAfter = new Date();
+    publishedAfter.setDate(publishedAfter.getDate() - publishedAfterDays);
+
+    const data = await fetchYouTube(
+      (key) =>
+        `${BASE_URL}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&order=viewCount&publishedAfter=${publishedAfter.toISOString()}&maxResults=${maxResults}&key=${key}`
+    );
+
     return (data.items ?? []).map(
       (item: { id: { videoId: string }; snippet: { title: string; publishedAt: string } }) => ({
         videoId: item.id.videoId,

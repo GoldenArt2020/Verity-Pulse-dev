@@ -7,6 +7,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
+import { RecommendationHistorySection } from "./RecommendationHistorySection";
+
+const BADGE_LABEL: Record<string, string> = {
+  "for-you": "Perfect Match",
+  "currently-trending": "Currently Trending",
+  "about-to-trend": "About to Trend",
+};
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
@@ -30,7 +37,7 @@ export function RecommendationsRowV2() {
             Our Recommendations
           </h2>
           <p className="mt-2 text-xs leading-relaxed text-[#A1A1AA] sm:text-sm">
-            Today’s strongest opportunities for your channel. Every recommendation is ranked using your Creator DNA, current search behaviour, competition analysis, and narrative opportunities.
+            Today’s strongest opportunities for your channel. Every recommendation is ranked using your Creator DNA, current search behaviour, competition analysis, and narrative opportunities. Refreshed automatically every night.
           </p>
         </div>
 
@@ -83,6 +90,7 @@ export function RecommendationsRowV2() {
             const item = r as any;
             const isExpanded = expanded === r.title;
             const matchScore = r.audienceMatch ?? 96;
+            const badgeLabel = BADGE_LABEL[item.trendStatus] ?? "Perfect Match";
 
             return (
               <motion.div
@@ -98,7 +106,7 @@ export function RecommendationsRowV2() {
                         <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                       ))}
                       <span className="ml-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
-                        PERFECT MATCH
+                        {badgeLabel}
                       </span>
                     </div>
                     <button className="text-[#71717A] hover:text-[#FAFAFA]" aria-label="Save">
@@ -181,6 +189,8 @@ export function RecommendationsRowV2() {
             );
           })}
       </div>
+
+      <RecommendationHistorySection />
     </section>
   );
 }

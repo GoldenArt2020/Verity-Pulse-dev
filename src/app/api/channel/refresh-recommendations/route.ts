@@ -1,3 +1,4 @@
+// src/app/api/channel/refresh-recommendations/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { generateRecommendations } from "@/services/recommendations";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const videos = await youtubeProvider.getChannelVideos(summary.uploadsPlaylistId, 50);
     const channelDNA = channelRow.channel_dna as unknown as ChannelDNA | null;
-    const recommendations = await generateRecommendations(channelRow.id, videos, channelDNA);
+    const recommendations = await generateRecommendations(supabase, channelRow.id, videos, channelDNA);
 
     return NextResponse.json({ recommendations });
   } catch (err) {
