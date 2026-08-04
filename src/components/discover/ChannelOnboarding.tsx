@@ -61,7 +61,7 @@ export function ChannelOnboarding() {
       const dnaData = await dnaRes.json();
       if (!dnaRes.ok) throw new Error(dnaData.error ?? "Failed to build Creator DNA");
       setStepIndex(5);
-      saveChannel(data.channelId, handle.trim());
+      saveChannel(data.channelId, data.title);
       await new Promise((r) => setTimeout(r, 400)); // let the last checkmark render
       window.location.reload();
      } catch (err) {
