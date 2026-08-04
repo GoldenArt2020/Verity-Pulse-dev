@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+﻿import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { getOrFetchChannelVideos, saveLensTags } from "@/services/channelVideos";
@@ -45,7 +45,7 @@ export interface ChannelDNA {
 function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; viewCount: number }[]): string {
   const videoList = videos
     .slice(0, 50)
-    .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount} views`)
+    .map((v, i) => `${i + 1}. "${v.title}" â€” ${v.viewCount} views`)
     .join("\n");
 
   return `You are an editorial analyst for a true crime YouTube intelligence platform. Analyze this creator's channel and return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
@@ -76,7 +76,7 @@ DESCRIPTION: ${channel.description.slice(0, 500)}
 SUBSCRIBERS: ${channel.subscriberCount}
 TOTAL VIDEOS: ${channel.videoCount}
 
-RECENT VIDEOS (numbered, title — views):
+RECENT VIDEOS (numbered, title â€” views):
 ${videoList}
 
 Base "strengths" and "weaknesses" on inferred true-crime subgenres this channel's titles suggest the audience responds to well vs. poorly.
@@ -142,7 +142,7 @@ export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
   userId: string
 ): Promise<ChannelDNA> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: existingChannel, error: fetchError } = await supabase
     .from("channels")
@@ -162,7 +162,7 @@ export async function getOrBuildChannelDNA(
   }
 
   if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot generate Creator DNA");
+    throw new Error("Groq is not configured â€” cannot generate Creator DNA");
   }
 
   // Need the channel's DB row id before we can cache raw videos against it.
@@ -189,7 +189,7 @@ export async function getOrBuildChannelDNA(
   }
 
   if (!channelDbId) {
-    throw new Error("channelDbId was not set — this should never happen");
+    throw new Error("channelDbId was not set â€” this should never happen");
   }
 
   const cachedVideos = await getOrFetchChannelVideos(channelDbId, channelSummary);

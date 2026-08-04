@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+﻿import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail, YouTubeChannelSummary } from "@/providers/youtube/types";
 
@@ -21,7 +21,7 @@ export async function getOrFetchChannelVideos(
   channelDbId: string,
   channelSummary: YouTubeChannelSummary
 ): Promise<CachedVideo[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: existing, error: fetchError } = await supabase
     .from("channel_videos")
@@ -77,7 +77,7 @@ export async function saveLensTags(
   channelDbId: string,
   tags: { videoId: string; lens: string }[]
 ): Promise<void> {
-  const supabase = createClient();
+  const supabase = await createClient();
   for (const tag of tags) {
     await supabase
       .from("channel_videos")
