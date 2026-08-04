@@ -159,7 +159,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
             />
             <SelectedAnglePanel angle={selectedAngle} onClear={() => setSelectedIndex(null)} />
             <div className="space-y-4">
-              <AudienceProfileMatch />
+              <AudienceProfileMatch angle={selectedAngle} />
               <AngleScoreBreakdown angle={selectedAngle} />
               <TitleIdeasList angles={angles} />
             </div>
