@@ -1,10 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import {
   Share2,
-  Bookmark,
-  BookmarkCheck,
   Sparkles,
   Mail,
   MessageCircle,
@@ -24,9 +22,6 @@ export function CaseHeader({ caseData, onGenerateAngles, anglesLoading }: CaseHe
   const [shareOpen, setShareOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
-
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -62,25 +57,6 @@ export function CaseHeader({ caseData, onGenerateAngles, anglesLoading }: CaseHe
       setTimeout(() => setLinkCopied(false), 2000);
     } catch {
       // Clipboard API can fail on non-HTTPS/local contexts; fall back silently.
-    }
-  }
-
-  async function handleSaveCase() {
-    if (saveState === "saving" || saveState === "saved") return;
-    setSaveState("saving");
-    setSaveError(null);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId: caseData.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save case");
-      setSaveState("saved");
-    } catch (err) {
-      setSaveState("error");
-      setSaveError(err instanceof Error ? err.message : "Failed to save case");
     }
   }
 
@@ -138,24 +114,6 @@ export function CaseHeader({ caseData, onGenerateAngles, anglesLoading }: CaseHe
               </div>
             )}
           </div>
-
-          <button
-            onClick={handleSaveCase}
-            disabled={saveState === "saving"}
-            title={saveError ?? undefined}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50 disabled:opacity-60"
-          >
-            {saveState === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {saveState === "saved" && <BookmarkCheck className="h-3.5 w-3.5 text-emerald-400" />}
-            {(saveState === "idle" || saveState === "error") && <Bookmark className="h-3.5 w-3.5" />}
-            {saveState === "saved"
-              ? "Saved"
-              : saveState === "saving"
-                ? "Saving..."
-                : saveState === "error"
-                  ? "Retry Save"
-                  : "Save Case"}
-          </button>
 
           <button
             onClick={onGenerateAngles}
