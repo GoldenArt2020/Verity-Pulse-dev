@@ -12,6 +12,11 @@ const LENS_LABELS: Record<string, string> = {
   courtroom: "Legal / Courtroom Drama",
 };
 
+function totalScore(a: GeneratedAngle) {
+  const s = a.scores;
+  return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
+}
+
 export function SelectedAnglePanel({ angle, onClear }: { angle: GeneratedAngle | null; onClear: () => void }) {
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
@@ -33,11 +38,16 @@ export function SelectedAnglePanel({ angle, onClear }: { angle: GeneratedAngle |
 
       {angle && (
         <>
-          <div className="mt-3">
-            <span className="inline-block rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
-              {LENS_LABELS[angle.lens] ?? angle.lens}
-            </span>
-            <p className="mt-1.5 text-lg font-semibold text-white">{angle.title}</p>
+          <div className="mt-3 flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 text-sm font-bold text-emerald-400">
+              {totalScore(angle)}
+            </div>
+            <div className="flex-1">
+              <span className="inline-block rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                {LENS_LABELS[angle.lens] ?? angle.lens}
+              </span>
+              <p className="mt-1 text-lg font-semibold text-white">{angle.title}</p>
+            </div>
           </div>
 
           <p className="mt-4 text-xs font-medium text-slate-400">Hook</p>

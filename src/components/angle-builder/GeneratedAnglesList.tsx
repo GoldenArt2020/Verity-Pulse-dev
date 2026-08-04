@@ -12,6 +12,11 @@ const LENS_LABELS: Record<string, string> = {
   courtroom: "Legal / Courtroom Drama",
 };
 
+function totalScore(a: GeneratedAngle) {
+  const s = a.scores;
+  return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
+}
+
 export function GeneratedAnglesList({
   angles,
   loading,
@@ -73,6 +78,9 @@ export function GeneratedAnglesList({
             >
               <div className="flex items-start gap-3">
                 <input type="checkbox" checked={selectedIndex === i} readOnly className="mt-1 h-3.5 w-3.5 rounded border-slate-600 accent-blue-500" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 border-emerald-500 text-xs font-bold text-emerald-400">
+                  {totalScore(a)}
+                </div>
                 <div className="min-w-0 flex-1">
                   <span className="inline-block rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
                     {LENS_LABELS[a.lens] ?? a.lens}

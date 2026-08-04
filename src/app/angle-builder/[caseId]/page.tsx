@@ -1,3 +1,4 @@
+// src/app/angle-builder/[caseId]/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -14,12 +15,21 @@ import { AngleScoreBreakdown } from "@/components/angle-builder/AngleScoreBreakd
 import { TitleIdeasList } from "@/components/angle-builder/TitleIdeasList";
 import { AngleBuilderStatsBar } from "@/components/angle-builder/AngleBuilderStatsBar";
 
+export interface AngleScores {
+  searchDemand: number;
+  competition: number;
+  emotionalImpact: number;
+  originality: number;
+  audienceMatch: number;
+}
+
 export interface GeneratedAngle {
   lens: string;
   title: string;
   hook: string;
   rationale: string;
   keyBeats: string[];
+  scores: AngleScores;
 }
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {
@@ -90,6 +100,8 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
     handleGenerateAngles();
   }, [researched, caseData]);
 
+  const selectedAngle = selectedIndex !== null ? angles[selectedIndex] ?? null : null;
+
   return (
     <div>
       <div className="flex items-center gap-4 border-b border-slate-800/60 bg-[rgb(4,9,22)] px-8 py-4">
@@ -145,13 +157,10 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
               onSelect={setSelectedIndex}
               onRegenerate={handleGenerateAngles}
             />
-            <SelectedAnglePanel
-              angle={selectedIndex !== null ? angles[selectedIndex] ?? null : null}
-              onClear={() => setSelectedIndex(null)}
-            />
+            <SelectedAnglePanel angle={selectedAngle} onClear={() => setSelectedIndex(null)} />
             <div className="space-y-4">
               <AudienceProfileMatch />
-              <AngleScoreBreakdown />
+              <AngleScoreBreakdown angle={selectedAngle} />
               <TitleIdeasList angles={angles} />
             </div>
           </div>
