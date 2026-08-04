@@ -4,10 +4,13 @@ import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
 
+export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
+
 export interface Recommendation {
   title: string;
   audienceMatch: number;
   reason: string;
+  trendStatus: TrendStatus;
 }
 
 interface TopicExtraction {
@@ -32,7 +35,7 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 List the distinct real case/person names you can confidently identify (max 10). If a video's subject can't be confidently identified as a specific real case, skip it rather than guessing.`;
 }
 
-function buildRecommendationPrompt(topics: string[], searchContext: string): string {
+function buildPersonalizedPrompt(topics: string[], searchContext: string): string {
   return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's content focuses on: ${topics.join(", ")}.
 
 Based on the following search results about true crime cases matching this creator's focus, recommend up to 5 cases this creator should cover next.
@@ -50,6 +53,27 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 Only recommend real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}.`;
 }
 
+function buildTrendPrompt(searchContext: string, label: "currently-trending" | "about-to-trend"): string {
+  const framing =
+    label === "currently-trending"
+      ? "cases that are ACTIVELY viral or breaking right now — major news coverage, high search volume this week, widely discussed"
+      : "cases showing EARLY signs of rising interest — recent developments, renewed attention, or growing search/discussion volume, but not yet mainstream/saturated";
+
+  return `You are a trend analyst for a true crime YouTube intelligence platform. Based on the search results below, identify up to 4 ${framing}.
+
+SEARCH RESULTS:
+${searchContext}
+
+Return ONLY valid JSON in this exact shape, no markdown, no commentary:
+{
+  "recommendations": [
+    { "title": string, "audienceMatch": number (0-100, general true-crime audience interest level), "reason": string (1 sentence explaining the trend signal — why this is ${label === "currently-trending" ? "trending now" : "about to trend"}) }
+  ]
+}
+
+Only include real, distinct, currently real-world cases — do not invent anything.`;
+}
+
 function parseJSON<T>(raw: string): T {
   const cleaned = raw
     .trim()
@@ -59,14 +83,36 @@ function parseJSON<T>(raw: string): T {
   return JSON.parse(cleaned);
 }
 
+async function fetchTrendRecommendations(
+  label: "currently-trending" | "about-to-trend"
+): Promise<Recommendation[]> {
+  const query =
+    label === "currently-trending"
+      ? "breaking viral true crime news this week"
+      : "true crime case renewed attention new developments emerging";
+
+  const searchResults = await tavilyProvider.search(query, 8);
+  if (searchResults.length === 0) return [];
+
+  const searchContext = searchResults
+    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
+    .join("\n\n");
+
+  const raw = await groqProvider.generateText(buildTrendPrompt(searchContext, label), {
+    temperature: 0.4,
+    maxTokens: 600,
+  });
+
+  const { recommendations } = parseJSON<{ recommendations: Omit<Recommendation, "trendStatus">[] }>(raw);
+  return recommendations.map((r) => ({ ...r, trendStatus: label }));
+}
+
 /**
  * Computes personalized case recommendations based on the channel's
- * top-performing videos. If video-based topic extraction doesn't yield
- * enough (e.g. too few videos, or Groq can't confidently identify
- * specific cases), falls back to the channel's cached ChannelDNA
- * (preferredSubjects, typicalHooks) instead — this means recommendations
- * still work for brand-new or small channels, not just established ones
- * with a large video history.
+ * top-performing videos, PLUS two independent trend-signal batches that
+ * are NOT gated by the channel's history — "Currently Trending" (breaking
+ * now) and "About to Trend" (early rising signal) — so genuinely new
+ * cases outside a creator's past coverage can still surface.
  */
 export async function generateRecommendations(
   channelId: string,
@@ -91,8 +137,6 @@ export async function generateRecommendations(
     topics = parsed.topics;
   }
 
-  // Fallback: not enough videos, or Groq couldn't confidently identify
-  // specific cases from them — use the channel's DNA profile instead.
   if (topics.length === 0 && channelDNA) {
     topics = [
       ...channelDNA.channelStyle.preferredSubjects,
@@ -100,26 +144,13 @@ export async function generateRecommendations(
     ];
   }
 
-  if (topics.length === 0) {
-    return [];
-  }
+  const [personalized, currentlyTrending, aboutToTrend] = await Promise.all([
+    topics.length > 0 ? fetchPersonalizedRecommendations(topics) : Promise.resolve([]),
+    fetchTrendRecommendations("currently-trending"),
+    fetchTrendRecommendations("about-to-trend"),
+  ]);
 
-  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
-  const searchResults = await tavilyProvider.search(searchQuery, 8);
-
-  if (searchResults.length === 0) {
-    return [];
-  }
-
-  const searchContext = searchResults
-    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
-    .join("\n\n");
-
-  const recRaw = await groqProvider.generateText(buildRecommendationPrompt(topics, searchContext), {
-    temperature: 0.4,
-    maxTokens: 800,
-  });
-  const { recommendations } = parseJSON<{ recommendations: Recommendation[] }>(recRaw);
+  const recommendations = [...personalized, ...currentlyTrending, ...aboutToTrend];
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -135,4 +166,21 @@ export async function generateRecommendations(
   }
 
   return recommendations;
+}
+
+async function fetchPersonalizedRecommendations(topics: string[]): Promise<Recommendation[]> {
+  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
+  const searchResults = await tavilyProvider.search(searchQuery, 8);
+  if (searchResults.length === 0) return [];
+
+  const searchContext = searchResults
+    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
+    .join("\n\n");
+
+  const raw = await groqProvider.generateText(buildPersonalizedPrompt(topics, searchContext), {
+    temperature: 0.4,
+    maxTokens: 800,
+  });
+  const { recommendations } = parseJSON<{ recommendations: Omit<Recommendation, "trendStatus">[] }>(raw);
+  return recommendations.map((r) => ({ ...r, trendStatus: "for-you" as const }));
 }
