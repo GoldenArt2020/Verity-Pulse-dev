@@ -1,8 +1,10 @@
-// src/components/angle-builder/AngleBuilderHeader.tsx
 "use client";
 
-import { Bookmark, Sparkles, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bookmark, BookmarkCheck, Sparkles, Loader2, ChevronDown } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
+
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function AngleBuilderHeader({
   caseData,
@@ -13,6 +15,44 @@ export function AngleBuilderHeader({
   onRegenerate: () => void;
   regenerating: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  async function handleSave(bucket: "ongoing" | "finished") {
+    setMenuOpen(false);
+    setSaveState("saving");
+    setSaveError(null);
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId: caseData.id,
+          status: bucket === "ongoing" ? "IDEA" : "PUBLISHED",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save project");
+      setSaveState("saved");
+    } catch (err) {
+      setSaveState("error");
+      setSaveError(err instanceof Error ? err.message : "Failed to save project");
+    }
+  }
+
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
       <div className="flex items-start gap-5">
@@ -32,9 +72,44 @@ export function AngleBuilderHeader({
         </div>
 
         <div className="flex shrink-0 gap-2">
-          <button className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50">
-            <Bookmark className="h-3.5 w-3.5" /> Save Angle
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => saveState !== "saved" && setMenuOpen((o) => !o)}
+              disabled={saveState === "saving"}
+              title={saveError ?? undefined}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50 disabled:opacity-60"
+            >
+              {saveState === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saveState === "saved" && <BookmarkCheck className="h-3.5 w-3.5 text-emerald-400" />}
+              {(saveState === "idle" || saveState === "error") && <Bookmark className="h-3.5 w-3.5" />}
+              {saveState === "saved"
+                ? "Saved"
+                : saveState === "saving"
+                  ? "Saving..."
+                  : saveState === "error"
+                    ? "Retry Save"
+                    : "Save Project"}
+              {saveState !== "saved" && <ChevronDown className="h-3 w-3" />}
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
+                <button
+                  onClick={() => handleSave("ongoing")}
+                  className="flex w-full items-center px-3 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  Save as Ongoing
+                </button>
+                <button
+                  onClick={() => handleSave("finished")}
+                  className="flex w-full items-center px-3 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  Save as Finished
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={onRegenerate}
             disabled={regenerating}

@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export async function GET() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )
-    .eq("id", id)
-    .single();
+    .order("created_at", { ascending: false });
 
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "Project not found" }, { status: 404 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  return NextResponse.json(data);
+  return NextResponse.json(data ?? []);
 }
 
 const VALID_STATUSES = [
@@ -26,30 +21,40 @@ const VALID_STATUSES = [
   "RECORDING", "EDITING", "SCHEDULED", "PUBLISHED", "ARCHIVED",
 ];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const status = body?.status as string | undefined;
+  const caseId = body?.caseId as string | undefined;
+  const status = (body?.status as string | undefined) ?? "IDEA";
 
-  if (!status || !VALID_STATUSES.includes(status)) {
+  if (!caseId) {
+    return NextResponse.json({ error: "caseId is required" }, { status: 400 });
+  }
+  if (!VALID_STATUSES.includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
   const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(existing);
+  }
+
   const { data, error } = await supabase
     .from("projects")
-    .update({ status })
-    .eq("id", id)
+    .insert({ case_id: caseId, status })
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )
     .single();
 
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "Failed to update project" }, { status: 400 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json(data);
 }
