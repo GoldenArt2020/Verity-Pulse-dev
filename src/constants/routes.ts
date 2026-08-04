@@ -2,8 +2,6 @@ import {
   Home,
   Compass,
   FolderKanban,
-  Wand2,
-  SlidersHorizontal,
   BarChart3,
   Settings,
 } from "lucide-react";
@@ -12,8 +10,6 @@ export const NAV_ITEMS = [
   { label: "Home", href: "/dashboard", icon: Home },
   { label: "Discover", href: "/discover", icon: Compass },
   { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "Create", href: "/angle-builder", icon: Wand2 },
-  { label: "Optimize", href: "/optimize", icon: SlidersHorizontal },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
 ] as const;
 
