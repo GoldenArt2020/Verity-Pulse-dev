@@ -4,14 +4,6 @@
 import { Sparkles } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
-const LENS_LABELS: Record<string, string> = {
-  "victim-centered": "Victim-Centered",
-  investigative: "Investigative Deep-Dive",
-  "systemic-failure": "Systemic / Institutional Failure",
-  "family-impact": "Family & Community Impact",
-  courtroom: "Legal / Courtroom Drama",
-};
-
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
@@ -42,25 +34,23 @@ export function SelectedAnglePanel({ angle, onClear }: { angle: GeneratedAngle |
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 text-sm font-bold text-emerald-400">
               {totalScore(angle)}
             </div>
-            <div className="flex-1">
-              <span className="inline-block rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
-                {LENS_LABELS[angle.lens] ?? angle.lens}
-              </span>
-              <p className="mt-1 text-lg font-semibold text-white">{angle.title}</p>
-            </div>
+            <p className="flex-1 text-lg font-semibold text-white">{angle.title}</p>
           </div>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Hook</p>
-          <p className="mt-1 text-sm italic leading-relaxed text-slate-300">&quot;{angle.hook}&quot;</p>
+          <p className="mt-4 text-xs font-medium text-slate-400">Core Question</p>
+          <p className="mt-1 text-sm italic leading-relaxed text-slate-300">{angle.coreQuestion}</p>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Why this angle works</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.rationale}</p>
+          <p className="mt-4 text-xs font-medium text-slate-400">Opening Hook</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-300">&quot;{angle.openingHook}&quot;</p>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Key Story Beats</p>
+          <p className="mt-4 text-xs font-medium text-slate-400">Why This Angle Works</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.whyItWorks}</p>
+
+          <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
           <ul className="mt-1.5 space-y-1">
-            {angle.keyBeats.map((b) => (
-              <li key={b} className="flex items-start gap-1.5 text-[13px] text-slate-300">
-                <span className="mt-0.5 text-emerald-400">✓</span> {b}
+            {angle.researchFocus.map((r) => (
+              <li key={r} className="flex items-start gap-1.5 text-[13px] text-slate-300">
+                <span className="mt-0.5 text-emerald-400">✓</span> {r}
               </li>
             ))}
           </ul>

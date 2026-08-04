@@ -5,14 +5,6 @@ import { Users } from "lucide-react";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
-const LENS_LABELS: Record<string, string> = {
-  "victim-centered": "Victim-Centered",
-  investigative: "Investigative Deep-Dive",
-  "systemic-failure": "Systemic / Institutional Failure",
-  "family-impact": "Family & Community Impact",
-  courtroom: "Legal / Courtroom Drama",
-};
-
 function ratingLabel(pct: number) {
   if (pct >= 85) return { label: "Excellent Match", color: "text-emerald-400" };
   if (pct >= 65) return { label: "Strong Match", color: "text-blue-400" };
@@ -41,12 +33,8 @@ export function AudienceProfileMatch({ angle }: { angle: GeneratedAngle | null }
 
   const pct = Math.round((angle.scores.audienceMatch / 15) * 100);
   const rating = ratingLabel(pct);
-  const lensPerf = dna?.lensPerformance.find((p) => p.lens === angle.lens);
 
   const traits: string[] = [];
-  if (lensPerf && lensPerf.videoCount > 0) {
-    traits.push(`Your ${LENS_LABELS[angle.lens] ?? angle.lens} videos perform ${lensPerf.avgViewsRelativeToChannel} (${lensPerf.videoCount} past video${lensPerf.videoCount === 1 ? "" : "s"})`);
-  }
   if (dna?.channelStyle?.preferredSubjects?.length) {
     traits.push(`Preferred subject match: ${dna.channelStyle.preferredSubjects.slice(0, 2).join(", ")}`);
   }

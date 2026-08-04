@@ -13,12 +13,20 @@ export function AngleBuilderStatsBar({
   loading: boolean;
   lastGeneratedAt: string | null;
 }) {
-  const lensCount = new Set(angles.map((a) => a.lens)).size;
+  const avgScore = angles.length
+    ? Math.round(
+        angles.reduce(
+          (sum, a) =>
+            sum + a.scores.searchDemand + a.scores.competition + a.scores.emotionalImpact + a.scores.originality + a.scores.audienceMatch,
+          0
+        ) / angles.length
+      )
+    : 0;
 
   return (
     <div className="glass-card flex items-center justify-between rounded-2xl border border-slate-800/60 bg-slate-900/40 px-6 py-4">
       <Stat icon={Link2} iconColor="text-emerald-400" label="Angles Generated" value={loading ? "—" : String(angles.length)} />
-      <Stat icon={Activity} iconColor="text-blue-400" label="Distinct Lenses" value={loading ? "—" : String(lensCount)} />
+      <Stat icon={Activity} iconColor="text-blue-400" label="Average Score" value={loading ? "—" : String(avgScore)} />
       <Stat
         icon={Clock}
         iconColor="text-slate-400"

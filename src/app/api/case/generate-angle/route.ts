@@ -3,94 +3,63 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
-import type { LensPerformance, ChannelDNA } from "@/services/creatorDNA";
-
-const ANGLE_LABELS: Record<string, string> = {
-  "victim-centered": "Victim-Centered",
-  investigative: "Investigative Deep-Dive",
-  "systemic-failure": "Systemic / Institutional Failure",
-  "family-impact": "Family & Community Impact",
-  courtroom: "Legal / Courtroom Drama",
-};
 
 export interface AngleScores {
-  searchDemand: number;    // 0-25
-  competition: number;     // 0-20 (higher = less competition, better)
-  emotionalImpact: number; // 0-25
-  originality: number;     // 0-15
-  audienceMatch: number;   // 0-15
+  searchDemand: number;
+  competition: number;
+  emotionalImpact: number;
+  originality: number;
+  audienceMatch: number;
 }
 
-interface GeneratedAngle {
-  lens: string;
+export interface GeneratedAngle {
   title: string;
-  hook: string;
-  rationale: string;
-  keyBeats: string[];
+  coreQuestion: string;
+  whyItWorks: string;
+  researchFocus: string[];
+  openingHook: string;
   scores: AngleScores;
 }
 
-function buildPrompt(
-  caseName: string,
-  summary: string,
-  youtubeTitles: string[],
-  lensPerformance: LensPerformance[]
-): string {
+function buildPrompt(caseName: string, summary: string, youtubeTitles: string[]): string {
   const coverageBlock =
     youtubeTitles.length > 0
-      ? `EXISTING YOUTUBE COVERAGE for this case (titles already published):\n${youtubeTitles
+      ? `EXISTING YOUTUBE COVERAGE (titles already published on this case):\n${youtubeTitles
           .map((t, i) => `${i + 1}. ${t}`)
           .join("\n")}`
       : `No existing YouTube coverage data is available for this case.`;
 
-  const performanceBlock =
-    lensPerformance.length > 0
-      ? `THIS CREATOR'S HISTORICAL LENS PERFORMANCE (based on their own past videos):\n${lensPerformance
-          .map(
-            (p) =>
-              `- ${ANGLE_LABELS[p.lens] ?? p.lens}: ${p.avgViewsRelativeToChannel} performance (${p.videoCount} past videos in this lens)`
-          )
-          .join("\n")}`
-      : `No historical performance data available for this creator yet.`;
+  return `You are an investigative documentary producer for a true crime YouTube channel. For the case "${caseName}", generate narrative angles that avoid the generic "here's what happened" structure most true crime videos use.
 
-  return `You are an editorial producer for a true crime YouTube documentary channel. For the case "${caseName}", identify which of the 5 documentary lenses below are BOTH underexplored on YouTube for this case AND likely to perform well for this specific creator.
-
-THE 5 LENSES:
-- victim-centered: Victim-Centered
-- investigative: Investigative Deep-Dive
-- systemic-failure: Systemic / Institutional Failure
-- family-impact: Family & Community Impact
-- courtroom: Legal / Courtroom Drama
+Each angle must be built around a CENTRAL QUESTION the documentary answers, not a chronological recap. Angles should surface a perspective existing coverage ignores or barely touches.
 
 CASE SUMMARY:
 ${summary}
 
 ${coverageBlock}
 
-${performanceBlock}
-
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
   "angles": [
     {
-      "lens": string (one of the 5 lens ids above),
-      "title": string (a compelling episode/angle title, max 12 words),
-      "hook": string (a single punchy sentence that would open the episode, narrator voice),
-      "rationale": string (2-3 sentences: why this angle works for THIS case, why it's underexplored on YouTube if coverage data was provided, AND why it fits this creator's proven strengths if performance data was provided),
-      "keyBeats": string[] (4-6 short specific story beats drawn from the case facts),
+      "title": string (a compelling angle title, e.g. "The Fire Was Never the Crime; It Was the Cover-Up"),
+      "coreQuestion": string (the single question this angle answers, e.g. "Why was the house set on fire, and how did that decision work against the killer?"),
+      "whyItWorks": string (2-3 sentences: why this is underexplored in existing coverage, and why it creates a fresh entry point into the case),
+      "researchFocus": string[] (4-6 specific, concrete research directions — facts, records, or evidence types to investigate for this angle, grounded in the case summary, not generic),
+      "openingHook": string (one sentence a narrator would use to open the episode on this angle, phrased as a question or a striking statement),
       "scores": {
-        "searchDemand": number (0-25, based on how likely this specific angle is to match rising search interest — reason from the case's public profile and how distinctive/newsworthy this specific lens is, not a guess),
-        "competition": number (0-20, higher = LESS saturated on YouTube for this lens — base this directly on the existing coverage list above; if no coverage data exists, score conservatively at 10),
-        "emotionalImpact": number (0-25, based on how emotionally resonant this specific angle's hook and beats are, grounded in the actual case facts),
-        "originality": number (0-15, how distinct this angle is from the other angles you're generating and from the existing YouTube coverage),
-        "audienceMatch": number (0-15, based on the creator's historical lens performance data above; if no data exists, score at 8 as neutral)
+        "searchDemand": number (0-25, how likely this specific angle is to match rising search interest, reasoned from how distinctive/newsworthy this specific question is),
+        "competition": number (0-20, higher = LESS saturated on YouTube for this angle — base this on the existing coverage list; if no coverage data exists, score conservatively at 10),
+        "emotionalImpact": number (0-25, how emotionally resonant this specific angle is, grounded in the actual case facts),
+        "originality": number (0-15, how distinct this angle is from the other angles generated and from existing coverage),
+        "audienceMatch": number (0-15, general true-crime audience appeal for this specific angle; score at 8 if uncertain)
       }
     }
   ]
 }
 
-Only include lenses that are genuinely underexplored for this case — skip any lens that's already saturated in the existing coverage. Prioritize lenses where this creator has "above average" historical performance, but you may still include a strong uncovered lens even without performance data. Score each angle honestly and distinctly — do not give every angle the same scores. Return between 1 and 5 angles, ordered by total score (sum of all 5 score fields) descending. Return ONLY the JSON object.`;
+Generate between 6 and 10 angles. Do not repeat the same core question in different words. Score each angle honestly and distinctly — do not give every angle the same scores. Order angles by total score (sum of all 5 score fields) descending. Ground every angle strictly in the case summary provided — do not invent facts not implied by it. Return ONLY the JSON object.`;
 }
 
 function parseAngles(raw: string): GeneratedAngle[] {
@@ -114,7 +83,6 @@ function parseAngles(raw: string): GeneratedAngle[] {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const caseId = body?.caseId as string | undefined;
-  const channelId = body?.channelId as string | undefined;
 
   if (!caseId) {
     return NextResponse.json({ error: "caseId is required" }, { status: 400 });
@@ -145,20 +113,9 @@ export async function POST(req: NextRequest) {
   try {
     const youtubeTitles = await getOrFetchYouTubeCoverage(caseId, caseRow.name);
 
-    let lensPerformance: LensPerformance[] = [];
-    if (channelId) {
-      const { data: channelRow } = await supabase
-        .from("channels")
-        .select("channel_dna")
-        .eq("youtube_channel_id", channelId)
-        .maybeSingle();
-      const dna = channelRow?.channel_dna as unknown as ChannelDNA | undefined;
-      lensPerformance = dna?.lensPerformance ?? [];
-    }
-
     const raw = await groqProvider.generateText(
-      buildPrompt(caseRow.name, caseRow.summary, youtubeTitles, lensPerformance),
-      { temperature: 0.6, maxTokens: 1800 }
+      buildPrompt(caseRow.name, caseRow.summary, youtubeTitles),
+      { temperature: 0.7, maxTokens: 2600 }
     );
     const angles = parseAngles(raw);
     return NextResponse.json({ angles });

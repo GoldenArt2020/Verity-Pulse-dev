@@ -5,7 +5,6 @@ import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useCase } from "@/hooks/useCase";
-import { useChannelId } from "@/hooks/useChannelId";
 import { AngleBuilderHeader } from "@/components/angle-builder/AngleBuilderHeader";
 import { StepTabs } from "@/components/angle-builder/StepTabs";
 import { GeneratedAnglesList } from "@/components/angle-builder/GeneratedAnglesList";
@@ -24,18 +23,17 @@ export interface AngleScores {
 }
 
 export interface GeneratedAngle {
-  lens: string;
   title: string;
-  hook: string;
-  rationale: string;
-  keyBeats: string[];
+  coreQuestion: string;
+  whyItWorks: string;
+  researchFocus: string[];
+  openingHook: string;
   scores: AngleScores;
 }
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
   const { caseData, loading, error } = useCase(caseId);
-  const { channelId } = useChannelId();
 
   const [researching, setResearching] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
@@ -81,7 +79,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       const res = await fetch("/api/case/generate-angle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId: caseData.id, channelId }),
+        body: JSON.stringify({ caseId: caseData.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to generate angles");
