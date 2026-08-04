@@ -2,7 +2,7 @@
 import type { LucideIcon } from "lucide-react";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronLeft, LogOut, X } from "lucide-react";
 import { useState } from "react";
 import { NAV_ITEMS, SECONDARY_NAV_ITEMS } from "@/constants/routes";
@@ -11,11 +11,20 @@ import { useUIStore } from "@/store/useUIStore";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, signOut } = useAuthUser();
   const { sidebarCollapsed: collapsed, toggleSidebar, mobileNavOpen, closeMobileNav } = useUIStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const displayName = user?.email?.split("@")[0] ?? "Creator";
+  console.log("Sidebar user state:", user);
+
+  async function handleSignOut() {
+    console.log("Sign out clicked, calling signOut()...");
+    await signOut();
+    console.log("signOut() finished, redirecting...");
+    router.push("/");
+  }
 
   const renderNavItem = (item: { label: string; href: string; icon: LucideIcon }) => {
     const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -112,7 +121,7 @@ export function Sidebar() {
           {menuOpen && !collapsed && (
             <div className="absolute bottom-full left-0 mb-2 w-48 rounded-lg border border-sidebar-border bg-sidebar p-1 shadow-lg">
               <button
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent"
               >
                 <LogOut className="h-3.5 w-3.5" />
