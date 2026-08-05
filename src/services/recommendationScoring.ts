@@ -56,7 +56,11 @@ function geographicScore(
   candidateRegion: string | null,
   dna: ChannelDNA
 ): number {
-  const { primaryRegion, isMultiRegion, distribution } = dna.regionDistribution;
+  const { primaryRegion, isMultiRegion, distribution } = dna.regionDistribution ?? {
+    primaryRegion: null,
+    isMultiRegion: false,
+    distribution: {},
+  };
 
   if (!candidateRegion) return 50; // unknown region — neutral, don't penalize missing data
 
