@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star } from "lucide-react";
+import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
@@ -10,11 +10,184 @@ import { useChannelId } from "@/hooks/useChannelId";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
 import { RecommendationHistorySection } from "./RecommendationHistorySection";
 
-const BADGE_LABEL: Record<string, string> = {
-  "for-you": "Perfect Match",
-  "currently-trending": "Currently Trending",
-  "about-to-trend": "About to Trend",
+const SECTION_META: Record<string, { label: string; description: string; icon: typeof Sparkles }> = {
+  "for-you": {
+    label: "For You",
+    description: "Matched to your channel's proven audience and storytelling style.",
+    icon: Sparkles,
+  },
+  "currently-trending": {
+    label: "Currently Trending",
+    description: "Cases with high search volume and public interest right now.",
+    icon: TrendingUp,
+  },
+  "about-to-trend": {
+    label: "About to Trend",
+    description: "Early signals of rising interest before the wider audience catches on.",
+    icon: Zap,
+  },
 };
+
+function RecommendationCard({
+  r,
+  isExpanded,
+  onToggleExpand,
+  onOpen,
+  isNavigating,
+  navigatingTo,
+}: {
+  r: any;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onOpen: () => void;
+  isNavigating: boolean;
+  navigatingTo: string | null;
+}) {
+  const matchScore = r.audienceMatch ?? 96;
+
+  return (
+    <motion.div
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="group relative flex h-[420px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
+    >
+      <div className="flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
+          <div className="flex items-center gap-1">
+            {[...Array(5)].map((_, idx) => (
+              <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+            ))}
+          </div>
+          <button className="text-[#71717A] hover:text-[#FAFAFA]" aria-label="Save">
+            <Bookmark className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4">
+          <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
+            {r.title}
+          </h3>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
+            <span>{r.country || "United Kingdom"}</span>
+            {r.category && (
+              <>
+                <span>•</span>
+                <span className="truncate">{r.category}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
+          <span className="text-xl font-black text-emerald-400">{matchScore}</span>
+          <span className="text-xs font-medium text-[#71717A]">Match Score</span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">Growing Search Demand</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">Low Competition</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">5 Untouched Angles</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">High Audience Fit</span>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-y-auto max-h-20 border-t border-white/[0.06] mt-3 pt-2 text-xs leading-relaxed text-[#A1A1AA]"
+            >
+              {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div className="pt-3 border-t border-white/[0.04] mt-auto">
+        <button
+          onClick={onToggleExpand}
+          className="mb-3 block w-full text-left text-xs font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
+        >
+          {isExpanded ? "Hide breakdown" : "Why we recommend this →"}
+        </button>
+
+        <button
+          onClick={onOpen}
+          disabled={isNavigating}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+        >
+          {navigatingTo === r.title ? "Opening Brief…" : "View Brief"}
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+function RecommendationSection({
+  status,
+  items,
+  expanded,
+  setExpanded,
+  goToAngleBuilder,
+  navigatingTo,
+}: {
+  status: string;
+  items: any[];
+  expanded: string | null;
+  setExpanded: (v: string | null) => void;
+  goToAngleBuilder: (title: string) => void;
+  navigatingTo: string | null;
+}) {
+  if (items.length === 0) return null;
+  const meta = SECTION_META[status];
+  const Icon = meta.icon;
+
+  return (
+    <div className="mt-8 first:mt-6">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+          <Icon className="h-4 w-4 text-blue-400" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-[#FAFAFA]">{meta.label}</h3>
+          <p className="text-xs text-[#71717A]">{meta.description}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+        {items.map((r) => {
+          const isExpanded = expanded === r.title;
+          return (
+            <RecommendationCard
+              key={r.title}
+              r={r}
+              isExpanded={isExpanded}
+              onToggleExpand={() => setExpanded(isExpanded ? null : r.title)}
+              onOpen={() => goToAngleBuilder(r.title)}
+              isNavigating={!!navigatingTo}
+              navigatingTo={navigatingTo}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
@@ -22,27 +195,28 @@ export function RecommendationsRowV2() {
   const { clearChannel } = useChannelId();
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const topRecommendations = useMemo(() => {
+  const grouped = useMemo(() => {
     const byStatus = (status: string) =>
       recommendations
         .filter((r: any) => r.trendStatus === status)
-        .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0));
-
-    const forYou = byStatus("for-you").slice(0, 2);
-    const trending = byStatus("currently-trending").slice(0, 1);
-    const aboutToTrend = byStatus("about-to-trend").slice(0, 1);
-
-    const combined = [...forYou, ...trending, ...aboutToTrend];
-
-    // Fallback for old-format data with no trendStatus at all
-    if (combined.length === 0) {
-      return [...recommendations]
         .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0))
         .slice(0, 4);
-    }
 
-    return combined;
+    const forYou = byStatus("for-you");
+    const trending = byStatus("currently-trending");
+    const aboutToTrend = byStatus("about-to-trend");
+
+    // Fallback for old-format data with no trendStatus at all
+    const untagged = recommendations.filter((r: any) => !r.trendStatus);
+    const legacy = untagged.length > 0
+      ? [...untagged].sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0)).slice(0, 4)
+      : [];
+
+    return { forYou, trending, aboutToTrend, legacy };
   }, [recommendations]);
+
+  const totalShown =
+    grouped.forYou.length + grouped.trending.length + grouped.aboutToTrend.length + grouped.legacy.length;
 
   return (
     <section className="w-full min-w-0">
@@ -55,7 +229,7 @@ export function RecommendationsRowV2() {
             Our Recommendations
           </h2>
           <p className="mt-2 text-xs leading-relaxed text-[#A1A1AA] sm:text-sm">
-            Today's strongest opportunities for your channel. Every recommendation is ranked using your Creator DNA, current search behaviour, competition analysis, and narrative opportunities. Refreshed automatically every night.
+            Today's strongest opportunities for your channel, grouped by how they were identified — personalized to your channel, trending right now, or on the rise. Refreshed automatically every night.
           </p>
         </div>
 
@@ -79,7 +253,15 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      {!loading && topRecommendations.length === 0 && (
+      {loading && (
+        <div className="mt-6 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-[420px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]" />
+          ))}
+        </div>
+      )}
+
+      {!loading && totalShown === 0 && (
         <div className="mt-6 flex flex-col items-center justify-center rounded-[22px] border border-dashed border-white/[0.12] bg-[#111114]/50 p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.08] bg-[#18181C]">
             <Tv className="h-5 w-5 text-blue-400" />
@@ -100,116 +282,53 @@ export function RecommendationsRowV2() {
         </div>
       )}
 
-      <div className="mt-6 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
-        {loading &&
-          [1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-[420px] w-full animate-pulse rounded-[22px] border border-white/[0.06] bg-[#111114]" />
-          ))}
-
-        {!loading &&
-          topRecommendations.map((r) => {
-            const item = r as any;
+      {!loading && grouped.legacy.length > 0 && (
+        <div className="mt-6 grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+          {grouped.legacy.map((r: any) => {
             const isExpanded = expanded === r.title;
-            const matchScore = r.audienceMatch ?? 96;
-            const badgeLabel = BADGE_LABEL[item.trendStatus] ?? "Perfect Match";
-
             return (
-              <motion.div
+              <RecommendationCard
                 key={r.title}
-                whileHover={{ y: -4 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group relative flex h-[420px] w-full flex-col justify-between rounded-[22px] border border-white/[0.08] bg-[#111114] p-6 shadow-xl transition-all hover:border-blue-500/40"
-              >
-                <div className="flex flex-col overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, idx) => (
-                        <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                      ))}
-                      <span className="ml-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
-                        {badgeLabel}
-                      </span>
-                    </div>
-                    <button className="text-[#71717A] hover:text-[#FAFAFA]" aria-label="Save">
-                      <Bookmark className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="mt-4">
-                    <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
-                      {r.title}
-                    </h3>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
-                      <span>{item.country || "United Kingdom"}</span>
-                      {item.category && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate">{item.category}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
-                    <span className="text-xl font-black text-emerald-400">{matchScore}</span>
-                    <span className="text-xs font-medium text-[#71717A]">Match Score</span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span className="truncate">Growing Search Demand</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span className="truncate">Low Competition</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span className="truncate">5 Untouched Angles</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span className="truncate">High Audience Fit</span>
-                    </div>
-                  </div>
-
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-y-auto max-h-20 border-t border-white/[0.06] mt-3 pt-2 text-xs leading-relaxed text-[#A1A1AA]"
-                      >
-                        {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <div className="pt-3 border-t border-white/[0.04] mt-auto">
-                  <button
-                    onClick={() => setExpanded(isExpanded ? null : r.title)}
-                    className="mb-3 block w-full text-left text-xs font-semibold text-[#71717A] hover:text-[#FAFAFA] transition-colors"
-                  >
-                    {isExpanded ? "Hide breakdown" : "Why we recommend this →"}
-                  </button>
-
-                  <button
-                    onClick={() => goToAngleBuilder(r.title)}
-                    disabled={!!navigatingTo}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/10 border border-blue-500/20 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
-                  >
-                    {navigatingTo === r.title ? "Opening Brief…" : "View Brief"}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </motion.div>
+                r={r}
+                isExpanded={isExpanded}
+                onToggleExpand={() => setExpanded(isExpanded ? null : r.title)}
+                onOpen={() => goToAngleBuilder(r.title)}
+                isNavigating={!!navigatingTo}
+                navigatingTo={navigatingTo}
+              />
             );
           })}
-      </div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          <RecommendationSection
+            status="for-you"
+            items={grouped.forYou}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            goToAngleBuilder={goToAngleBuilder}
+            navigatingTo={navigatingTo}
+          />
+          <RecommendationSection
+            status="currently-trending"
+            items={grouped.trending}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            goToAngleBuilder={goToAngleBuilder}
+            navigatingTo={navigatingTo}
+          />
+          <RecommendationSection
+            status="about-to-trend"
+            items={grouped.aboutToTrend}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            goToAngleBuilder={goToAngleBuilder}
+            navigatingTo={navigatingTo}
+          />
+        </>
+      )}
 
       <RecommendationHistorySection />
     </section>
