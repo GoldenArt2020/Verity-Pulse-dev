@@ -50,18 +50,18 @@ export default function AnalyticsPage() {
         subtitle="Track opportunities, performance and uncover the stories others miss."
         icon={<Target className="h-4.5 w-4.5" />}
       />
-      <div className="space-y-4 p-6">
-        <div className="grid grid-cols-6 gap-4">
+      <div className="space-y-4 p-3 sm:p-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
           {caseStats.map((s) => (
             <StatCard key={s.label} {...s} loading={loading} />
           ))}
           <ChannelStatCards />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <OpportunityOverview />
           <OpportunityGauge />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <RecentCases />
           <RecommendationConversionCard />
         </div>

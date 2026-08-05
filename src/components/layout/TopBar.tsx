@@ -8,7 +8,7 @@ interface TopBarProps {
 
 export function TopBar({ title, subtitle, icon }: TopBarProps) {
   return (
-    <div className="border-b border-border bg-background px-8 py-8">
+    <div className="border-b border-border bg-background px-4 py-6 sm:px-8 sm:py-8">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
           {icon}

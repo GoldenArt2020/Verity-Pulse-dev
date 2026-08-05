@@ -24,22 +24,22 @@ export function RecentCases() {
     .slice(0, 5);
 
   if (loading) {
-    return <div className="col-span-3 h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
+    return <div className="col-span-full h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
   }
 
   if (researched.length === 0) {
     return (
-      <div className="glass-card col-span-3 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-center text-sm text-slate-400">
+      <div className="glass-card col-span-full rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-center text-sm text-slate-400">
         No cases researched yet.
       </div>
     );
   }
 
   return (
-    <div className="glass-card col-span-3 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
+    <div className="glass-card col-span-1 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 lg:col-span-3">
       <h3 className="text-base font-semibold text-white">Recent Cases Analyzed</h3>
 
-      <div className="mt-4 grid grid-cols-5 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {researched.map((c) => (
           <div
             key={c.id}

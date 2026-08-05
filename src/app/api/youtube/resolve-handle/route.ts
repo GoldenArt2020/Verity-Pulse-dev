@@ -14,6 +14,13 @@ function parseChannelInput(raw: string): { type: "id" | "handle"; value: string 
     return { type: "handle", value: handleUrlMatch[1] };
   }
 
+  // A bare channel ID/code, e.g. "UCjVkOPNsVLEl..." pasted with no URL around it.
+  // YouTube channel IDs always start with "UC" and are exactly 24 characters.
+  const bareChannelId = trimmed.replace(/^@/, "");
+  if (/^UC[a-zA-Z0-9_-]{22}$/.test(bareChannelId)) {
+    return { type: "id", value: bareChannelId };
+  }
+
   return { type: "handle", value: trimmed.replace(/^@/, "") };
 }
 

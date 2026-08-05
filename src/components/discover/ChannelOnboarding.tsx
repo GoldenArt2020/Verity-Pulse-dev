@@ -15,6 +15,9 @@ const ANALYSIS_STEPS = [
   "Generating recommendations",
 ];
 
+const CHANNEL_INPUT_HINT =
+  "Paste your YouTube channel link (youtube.com/@yourhandle or youtube.com/channel/UC...), your @handle, or your channel ID.";
+
 export function ChannelOnboarding() {
   const { saveChannel } = useChannelId();
   const { user, isAuthenticated } = useAuthUser();
@@ -89,16 +92,20 @@ export function ChannelOnboarding() {
             </p>
 
             <div className="mt-10 w-full">
-              <div className="relative">
+              <div className="relative" title={CHANNEL_INPUT_HINT}>
                 <AtSign className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#71717A]" />
                 <input
                   value={handle}
                   onChange={(e) => setHandle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-                  placeholder="yourchannelhandle"
+                  placeholder="Link your channel"
+                  title={CHANNEL_INPUT_HINT}
                   className="h-14 w-full rounded-[18px] border border-white/[0.06] bg-[#18181B] pl-11 pr-5 text-[#FAFAFA] placeholder:text-[#71717A] transition-colors focus:border-blue-500/50 focus:outline-none"
                 />
               </div>
+              <p className="mt-2 text-xs text-[#71717A]">
+                Paste your channel link, @handle, or channel ID.
+              </p>
 
               {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 

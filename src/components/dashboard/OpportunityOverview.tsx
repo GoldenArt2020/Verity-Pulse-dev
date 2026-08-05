@@ -5,10 +5,10 @@ import { useDashboardStats } from "@/hooks/useDashboardStats";
 export function OpportunityOverview() {
   const { stats, loading, error } = useDashboardStats();
 
-  if (loading) return <div className="col-span-2 h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
+  if (loading) return <div className="col-span-full h-64 animate-pulse rounded-2xl bg-slate-900/40" />;
   if (error || !stats) {
     return (
-      <div className="glass-card col-span-2 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-sm text-slate-400">
+      <div className="glass-card col-span-full rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-sm text-slate-400">
         Couldn't load opportunity data.
       </div>
     );
@@ -17,11 +17,11 @@ export function OpportunityOverview() {
   const topCategory = stats.categoryBreakdown[0];
 
   return (
-    <div className="glass-card col-span-2 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
+    <div className="glass-card col-span-1 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 lg:col-span-2">
       <h3 className="text-base font-semibold text-white">Opportunity Overview</h3>
       <p className="text-xs text-slate-500">Based on {stats.totalCases} researched case{stats.totalCases === 1 ? "" : "s"}</p>
 
-      <div className="mt-5 grid grid-cols-4 gap-4">
+      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
           <p className="text-[11px] text-slate-500">Average Opportunity Score</p>
           <p className="text-lg font-semibold text-white">{stats.avgOpportunityScore}</p>
