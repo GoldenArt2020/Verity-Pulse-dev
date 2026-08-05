@@ -23,9 +23,25 @@ export function RecommendationsRowV2() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const topRecommendations = useMemo(() => {
-    return [...recommendations]
-      .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0))
-      .slice(0, 4);
+    const byStatus = (status: string) =>
+      recommendations
+        .filter((r: any) => r.trendStatus === status)
+        .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0));
+
+    const forYou = byStatus("for-you").slice(0, 2);
+    const trending = byStatus("currently-trending").slice(0, 1);
+    const aboutToTrend = byStatus("about-to-trend").slice(0, 1);
+
+    const combined = [...forYou, ...trending, ...aboutToTrend];
+
+    // Fallback for old-format data with no trendStatus at all
+    if (combined.length === 0) {
+      return [...recommendations]
+        .sort((a: any, b: any) => (b.audienceMatch ?? 0) - (a.audienceMatch ?? 0))
+        .slice(0, 4);
+    }
+
+    return combined;
   }, [recommendations]);
 
   return (
@@ -39,7 +55,7 @@ export function RecommendationsRowV2() {
             Our Recommendations
           </h2>
           <p className="mt-2 text-xs leading-relaxed text-[#A1A1AA] sm:text-sm">
-            Today’s strongest opportunities for your channel. Every recommendation is ranked using your Creator DNA, current search behaviour, competition analysis, and narrative opportunities. Refreshed automatically every night.
+            Today's strongest opportunities for your channel. Every recommendation is ranked using your Creator DNA, current search behaviour, competition analysis, and narrative opportunities. Refreshed automatically every night.
           </p>
         </div>
 
