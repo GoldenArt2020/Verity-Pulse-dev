@@ -1,18 +1,18 @@
-// src/services/recommendations.ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
+import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate } from "@/services/recommendationScoring";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
 export interface Recommendation {
   title: string;
-  audienceMatch: number;
+  audienceMatch: number; // final weighted score
   reason: string;
   trendStatus: TrendStatus;
+  whyRecommended: string[];
 }
 
 interface TopicExtraction {
@@ -37,114 +37,169 @@ Return ONLY valid JSON in this exact shape, no markdown, no commentary:
 List the distinct real case/person names you can confidently identify (max 10). If a video's subject can't be confidently identified as a specific real case, skip it rather than guessing.`;
 }
 
-function buildPersonalizedPrompt(topics: string[], searchContext: string): string {
+const CANDIDATE_SHAPE = `{
+      "title": string,
+      "reason": string (1 sentence),
+      "region": string or null (country the case occurred in, if determinable),
+      "caseTypeTags": string[] (2-5 tags, e.g. "police-misconduct", "missing-person", "institutional-failure"),
+      "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" | null (best-fit narrative lens for this case),
+      "audienceDnaMatch": number (0-100 — your honest judgment of how well this case fits the audience DNA profile provided, based on case-type and demographic preferences),
+      "storytellingMatch": number (0-100 — how well this case suits the creator's storytelling style described below),
+      "competitionScore": number (0-100 — higher = LESS existing YouTube coverage, more opportunity),
+      "trendPotential": number (0-100 — current or emerging public interest level)
+    }`;
+
+function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
+  if (!dna?.audienceDNA) {
+    return "No Audience DNA profile available yet for this channel — score audienceDnaMatch conservatively at 50.";
+  }
+  const a = dna.audienceDNA;
+  return `AUDIENCE DNA PROFILE:
+- Preferred case types (ranked): ${a.caseTypePreferences.join(", ") || "unknown"}
+- Victim demographic pattern: ethnicity=${a.victimDemographicPreferences.ethnicity ?? "no clear pattern"}, age range=${a.victimDemographicPreferences.ageRange ?? "no clear pattern"}
+- Narrative style: ${a.narrativeStyle}
+- Evidence emphasis: ${a.evidenceWeight.join(", ") || "unknown"}
+- Content freshness preference: ${a.contentFreshness}
+- Storytelling style: ${dna.channelStyle.storytellingStyle}, tone: ${dna.channelStyle.emotionalTone}`;
+}
+
+function buildPersonalizedPrompt(topics: string[], searchContext: string, dna?: ChannelDNA | null): string {
   return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's content focuses on: ${topics.join(", ")}.
 
-Based on the following search results about true crime cases matching this creator's focus, recommend up to 5 cases this creator should cover next.
+${buildAudienceDnaBlock(dna)}
+
+Based on the following search results about true crime cases matching this creator's focus, propose up to 6 candidate cases this creator could cover next.
 
 SEARCH RESULTS:
 ${searchContext}
 
-Return ONLY valid JSON in this exact shape, no markdown, no commentary:
-{
-  "recommendations": [
-    { "title": string, "audienceMatch": number (0-100), "reason": string (1 sentence, tie it back to why it matches this creator's proven audience) }
-  ]
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{ "candidates": [${CANDIDATE_SHAPE}] }
+
+Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score audienceDnaMatch and storytellingMatch honestly against the profile above — do not give every candidate the same scores.`;
 }
 
-Only recommend real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}.`;
-}
-
-function buildTrendPrompt(searchContext: string, label: "currently-trending" | "about-to-trend"): string {
+function buildTrendPrompt(
+  searchContext: string,
+  label: "currently-trending" | "about-to-trend",
+  dna?: ChannelDNA | null
+): string {
   const framing =
     label === "currently-trending"
-      ? "cases that are ACTIVELY viral or breaking right now — major news coverage, high search volume this week, widely discussed, AND (if YouTube data is provided below) genuinely high recent view counts on the platform"
-      : "cases showing EARLY signs of rising interest — recent developments, renewed attention, or growing search/discussion volume, but not yet mainstream/saturated on YouTube";
+      ? "cases that are ACTIVELY viral or breaking right now — major news coverage, high search volume this week, widely discussed"
+      : "cases showing EARLY signs of rising interest — recent developments, renewed attention, or growing search/discussion volume, but not yet mainstream/saturated";
 
-  return `You are a trend analyst for a true crime YouTube intelligence platform. Based on the search results below, identify up to 4 ${framing}.
+  return `You are a trend analyst for a true crime YouTube intelligence platform. Based on the search results below, identify up to 5 ${framing}.
+
+${buildAudienceDnaBlock(dna)}
 
 SEARCH RESULTS:
 ${searchContext}
 
-Return ONLY valid JSON in this exact shape, no markdown, no commentary:
-{
-  "recommendations": [
-    { "title": string, "audienceMatch": number (0-100, general true-crime audience interest level), "reason": string (1 sentence explaining the trend signal — why this is ${label === "currently-trending" ? "trending now" : "about to trend"}) }
-  ]
-}
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{ "candidates": [${CANDIDATE_SHAPE}] }
 
-Only include real, distinct, currently real-world cases — do not invent anything.`;
+Only include real, distinct, currently real-world cases — do not invent anything. Score audienceDnaMatch and storytellingMatch honestly against the profile above, even for trending cases outside the creator's usual coverage.`;
 }
 
 function parseJSON<T>(raw: string): T {
-  const cleaned = raw.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
   return JSON.parse(cleaned);
 }
 
+function scoreAndFilter(
+  candidates: ScoredCandidate[],
+  dna: ChannelDNA | null | undefined,
+  trendStatus: TrendStatus
+): Recommendation[] {
+  if (!dna) {
+    return candidates.map((c) => ({
+      title: c.title,
+      audienceMatch: 50,
+      reason: c.reason,
+      trendStatus,
+      whyRecommended: [c.reason],
+    }));
+  }
+
+  return candidates
+    .map((c) => {
+      const breakdown = scoreCandidate(c, dna);
+      return {
+        title: c.title,
+        audienceMatch: breakdown.finalScore,
+        reason: c.reason,
+        trendStatus,
+        whyRecommended: breakdown.whyRecommended,
+      };
+    })
+    .filter((r) => r.audienceMatch >= RECOMMENDATION_THRESHOLD)
+    .sort((a, b) => b.audienceMatch - a.audienceMatch);
+}
+
+async function fetchPersonalizedRecommendations(
+  topics: string[],
+  dna?: ChannelDNA | null
+): Promise<Recommendation[]> {
+  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
+  const searchResults = await tavilyProvider.search(searchQuery, 8);
+  if (searchResults.length === 0) return [];
+
+  const searchContext = searchResults
+    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
+    .join("\n\n");
+
+  const raw = await groqProvider.generateText(buildPersonalizedPrompt(topics, searchContext, dna), {
+    temperature: 0.4,
+    maxTokens: 1400,
+  });
+  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  return scoreAndFilter(candidates ?? [], dna, "for-you");
+}
+
 async function fetchTrendRecommendations(
-  label: "currently-trending" | "about-to-trend"
+  label: "currently-trending" | "about-to-trend",
+  dna?: ChannelDNA | null
 ): Promise<Recommendation[]> {
   const query =
     label === "currently-trending"
       ? "breaking viral true crime news this week"
       : "true crime case renewed attention new developments emerging";
 
-  const [searchResults, youtubeSignal] = await Promise.all([
-    tavilyProvider.search(query, 8),
-    label === "currently-trending" && youtubeProvider.isConfigured()
-      ? youtubeProvider.searchTrendingVideos("true crime case", 7, 12).catch(() => [])
-      : Promise.resolve([]),
-  ]);
-
-  if (searchResults.length === 0 && youtubeSignal.length === 0) return [];
-
-  const searchContext = searchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
-
-  const youtubeContext =
-    youtubeSignal.length > 0
-      ? `\n\nRECENT HIGH-VIEW YOUTUBE VIDEOS ON TRUE CRIME (last 7 days, sorted by views — real signal of what's resonating on the platform right now):\n${youtubeSignal
-          .map((v, i) => `${i + 1}. "${v.title}" (published ${v.publishedAt})`)
-          .join("\n")}`
-      : "";
-
-  const raw = await groqProvider.generateText(buildTrendPrompt(searchContext + youtubeContext, label), {
-    temperature: 0.4,
-    maxTokens: 600,
-  });
-
-  const { recommendations } = parseJSON<{ recommendations: Omit<Recommendation, "trendStatus">[] }>(raw);
-  return recommendations.map((r) => ({ ...r, trendStatus: label }));
-}
-
-async function fetchPersonalizedRecommendations(topics: string[]): Promise<Recommendation[]> {
-  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
-  const searchResults = await tavilyProvider.search(searchQuery, 8);
+  const searchResults = await tavilyProvider.search(query, 8);
   if (searchResults.length === 0) return [];
 
-  const searchContext = searchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
+  const searchContext = searchResults
+    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
+    .join("\n\n");
 
-  const raw = await groqProvider.generateText(buildPersonalizedPrompt(topics, searchContext), {
+  const raw = await groqProvider.generateText(buildTrendPrompt(searchContext, label, dna), {
     temperature: 0.4,
-    maxTokens: 800,
+    maxTokens: 1400,
   });
-  const { recommendations } = parseJSON<{ recommendations: Omit<Recommendation, "trendStatus">[] }>(raw);
-  return recommendations.map((r) => ({ ...r, trendStatus: "for-you" as const }));
+  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  return scoreAndFilter(candidates ?? [], dna, label);
 }
 
 /**
  * Computes personalized case recommendations based on the channel's
- * top-performing videos, PLUS two independent trend-signal batches that
- * are NOT gated by the channel's history — "Currently Trending" (breaking
- * now) and "About to Trend" (early rising signal) — so genuinely new
- * cases outside a creator's past coverage can still surface.
+ * top-performing videos, PLUS two independent trend-signal batches not
+ * gated by the channel's history. Every candidate is scored against the
+ * channel's Creator DNA using the fixed weighted formula and filtered to
+ * >= 80/100 before being shown.
  *
- * Accepts an already-constructed Supabase client so callers control
- * which client is used (cookie-based for user-triggered requests,
- * service-role for cron jobs with no user session). The `any, any, any`
- * generic params avoid type friction between the two client variants.
+ * Takes an injected Supabase client (rather than creating its own)
+ * because this runs in two different contexts: a cookie/session-based
+ * client when a user manually clicks Refresh, and a service-role client
+ * when the nightly cron job runs it for every channel with no user
+ * session present.
  */
 export async function generateRecommendations(
-  supabase: SupabaseClient<any, any, any>,
+  supabase: SupabaseClient,
   channelId: string,
   videos: YouTubeVideoDetail[],
   channelDNA?: ChannelDNA | null
@@ -175,9 +230,9 @@ export async function generateRecommendations(
   }
 
   const [personalized, currentlyTrending, aboutToTrend] = await Promise.all([
-    topics.length > 0 ? fetchPersonalizedRecommendations(topics) : Promise.resolve([]),
-    fetchTrendRecommendations("currently-trending"),
-    fetchTrendRecommendations("about-to-trend"),
+    topics.length > 0 ? fetchPersonalizedRecommendations(topics, channelDNA) : Promise.resolve([]),
+    fetchTrendRecommendations("currently-trending", channelDNA),
+    fetchTrendRecommendations("about-to-trend", channelDNA),
   ]);
 
   const recommendations = [...personalized, ...currentlyTrending, ...aboutToTrend];

@@ -5,6 +5,7 @@ import { getOrFetchChannelVideos, saveLensTags } from "@/services/channelVideos"
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
 const REANALYSIS_INTERVAL_DAYS = 30; // never rebuild DNA automatically more than once/month
+const PRIMARY_REGION_THRESHOLD = 80; // % of content from one region before it's treated as the default filter
 
 const LENS_IDS = [
   "victim-centered",
@@ -18,6 +19,23 @@ export interface LensPerformance {
   lens: (typeof LENS_IDS)[number];
   avgViewsRelativeToChannel: "above average" | "average" | "below average";
   videoCount: number;
+}
+
+export interface RegionDistribution {
+  distribution: Record<string, number>; // e.g. { "United Kingdom": 92, "United States": 5 }
+  primaryRegion: string | null; // set only if one region crosses PRIMARY_REGION_THRESHOLD
+  isMultiRegion: boolean; // true if no single region dominates — "Global English True Crime" per spec
+}
+
+export interface AudienceDNA {
+  caseTypePreferences: string[]; // ranked, most-preferred first
+  victimDemographicPreferences: {
+    ethnicity: string | null;
+    ageRange: string | null;
+  };
+  narrativeStyle: string;
+  evidenceWeight: string[]; // e.g. ["Official Documents", "Bodycam", "Court Records"]
+  contentFreshness: string; // e.g. "Recent Cases", "No strong preference"
 }
 
 export interface ChannelDNA {
@@ -39,13 +57,15 @@ export interface ChannelDNA {
   strengths: string[];
   weaknesses: string[];
   lensPerformance: LensPerformance[];
+  regionDistribution: RegionDistribution;
+  audienceDNA: AudienceDNA;
   generatedAt: string;
 }
 
 function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; viewCount: number }[]): string {
   const videoList = videos
     .slice(0, 50)
-    .map((v, i) => `${i + 1}. "${v.title}" â€” ${v.viewCount} views`)
+    .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount} views`)
     .join("\n");
 
   return `You are an editorial analyst for a true crime YouTube intelligence platform. Analyze this creator's channel and return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
@@ -68,7 +88,18 @@ function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; vi
   },
   "strengths": string[],
   "weaknesses": string[],
-  "videoLensTags": [{ "index": number, "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" }]
+  "videoLensTags": [{ "index": number, "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" }],
+  "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/subject matter — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region can't be determined, exclude it from the distribution rather than guessing.,
+  "audienceDNA": {
+    "caseTypePreferences": string[] (3-6 case types this audience engages with most, ranked most-preferred first, e.g. "institutional failures", "missing persons", "police misconduct"),
+    "victimDemographicPreferences": {
+      "ethnicity": string or null (only if a clear, consistent pattern is visible across titles — never guess from a single video),
+      "ageRange": string or null (e.g. "adults", "children", "no strong pattern")
+    },
+    "narrativeStyle": string (e.g. "emotional documentary", "investigative procedural", "social commentary"),
+    "evidenceWeight": string[] (types of evidence this channel's content tends to emphasize, e.g. "official documents", "court records", "witness testimony"),
+    "contentFreshness": string (e.g. "recent/breaking cases", "historical cases", "mixed")
+  }
 }
 
 CHANNEL: ${channel.title}
@@ -76,18 +107,22 @@ DESCRIPTION: ${channel.description.slice(0, 500)}
 SUBSCRIBERS: ${channel.subscriberCount}
 TOTAL VIDEOS: ${channel.videoCount}
 
-RECENT VIDEOS (numbered, title â€” views):
+RECENT VIDEOS (numbered, title — views):
 ${videoList}
 
-Base "strengths" and "weaknesses" on inferred true-crime subgenres this channel's titles suggest the audience responds to well vs. poorly.
+Base "strengths" and "weaknesses" on inferred true-crime subgenres this channel's titles and topics suggest the audience responds to well vs. poorly.
 
 For "videoLensTags": classify EVERY numbered video above into exactly one of the 5 lens categories (victim-centered, investigative, systemic-failure, family-impact, courtroom), based on its title. Every video must get exactly one tag, using its list number as "index" (1-based, matching the numbers above).
+
+For "regionDistribution" and "audienceDNA": be conservative and evidence-based. Only infer demographic or regional patterns that are clearly and consistently supported by multiple video titles — do not infer from a single data point, and leave fields null/empty rather than guessing when evidence is thin.
 
 Return ONLY the JSON object, nothing else.`;
 }
 
-interface RawDNAResponse extends Omit<ChannelDNA, "generatedAt" | "lensPerformance"> {
+interface RawDNAResponse
+  extends Omit<ChannelDNA, "generatedAt" | "lensPerformance" | "regionDistribution"> {
   videoLensTags: { index: number; lens: string }[];
+  regionDistribution: Record<string, number>;
 }
 
 function parseDNAResponse(raw: string): RawDNAResponse {
@@ -131,12 +166,38 @@ function computeLensPerformance(
 }
 
 /**
+ * Determines the single dominant region deterministically from the
+ * Groq-provided distribution — the >=80% threshold rule is applied here
+ * in code, not left to the model, so it's consistent every time rather
+ * than depending on how the LLM chooses to phrase its own conclusion.
+ */
+function resolveRegionDistribution(distribution: Record<string, number>): RegionDistribution {
+  const entries = Object.entries(distribution ?? {});
+  if (entries.length === 0) {
+    return { distribution: {}, primaryRegion: null, isMultiRegion: false };
+  }
+
+  const [topRegion, topPct] = entries.reduce((max, entry) => (entry[1] > max[1] ? entry : max));
+
+  if (topPct >= PRIMARY_REGION_THRESHOLD) {
+    return { distribution, primaryRegion: topRegion, isMultiRegion: false };
+  }
+
+  return { distribution, primaryRegion: null, isMultiRegion: true };
+}
+
+/**
  * Returns cached Creator DNA if it exists and is recent (<30 days old).
  * Only calls Groq (ONE batched call, not one per video) when:
  *   - no channels row exists yet for this youtube_channel_id + user, OR
  *   - the cached DNA is older than REANALYSIS_INTERVAL_DAYS
  * Raw per-video data (title/views, for lens-performance correlation) is
  * cached separately for 15 days via channelVideos.ts.
+ *
+ * This same call now also infers geographic distribution and Audience
+ * DNA (case-type/demographic preferences, narrative style) — both feed
+ * the recommendation engine's Geography and Audience DNA filters.
+ * channels.country is repurposed to store the resolved primaryRegion.
  */
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
@@ -162,12 +223,9 @@ export async function getOrBuildChannelDNA(
   }
 
   if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured â€” cannot generate Creator DNA");
+    throw new Error("Groq is not configured — cannot generate Creator DNA");
   }
 
-  // Need the channel's DB row id before we can cache raw videos against it.
-  // If this is a brand-new channel (no existingChannel yet), insert a
-  // placeholder row first so channel_videos has a valid FK target.
   let channelDbId = existingChannel?.id as string | undefined;
   if (!channelDbId) {
     const { data: inserted, error: insertError } = await supabase
@@ -189,18 +247,19 @@ export async function getOrBuildChannelDNA(
   }
 
   if (!channelDbId) {
-    throw new Error("channelDbId was not set â€” this should never happen");
+    throw new Error("channelDbId was not set — this should never happen");
   }
 
   const cachedVideos = await getOrFetchChannelVideos(channelDbId, channelSummary);
 
   const raw = await groqProvider.generateText(buildPrompt(channelSummary, cachedVideos), {
     temperature: 0.3,
-    maxTokens: 1600,
+    maxTokens: 2200,
   });
 
   const parsed = parseDNAResponse(raw);
   const lensPerformance = computeLensPerformance(cachedVideos, parsed.videoLensTags ?? []);
+  const regionDistribution = resolveRegionDistribution(parsed.regionDistribution ?? {});
 
   const tagsToSave = (parsed.videoLensTags ?? [])
     .map((t) => {
@@ -211,8 +270,13 @@ export async function getOrBuildChannelDNA(
 
   await saveLensTags(channelDbId, tagsToSave);
 
-  const { videoLensTags, ...dnaFields } = parsed;
-  const dna: ChannelDNA = { ...dnaFields, lensPerformance, generatedAt: new Date().toISOString() };
+  const { videoLensTags, regionDistribution: _rawRegion, ...dnaFields } = parsed;
+  const dna: ChannelDNA = {
+    ...dnaFields,
+    lensPerformance,
+    regionDistribution,
+    generatedAt: new Date().toISOString(),
+  };
 
   const { error: updateError } = await supabase
     .from("channels")
@@ -222,6 +286,9 @@ export async function getOrBuildChannelDNA(
       video_count: channelSummary.videoCount,
       view_count: channelSummary.viewCount,
       channel_dna: dna,
+      region_distribution: regionDistribution,
+      audience_dna: dna.audienceDNA,
+      country: regionDistribution.primaryRegion,
       last_analyzed: new Date().toISOString(),
     })
     .eq("id", channelDbId);
