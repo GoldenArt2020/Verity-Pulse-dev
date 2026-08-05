@@ -98,7 +98,7 @@ export default function RegisterPage() {
       <div className="pointer-events-none absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-blue-400/10 blur-[100px]" />
 
       <div className="absolute left-24 top-1/2 hidden -translate-y-1/2 lg:block">
-        <div className="text-6xl font-bold text-blue-500">V</div>
+        <img src="/verity-pulse-icon.png" alt="VerityPulse" className="h-20 w-auto object-contain" />
         <h1 className="mt-4 text-5xl font-bold tracking-tight text-white">
           VERITYPULSE
         </h1>
