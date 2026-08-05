@@ -33,7 +33,7 @@ export interface GeneratedAngle {
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
-  const { caseData, loading, error } = useCase(caseId);
+  const { caseData, loading, error, refetch } = useCase(caseId);
 
   const [researching, setResearching] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
@@ -64,11 +64,12 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Research failed");
+        await refetch();
         setResearchDone(true);
       })
       .catch((err) => setResearchError(err instanceof Error ? err.message : "Research failed"))
       .finally(() => setResearching(false));
-  }, [isStub, caseData]);
+  }, [isStub, caseData, refetch]);
 
   async function handleGenerateAngles() {
     if (!caseData) return;

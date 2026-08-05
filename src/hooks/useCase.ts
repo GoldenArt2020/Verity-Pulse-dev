@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export interface CaseRow {
@@ -23,39 +23,33 @@ export function useCase(caseId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!caseId) return;
-    let active = true;
+    setLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("cases")
+        .select("*")
+        .eq("id", caseId)
+        .single();
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from("cases")
-          .select("*")
-          .eq("id", caseId)
-          .single();
-
-        if (!active) return;
-        if (error) {
-          setError(error.message);
-        } else {
-          setCaseData(data);
-        }
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Failed to load case.");
-      } finally {
-        if (active) setLoading(false);
+      if (error) {
+        setError(error.message);
+      } else {
+        setCaseData(data);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load case.");
+    } finally {
+      setLoading(false);
     }
-
-    load();
-    return () => {
-      active = false;
-    };
   }, [caseId]);
 
-  return { caseData, loading, error };
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return { caseData, loading, error, refetch: load };
 }
