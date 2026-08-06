@@ -63,7 +63,57 @@ function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
 - Storytelling style: ${dna.channelStyle.storytellingStyle}, tone: ${dna.channelStyle.emotionalTone}`;
 }
 
-function buildPersonalizedPrompt(topics: string[], searchContext: string, dna?: ChannelDNA | null): string {
+function normalizeTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Every channel currently gets independently-generated recommendations with
+ * zero awareness of other channels — so two channels (especially similar
+ * ones) can easily get told to cover the exact same case, most often via
+ * the trend batches, which run identical generic queries for everyone.
+ *
+ * This pulls the titles currently live in every OTHER channel's
+ * recommendations column, so we can both instruct the model to avoid them
+ * and hard-filter them out afterward as a safety net. Because
+ * `channels.recommendations` gets fully overwritten on every regeneration
+ * (not appended to), this naturally stays fresh rather than permanently
+ * locking a case out forever — once another channel's batch is
+ * regenerated without that case, it becomes available again.
+ */
+async function fetchExcludedTitles(
+  supabase: SupabaseClient,
+  currentChannelId: string
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("channels")
+    .select("recommendations")
+    .neq("id", currentChannelId);
+
+  if (error || !data) return new Set();
+
+  const excluded = new Set<string>();
+  for (const row of data) {
+    const recs = (row.recommendations as Recommendation[] | null) ?? [];
+    for (const r of recs) {
+      if (r?.title) excluded.add(normalizeTitle(r.title));
+    }
+  }
+  return excluded;
+}
+
+function buildExclusionBlock(excludedTitles: Set<string>): string {
+  if (excludedTitles.size === 0) return "";
+  const sample = Array.from(excludedTitles).slice(0, 40);
+  return `\n\nDO NOT recommend any of these cases — they are already assigned to a different channel on this platform:\n${sample.map((t) => `- ${t}`).join("\n")}`;
+}
+
+function buildPersonalizedPrompt(
+  topics: string[],
+  searchContext: string,
+  dna?: ChannelDNA | null,
+  excludedTitles?: Set<string>
+): string {
   return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's content focuses on: ${topics.join(", ")}.
 
 ${buildAudienceDnaBlock(dna)}
@@ -76,13 +126,14 @@ ${searchContext}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 { "candidates": [${CANDIDATE_SHAPE}] }
 
-Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score audienceDnaMatch and storytellingMatch honestly against the profile above — do not give every candidate the same scores.`;
+Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score audienceDnaMatch and storytellingMatch honestly against the profile above — do not give every candidate the same scores.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
 function buildTrendPrompt(
   searchContext: string,
   label: "currently-trending" | "about-to-trend",
-  dna?: ChannelDNA | null
+  dna?: ChannelDNA | null,
+  excludedTitles?: Set<string>
 ): string {
   const framing =
     label === "currently-trending"
@@ -99,7 +150,7 @@ ${searchContext}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 { "candidates": [${CANDIDATE_SHAPE}] }
 
-Only include real, distinct, currently real-world cases — do not invent anything. Score audienceDnaMatch and storytellingMatch honestly against the profile above, even for trending cases outside the creator's usual coverage.`;
+Only include real, distinct, currently real-world cases — do not invent anything. Score audienceDnaMatch and storytellingMatch honestly against the profile above, even for trending cases outside the creator's usual coverage.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
 function parseJSON<T>(raw: string): T {
@@ -114,10 +165,15 @@ function parseJSON<T>(raw: string): T {
 function scoreAndFilter(
   candidates: ScoredCandidate[],
   dna: ChannelDNA | null | undefined,
-  trendStatus: TrendStatus
+  trendStatus: TrendStatus,
+  excludedTitles: Set<string>
 ): Recommendation[] {
+  // Safety net: drop anything matching an excluded title even if the model
+  // ignored the instruction not to suggest it.
+  const filtered = candidates.filter((c) => !excludedTitles.has(normalizeTitle(c.title)));
+
   if (!dna) {
-    return candidates.map((c) => ({
+    return filtered.map((c) => ({
       title: c.title,
       audienceMatch: 50,
       reason: c.reason,
@@ -126,7 +182,7 @@ function scoreAndFilter(
     }));
   }
 
-  return candidates
+  return filtered
     .map((c) => {
       const breakdown = scoreCandidate(c, dna);
       return {
@@ -143,7 +199,8 @@ function scoreAndFilter(
 
 async function fetchPersonalizedRecommendations(
   topics: string[],
-  dna?: ChannelDNA | null
+  dna: ChannelDNA | null | undefined,
+  excludedTitles: Set<string>
 ): Promise<Recommendation[]> {
   const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
   const searchResults = await tavilyProvider.search(searchQuery, 8);
@@ -153,17 +210,18 @@ async function fetchPersonalizedRecommendations(
     .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
     .join("\n\n");
 
-  const raw = await groqProvider.generateText(buildPersonalizedPrompt(topics, searchContext, dna), {
-    temperature: 0.4,
-    maxTokens: 1400,
-  });
+  const raw = await groqProvider.generateText(
+    buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
+    { temperature: 0.4, maxTokens: 1400 }
+  );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
-  return scoreAndFilter(candidates ?? [], dna, "for-you");
+  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles);
 }
 
 async function fetchTrendRecommendations(
   label: "currently-trending" | "about-to-trend",
-  dna?: ChannelDNA | null
+  dna: ChannelDNA | null | undefined,
+  excludedTitles: Set<string>
 ): Promise<Recommendation[]> {
   const query =
     label === "currently-trending"
@@ -177,12 +235,12 @@ async function fetchTrendRecommendations(
     .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
     .join("\n\n");
 
-  const raw = await groqProvider.generateText(buildTrendPrompt(searchContext, label, dna), {
-    temperature: 0.4,
-    maxTokens: 1400,
-  });
+  const raw = await groqProvider.generateText(
+    buildTrendPrompt(searchContext, label, dna, excludedTitles),
+    { temperature: 0.4, maxTokens: 1400 }
+  );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
-  return scoreAndFilter(candidates ?? [], dna, label);
+  return scoreAndFilter(candidates ?? [], dna, label, excludedTitles);
 }
 
 /**
@@ -229,10 +287,14 @@ export async function generateRecommendations(
     ];
   }
 
+  const excludedTitles = await fetchExcludedTitles(supabase, channelId);
+
   const [personalized, currentlyTrending, aboutToTrend] = await Promise.all([
-    topics.length > 0 ? fetchPersonalizedRecommendations(topics, channelDNA) : Promise.resolve([]),
-    fetchTrendRecommendations("currently-trending", channelDNA),
-    fetchTrendRecommendations("about-to-trend", channelDNA),
+    topics.length > 0
+      ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles)
+      : Promise.resolve([]),
+    fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles),
+    fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles),
   ]);
 
   const recommendations = [...personalized, ...currentlyTrending, ...aboutToTrend];
