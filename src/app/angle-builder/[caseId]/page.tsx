@@ -1,4 +1,3 @@
-// src/app/angle-builder/[caseId]/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -23,12 +22,15 @@ export interface AngleScores {
 }
 
 export interface GeneratedAngle {
+  id: string;
   title: string;
   coreQuestion: string;
   whyItWorks: string;
   researchFocus: string[];
   openingHook: string;
   scores: AngleScores;
+  script: string | null;
+  scriptGeneratedAt: string | null;
 }
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {
@@ -93,10 +95,39 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
     }
   }
 
+  function handleRegenerateClick() {
+    if (angles.length > 0) {
+      const hasScripts = angles.some((a) => !!a.script);
+      const message = hasScripts
+        ? "Regenerating will archive these angles, including ones with scripts already written. Archived angles and scripts stay saved under the case's project — they just won't show here anymore. Continue?"
+        : "Regenerating will replace these angles with a new batch. Continue?";
+      if (!confirm(message)) return;
+    }
+    handleGenerateAngles();
+  }
+
+  // Load already-saved angles first — only auto-generate if this case truly
+  // has none yet. Auto-regenerating on every visit would now archive a
+  // perfectly good batch (and any scripts) each time someone opens the page.
   useEffect(() => {
     if (!researched || !caseData || anglesTriggeredRef.current) return;
     anglesTriggeredRef.current = true;
-    handleGenerateAngles();
+
+    setAnglesLoading(true);
+    fetch(`/api/case/${caseData.id}/angles`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to load angles");
+        if ((data.angles ?? []).length > 0) {
+          setAngles(data.angles);
+          setAnglesLoading(false);
+        } else {
+          handleGenerateAngles();
+        }
+      })
+      .catch(() => {
+        handleGenerateAngles();
+      });
   }, [researched, caseData]);
 
   const selectedAngle = selectedIndex !== null ? angles[selectedIndex] ?? null : null;
@@ -144,7 +175,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
 
       {!loading && !error && caseData && researched && (
         <div className="p-6 space-y-4">
-          <AngleBuilderHeader caseData={caseData} onRegenerate={handleGenerateAngles} regenerating={anglesLoading} />
+          <AngleBuilderHeader caseData={caseData} onRegenerate={handleRegenerateClick} regenerating={anglesLoading} />
           <StepTabs />
 
           <div className="grid grid-cols-[1fr_1fr_340px] gap-4">
@@ -154,7 +185,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
               error={anglesError}
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
-              onRegenerate={handleGenerateAngles}
+              onRegenerate={handleRegenerateClick}
             />
             <SelectedAnglePanel angle={selectedAngle} onClear={() => setSelectedIndex(null)} />
             <div className="space-y-4">

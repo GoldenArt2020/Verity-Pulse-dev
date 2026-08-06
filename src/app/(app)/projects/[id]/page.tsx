@@ -1,4 +1,3 @@
-// src/app/(app)/projects/[id]/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -6,8 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ProjectAngleTabs } from "@/components/projects/ProjectAngleTabs";
 
-type ProjectStatus = "active" | "on_hold" | "completed" | "archived";
+type ProjectStatus =
+  | "IDEA" | "RESEARCH" | "NARRATIVE" | "SEO" | "THUMBNAIL"
+  | "RECORDING" | "EDITING" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
 interface ProjectDetail {
   id: string;
@@ -24,20 +26,35 @@ interface ProjectDetail {
   } | null;
 }
 
-const STATUS_OPTIONS: ProjectStatus[] = ["active", "on_hold", "completed", "archived"];
+const STATUS_OPTIONS: ProjectStatus[] = [
+  "IDEA", "RESEARCH", "NARRATIVE", "SEO", "THUMBNAIL",
+  "RECORDING", "EDITING", "SCHEDULED", "PUBLISHED", "ARCHIVED",
+];
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: "Active",
-  on_hold: "On Hold",
-  completed: "Completed",
-  archived: "Archived",
+  IDEA: "Idea",
+  RESEARCH: "Research",
+  NARRATIVE: "Narrative",
+  SEO: "SEO",
+  THUMBNAIL: "Thumbnail",
+  RECORDING: "Recording",
+  EDITING: "Editing",
+  SCHEDULED: "Scheduled",
+  PUBLISHED: "Published",
+  ARCHIVED: "Archived",
 };
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
-  active: "bg-emerald-500/15 text-emerald-400",
-  on_hold: "bg-amber-500/15 text-amber-400",
-  completed: "bg-blue-500/15 text-blue-400",
-  archived: "bg-slate-500/15 text-slate-400",
+  IDEA: "bg-slate-500/15 text-slate-400",
+  RESEARCH: "bg-sky-500/15 text-sky-400",
+  NARRATIVE: "bg-violet-500/15 text-violet-400",
+  SEO: "bg-fuchsia-500/15 text-fuchsia-400",
+  THUMBNAIL: "bg-pink-500/15 text-pink-400",
+  RECORDING: "bg-orange-500/15 text-orange-400",
+  EDITING: "bg-amber-500/15 text-amber-400",
+  SCHEDULED: "bg-cyan-500/15 text-cyan-400",
+  PUBLISHED: "bg-emerald-500/15 text-emerald-400",
+  ARCHIVED: "bg-slate-500/15 text-slate-400",
 };
 
 export default function ProjectDetailPage() {
@@ -189,6 +206,8 @@ export default function ProjectDetailPage() {
           ))}
         </div>
       </div>
+
+      {project.case_id && <ProjectAngleTabs caseId={project.case_id} />}
 
       <button
         onClick={handleDelete}

@@ -1,4 +1,3 @@
-// src/app/api/case/generate-angle/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
@@ -13,6 +12,18 @@ export interface AngleScores {
 }
 
 export interface GeneratedAngle {
+  id: string;
+  title: string;
+  coreQuestion: string;
+  whyItWorks: string;
+  researchFocus: string[];
+  openingHook: string;
+  scores: AngleScores;
+  script: string | null;
+  scriptGeneratedAt: string | null;
+}
+
+interface RawAngle {
   title: string;
   coreQuestion: string;
   whyItWorks: string;
@@ -62,7 +73,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Generate between 6 and 10 angles. Do not repeat the same core question in different words. Score each angle honestly and distinctly — do not give every angle the same scores. Order angles by total score (sum of all 5 score fields) descending. Ground every angle strictly in the case summary provided — do not invent facts not implied by it. Return ONLY the JSON object.`;
 }
 
-function parseAngles(raw: string): GeneratedAngle[] {
+function parseAngles(raw: string): RawAngle[] {
   let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
@@ -117,7 +128,63 @@ export async function POST(req: NextRequest) {
       buildPrompt(caseRow.name, caseRow.summary, youtubeTitles),
       { temperature: 0.7, maxTokens: 2600 }
     );
-    const angles = parseAngles(raw);
+    const rawAngles = parseAngles(raw);
+
+    if (rawAngles.length === 0) {
+      return NextResponse.json({ error: "No angles were generated" }, { status: 500 });
+    }
+
+    // Archive the previous active batch rather than deleting — archived
+    // angles (and any scripts already written against them) stay saved
+    // under the case's project, they just stop showing as "current."
+    const { error: archiveError } = await supabase
+      .from("angles")
+      .update({ status: "archived" })
+      .eq("case_id", caseId)
+      .eq("status", "active");
+
+    if (archiveError) {
+      return NextResponse.json(
+        { error: `Failed to archive previous angles: ${archiveError.message}` },
+        { status: 500 }
+      );
+    }
+
+    const rowsToInsert = rawAngles.map((a) => ({
+      case_id: caseId,
+      title: a.title,
+      core_question: a.coreQuestion,
+      why_it_works: a.whyItWorks,
+      research_focus: a.researchFocus,
+      opening_hook: a.openingHook,
+      scores: a.scores,
+      status: "active",
+    }));
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("angles")
+      .insert(rowsToInsert)
+      .select("id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at");
+
+    if (insertError || !inserted) {
+      return NextResponse.json(
+        { error: `Failed to save angles: ${insertError?.message}` },
+        { status: 500 }
+      );
+    }
+
+    const angles: GeneratedAngle[] = inserted.map((row) => ({
+      id: row.id,
+      title: row.title,
+      coreQuestion: row.core_question,
+      whyItWorks: row.why_it_works,
+      researchFocus: row.research_focus,
+      openingHook: row.opening_hook,
+      scores: row.scores,
+      script: row.script,
+      scriptGeneratedAt: row.script_generated_at,
+    }));
+
     return NextResponse.json({ angles });
   } catch (err) {
     return NextResponse.json(

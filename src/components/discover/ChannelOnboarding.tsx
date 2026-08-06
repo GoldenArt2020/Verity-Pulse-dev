@@ -18,7 +18,7 @@ const ANALYSIS_STEPS = [
 const CHANNEL_INPUT_HINT =
   "Paste your YouTube channel link (youtube.com/@yourhandle or youtube.com/channel/UC...), your @handle, or your channel ID.";
 
-export function ChannelOnboarding() {
+export function ChannelOnboarding({ onConnected }: { onConnected?: () => void }) {
   const { saveChannel } = useChannelId();
   const { user, isAuthenticated } = useAuthUser();
   const [handle, setHandle] = useState("");
@@ -63,11 +63,17 @@ export function ChannelOnboarding() {
       });
       const dnaData = await dnaRes.json();
       if (!dnaRes.ok) throw new Error(dnaData.error ?? "Failed to build Creator DNA");
+
       setStepIndex(5);
-      saveChannel(data.channelId, data.title);
-      await new Promise((r) => setTimeout(r, 400)); // let the last checkmark render
-      window.location.reload();
-     } catch (err) {
+      await saveChannel(dnaData.channelRowId);
+      await new Promise((r) => setTimeout(r, 400));
+
+      if (onConnected) {
+        onConnected();
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }

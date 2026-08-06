@@ -4,12 +4,11 @@ import { useChannelId } from "@/hooks/useChannelId";
 import { ChannelOnboarding } from "@/components/discover/ChannelOnboarding";
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { channelId, loaded } = useChannelId();
+  const { channels, loaded } = useChannelId();
 
-  // Avoid flashing the onboarding screen while we're still reading localStorage.
   if (!loaded) return null;
 
-  if (!channelId) {
+  if (channels.length === 0) {
     return <ChannelOnboarding />;
   }
 
