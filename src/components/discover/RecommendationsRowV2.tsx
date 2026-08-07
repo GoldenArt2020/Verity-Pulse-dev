@@ -203,7 +203,7 @@ function RecommendationSection({
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToAngleBuilder, navigatingTo } = useCaseNavigation();
-  const { clearChannel } = useChannelId();
+  const { clearActiveChannel } = useChannelId();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -283,7 +283,7 @@ export function RecommendationsRowV2() {
           </p>
           <button
             onClick={() => {
-              clearChannel();
+              clearActiveChannel();
               window.location.reload();
             }}
             className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-blue-500 shadow-lg shadow-blue-500/20"

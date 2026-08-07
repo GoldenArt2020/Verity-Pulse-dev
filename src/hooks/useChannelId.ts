@@ -108,6 +108,14 @@ export function useChannelId() {
     [user, load]
   );
 
+  /** Clears the active channel selection without deleting any channel. */
+  const clearActiveChannel = useCallback(async () => {
+    if (!user) return;
+    const supabase = createClient();
+    await supabase.from("active_channel").delete().eq("user_id", user.id);
+    setActiveChannelRowId(undefined);
+  }, [user]);
+
   return {
     // Back-compat shape for existing code that reads `channelId`/`channelHandle`
     // as "the current channel":
@@ -120,5 +128,6 @@ export function useChannelId() {
     saveChannel,
     switchChannel,
     removeChannel,
+    clearActiveChannel,
   };
 }
