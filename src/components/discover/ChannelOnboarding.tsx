@@ -18,15 +18,6 @@ const ANALYSIS_STEPS = [
 const CHANNEL_INPUT_HINT =
   "Paste your YouTube channel link (youtube.com/@yourhandle or youtube.com/channel/UC...), your @handle, or your channel ID.";
 
-<<<<<<< HEAD
-=======
-/**
- * Reverted to manual-only channel connection. The user adds their
- * channel themselves here; YouTube Analytics permission is a separate,
- * later step on the Channel Intelligence page (see
- * ConnectYouTubeAnalytics.tsx) rather than bundled into this flow.
- */
->>>>>>> 5ba4604 (Recommendations: 8-factor VerityPulse scoring (Creator DNA/Audience/Search/Competition/Angles/Region/Momentum/Historical), real region display with exception badges, cross-channel exclusion preserved)
 export function ChannelOnboarding({ onConnected }: { onConnected?: () => void }) {
   const { saveChannel } = useChannelId();
   const { user, isAuthenticated } = useAuthUser();
