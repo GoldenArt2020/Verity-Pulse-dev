@@ -126,7 +126,9 @@ export function SelectedAnglePanel({
                 {angle.latestFindings.map((f) => (
                   <li key={f.url} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2">
                     
-                      href={f.url}
+                    
+                      <a
+                        href={f.url}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-1 text-[12px] font-medium text-blue-400 hover:text-blue-300"
