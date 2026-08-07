@@ -56,8 +56,8 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
     {
       "title": string (a compelling angle title, e.g. "The Fire Was Never the Crime; It Was the Cover-Up"),
       "coreQuestion": string (the single question this angle answers, e.g. "Why was the house set on fire, and how did that decision work against the killer?"),
-      "whyItWorks": string (2-3 sentences: why this is underexplored in existing coverage, and why it creates a fresh entry point into the case),
-      "researchFocus": string[] (4-6 specific, concrete research directions — facts, records, or evidence types to investigate for this angle, grounded in the case summary, not generic),
+      "whyItWorks": string (2 concise sentences: why this is underexplored in existing coverage, and why it creates a fresh entry point into the case),
+      "researchFocus": string[] (4-5 specific, concrete research directions — facts, records, or evidence types to investigate for this angle, grounded in the case summary, not generic),
       "openingHook": string (one sentence a narrator would use to open the episode on this angle, phrased as a question or a striking statement),
       "scores": {
         "searchDemand": number (0-25, how likely this specific angle is to match rising search interest, reasoned from how distinctive/newsworthy this specific question is),
@@ -70,25 +70,91 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 10 angles. Do not repeat the same core question in different words. Score each angle honestly and distinctly — do not give every angle the same scores. Order angles by total score (sum of all 5 score fields) descending. Ground every angle strictly in the case summary provided — do not invent facts not implied by it. Return ONLY the JSON object.`;
+Generate between 6 and 8 angles. Keep every field concise — this response must stay compact enough to complete in full. Do not repeat the same core question in different words. Score each angle honestly and distinctly — do not give every angle the same scores. Order angles by total score (sum of all 5 score fields) descending. Ground every angle strictly in the case summary provided — do not invent facts not implied by it. Return ONLY the JSON object.`;
+}
+
+function tryParseJson(text: string): { angles?: RawAngle[] } | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Groq responses occasionally get cut off mid-object when the batch runs
+ * long (hitting the token limit). Rather than fail the whole request, walk
+ * the "angles" array brace-by-brace and keep every angle object that
+ * finished generating before the cutoff, discarding only the incomplete
+ * tail.
+ */
+function salvageTruncatedAngles(cleaned: string): RawAngle[] {
+  const arrayStart = cleaned.indexOf("[");
+  if (arrayStart === -1) return [];
+
+  const salvaged: RawAngle[] = [];
+  let depth = 0;
+  let objStart = -1;
+
+  for (let i = arrayStart; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        const candidate = cleaned.slice(objStart, i + 1);
+        const parsed = tryParseJson(candidate);
+        if (parsed && "title" in parsed) {
+          salvaged.push(parsed as unknown as RawAngle);
+          objStart = -1;
+        } else {
+          // First malformed object hit — everything after this is also
+          // unreliable, stop here rather than risk garbage entries.
+          break;
+        }
+      }
+    }
+  }
+  return salvaged;
 }
 
 function parseAngles(raw: string): RawAngle[] {
-  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+  const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1) {
-    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
+  if (firstBrace === -1) {
+    throw new Error("empty_response");
   }
-  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-  try {
-    const parsed = JSON.parse(cleaned);
-    return parsed.angles ?? [];
-  } catch (err) {
-    throw new Error(
-      `Failed to parse AI JSON response: ${(err as Error).message}\nRaw (first 500 chars): ${raw.slice(0, 500)}`
-    );
+  const fromFirstBrace = cleaned.slice(firstBrace);
+
+  const lastBrace = fromFirstBrace.lastIndexOf("}");
+  if (lastBrace !== -1) {
+    const wholeCandidate = fromFirstBrace.slice(0, lastBrace + 1);
+    const parsed = tryParseJson(wholeCandidate);
+    if (parsed?.angles?.length) {
+      return parsed.angles;
+    }
   }
+
+  const salvaged = salvageTruncatedAngles(fromFirstBrace);
+  if (salvaged.length > 0) {
+    return salvaged;
+  }
+
+  throw new Error("unparseable_response");
+}
+
+async function generateAngleBatch(
+  caseName: string,
+  summary: string,
+  youtubeTitles: string[]
+): Promise<RawAngle[]> {
+  const raw = await groqProvider.generateText(buildPrompt(caseName, summary, youtubeTitles), {
+    temperature: 0.7,
+    maxTokens: 4500,
+  });
+  return parseAngles(raw);
 }
 
 export async function POST(req: NextRequest) {
@@ -121,19 +187,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const youtubeTitles = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
+
+  let rawAngles: RawAngle[];
   try {
-    const youtubeTitles = await getOrFetchYouTubeCoverage(caseId, caseRow.name);
-
-    const raw = await groqProvider.generateText(
-      buildPrompt(caseRow.name, caseRow.summary, youtubeTitles),
-      { temperature: 0.7, maxTokens: 2600 }
-    );
-    const rawAngles = parseAngles(raw);
-
-    if (rawAngles.length === 0) {
-      return NextResponse.json({ error: "No angles were generated" }, { status: 500 });
+    rawAngles = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeTitles);
+  } catch (firstErr) {
+    // One automatic retry — a fresh generation attempt usually succeeds
+    // even when the first one got cut off or came back malformed, since
+    // Groq's output length varies call to call.
+    try {
+      rawAngles = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeTitles);
+    } catch (secondErr) {
+      console.error("generate-angle: both attempts failed", firstErr, secondErr);
+      return NextResponse.json(
+        {
+          error:
+            "We couldn't generate angles for this case just now — the response came back incomplete. Please try again.",
+        },
+        { status: 502 }
+      );
     }
+  }
 
+  if (rawAngles.length === 0) {
+    return NextResponse.json({ error: "No angles were generated. Please try again." }, { status: 500 });
+  }
+
+  try {
     // Archive the previous active batch rather than deleting — archived
     // angles (and any scripts already written against them) stay saved
     // under the case's project, they just stop showing as "current."

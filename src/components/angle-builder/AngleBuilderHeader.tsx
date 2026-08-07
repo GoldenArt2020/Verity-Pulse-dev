@@ -1,10 +1,40 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, BookmarkCheck, Sparkles, Loader2, ChevronDown } from "lucide-react";
+import { Bookmark, BookmarkCheck, Sparkles, Loader2, ChevronDown, Info } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="text-slate-600 hover:text-slate-400"
+        aria-label="More info"
+      >
+        <Info className="h-3 w-3" />
+      </button>
+      {open && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
+          {text}
+          <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function AngleBuilderHeader({
   caseData,
@@ -123,7 +153,10 @@ export function AngleBuilderHeader({
 
       <div className="mt-5 grid grid-cols-3 gap-4 border-t border-slate-800/60 pt-5">
         <div className="text-center">
-          <p className="mb-1 text-[11px] text-slate-500">Opportunity Score</p>
+          <p className="mb-1 flex items-center justify-center gap-1 text-[11px] text-slate-500">
+            Opportunity Score
+            <InfoTooltip text="Overall strength of this case as a documentary opportunity — combines how much verifiable evidence exists, how well-documented the case is, and how much public interest it's likely to draw. Higher is better." />
+          </p>
           <div className="relative mx-auto h-16 w-16">
             <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
               <circle cx="18" cy="18" r="15.5" fill="none" stroke="#1e293b" strokeWidth="3" />
@@ -141,14 +174,20 @@ export function AngleBuilderHeader({
         </div>
 
         <div className="text-center">
-          <p className="text-[11px] text-slate-500">YouTube Coverage</p>
+          <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+            YouTube Coverage
+            <InfoTooltip text="A 0–10 estimate of how much true-crime documentary coverage this case already has on YouTube. Lower means the story is fresher and less oversaturated — more room for a new take." />
+          </p>
           <p className="mt-1 text-xl font-semibold text-white">
             {caseData.coverage_score != null ? `${caseData.coverage_score}/10` : "—"}
           </p>
         </div>
 
         <div className="text-center">
-          <p className="text-[11px] text-slate-500">Competition Score</p>
+          <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+            Competition Score
+            <InfoTooltip text="0–100 estimate of how saturated this case is across media and YouTube coverage combined. A higher score means more existing coverage and more competition — you'll want a sharper, more distinct angle to stand out." />
+          </p>
           <p className="mt-1 text-xl font-semibold text-white">
             {caseData.competition_score ?? "—"} <span className="text-[11px] font-normal text-slate-500">/100</span>
           </p>

@@ -1,7 +1,7 @@
 // src/components/angle-builder/GeneratedAnglesList.tsx
 "use client";
 
-import { Sparkles, Check } from "lucide-react";
+import { Sparkles, Check, AlertTriangle } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
 function totalScore(a: GeneratedAngle) {
@@ -39,8 +39,15 @@ export function GeneratedAnglesList({
       )}
 
       {!loading && error && (
-        <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">
-          {error}
+        <div className="mt-3 flex flex-col items-center gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-5 text-center">
+          <AlertTriangle className="h-5 w-5 text-rose-400" />
+          <p className="text-xs text-rose-300">{error}</p>
+          <button
+            onClick={onRegenerate}
+            className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-400"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Try Again
+          </button>
         </div>
       )}
 
