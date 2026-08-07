@@ -11,12 +11,18 @@ export interface ConnectedChannel {
 }
 
 export function useChannelId() {
-  const { user } = useAuthUser();
+  const { user, isLoading: authLoading } = useAuthUser();
   const [channels, setChannels] = useState<ConnectedChannel[]>([]);
   const [activeChannelRowId, setActiveChannelRowId] = useState<string | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
+    if (authLoading) {
+      // Auth hasn't resolved yet — don't decide "no channels" prematurely,
+      // or the onboarding form flashes before real auth/channel data loads.
+      return;
+    }
+
     if (!user) {
       setChannels([]);
       setActiveChannelRowId(undefined);
@@ -59,7 +65,7 @@ export function useChannelId() {
     const resolvedActiveId = activeRow?.channel_id ?? mapped[0]?.id;
     setActiveChannelRowId(resolvedActiveId);
     setLoaded(true);
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => {
     load();
