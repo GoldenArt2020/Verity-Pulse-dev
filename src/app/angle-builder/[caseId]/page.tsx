@@ -192,11 +192,11 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       )}
 
       {!loading && !error && caseData && researched && (
-        <div className="mx-auto max-w-[1600px] space-y-4 p-6">
+        <div className="mx-auto max-w-[1400px] space-y-4 p-6">
           <AngleBuilderHeader caseData={caseData} onRegenerate={handleRegenerateClick} regenerating={anglesLoading} />
           <StepTabs />
 
-          <div className="grid grid-cols-[1fr_1fr_340px] gap-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_340px] gap-4">
             <GeneratedAnglesList
               angles={angles}
               loading={anglesLoading}
