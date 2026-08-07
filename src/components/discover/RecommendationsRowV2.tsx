@@ -5,7 +5,6 @@ import { RefreshCw, Bookmark, ArrowRight, Tv, Sparkles, TrendingUp, Zap, Globe2 
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
-import { useChannelId } from "@/hooks/useChannelId";
 import { AudienceSignalPanel } from "./AudienceSignalPanel";
 import { RecommendationHistorySection } from "./RecommendationHistorySection";
 
@@ -203,7 +202,6 @@ function RecommendationSection({
 export function RecommendationsRowV2() {
   const { recommendations, loading, refreshing, error, refresh } = useRecommendations();
   const { goToAngleBuilder, navigatingTo } = useCaseNavigation();
-  const { clearActiveChannel } = useChannelId();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -279,16 +277,15 @@ export function RecommendationsRowV2() {
           </div>
           <h3 className="mt-4 text-base font-semibold text-[#FAFAFA]">No recommendations yet</h3>
           <p className="mt-2 max-w-md text-xs leading-relaxed text-[#71717A]">
-            Connect your YouTube channel and allow VerityPulse to analyze your audience. The more we learn about your content, the better our recommendations become.
+            Your channel is connected, but nothing has cleared our quality bar yet. Run a refresh to pull fresh candidates — this can happen when there's limited case coverage available right now.
           </p>
           <button
-            onClick={() => {
-              clearActiveChannel();
-              window.location.reload();
-            }}
-            className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-blue-500 shadow-lg shadow-blue-500/20"
+            onClick={refresh}
+            disabled={refreshing}
+            className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-blue-500 shadow-lg shadow-blue-500/20 disabled:opacity-50"
           >
-            Connect Channel
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Analyzing…" : "Refresh Recommendations"}
           </button>
         </div>
       )}

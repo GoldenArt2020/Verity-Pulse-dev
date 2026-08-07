@@ -49,7 +49,7 @@ const WEIGHTS = {
   historicalPerformance: 0.05,
 };
 
-export const RECOMMENDATION_THRESHOLD = 80;
+export const RECOMMENDATION_THRESHOLD = 60;
 
 function lensHistoricalScore(lens: Lens | null, lensPerformance: LensPerformance[]): number {
   if (!lens) return 50;
