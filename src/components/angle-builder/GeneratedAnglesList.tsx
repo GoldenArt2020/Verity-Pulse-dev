@@ -1,7 +1,7 @@
-// src/components/angle-builder/GeneratedAnglesList.tsx
 "use client";
 
-import { Sparkles, Check, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, RefreshCw, FileText, Loader2 } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
 function totalScore(a: GeneratedAngle) {
@@ -16,86 +16,122 @@ export function GeneratedAnglesList({
   selectedIndex,
   onSelect,
   onRegenerate,
+  caseId,
+  onScriptGenerated,
 }: {
   angles: GeneratedAngle[];
   loading: boolean;
   error: string | null;
   selectedIndex: number | null;
-  onSelect: (i: number) => void;
+  onSelect: (index: number) => void;
   onRegenerate: () => void;
+  caseId: string;
+  onScriptGenerated: (originalIndex: number, script: string) => void;
 }) {
+  const [writingId, setWritingId] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
+
+  const ranked = angles
+    .map((angle, originalIndex) => ({ angle, originalIndex }))
+    .sort((a, b) => totalScore(b.angle) - totalScore(a.angle));
+
+  async function handleWriteScript(angle: GeneratedAngle, originalIndex: number) {
+    setWritingId(angle.id);
+    setWriteError(null);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleId: angle.id, caseId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
+      onScriptGenerated(originalIndex, data.script);
+    } catch (err) {
+      setWriteError(err instanceof Error ? err.message : "Failed to generate script");
+    } finally {
+      setWritingId(null);
+    }
+  }
+
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">Generated Narrative Angles ({angles.length})</h3>
-      </div>
+      <h3 className="text-base font-semibold text-white">Generated Narrative Angles ({angles.length})</h3>
 
       {loading && (
-        <div className="mt-3 space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-800/60 bg-slate-800/30" />
-          ))}
+        <div className="mt-6 flex flex-col items-center gap-2 py-8 text-center">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+          <p className="text-xs text-slate-500">Generating angles...</p>
         </div>
       )}
 
       {!loading && error && (
-        <div className="mt-3 flex flex-col items-center gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-5 text-center">
-          <AlertTriangle className="h-5 w-5 text-rose-400" />
-          <p className="text-xs text-rose-300">{error}</p>
+        <div className="mt-4 rounded-xl border border-rose-900/40 bg-rose-950/30 p-6 text-center">
+          <p className="text-sm text-rose-400">{error}</p>
           <button
             onClick={onRegenerate}
-            className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-400"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
           >
-            <Sparkles className="h-3.5 w-3.5" /> Try Again
+            <RefreshCw className="h-4 w-4" /> Try Again
           </button>
         </div>
       )}
 
       {!loading && !error && angles.length === 0 && (
-        <div className="mt-4 flex flex-col items-center gap-3 py-6 text-center">
-          <p className="text-xs text-slate-500">No angles generated yet.</p>
-          <button
-            onClick={onRegenerate}
-            className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white"
-          >
-            <Sparkles className="h-3.5 w-3.5" /> Generate Angles
-          </button>
+        <div className="mt-6 flex flex-col items-center gap-2 py-8 text-center">
+          <Sparkles className="h-5 w-5 text-slate-600" />
+          <p className="text-xs text-slate-500">No angles yet.</p>
         </div>
       )}
 
       {!loading && !error && angles.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {angles.map((a, i) => {
-            const isSelected = selectedIndex === i;
+        <div className="mt-4 space-y-2">
+          {writeError && <p className="text-xs text-rose-400">{writeError}</p>}
+          {ranked.map(({ angle, originalIndex }) => {
+            const selected = selectedIndex === originalIndex;
+            const score = totalScore(angle);
             return (
               <div
-                key={a.title}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelect(i)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect(i)}
-                className={`w-full cursor-pointer rounded-xl border p-3 text-left transition-all ${
-                  isSelected
-                    ? "border-blue-500/60 bg-blue-500/10 ring-1 ring-blue-500/40"
-                    : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-800/30"
+                key={angle.id}
+                onClick={() => onSelect(originalIndex)}
+                className={`cursor-pointer rounded-xl border p-3 transition ${
+                  selected
+                    ? "border-blue-500 bg-blue-950/30"
+                    : "border-slate-800/60 bg-slate-900/30 hover:border-slate-700"
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div
-                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                      isSelected ? "border-blue-500 bg-blue-500" : "border-slate-600"
-                    }`}
-                  >
-                    {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-                  </div>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 border-emerald-500 text-xs font-bold text-emerald-400">
-                    {totalScore(a)}
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-emerald-500 text-xs font-bold text-emerald-400">
+                    {score}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-white">{a.title}</p>
-                    <p className="mt-1 text-[11px] italic leading-snug text-slate-500">{a.coreQuestion}</p>
-                    <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-slate-400">{a.whyItWorks}</p>
+                    <p className="truncate text-sm font-semibold text-white">{angle.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-400">{angle.coreQuestion}</p>
                   </div>
+                </div>
+
+                <div className="mt-2 flex items-center justify-end">
+                  {angle.script ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+                      <FileText className="h-3.5 w-3.5" /> Script ready
+                    </span>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleWriteScript(angle, originalIndex);
+                      }}
+                      disabled={writingId === angle.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-200 hover:border-blue-500 hover:text-blue-400 disabled:opacity-50"
+                    >
+                      {writingId === angle.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5" />
+                      )}
+                      Write Script
+                    </button>
+                  )}
                 </div>
               </div>
             );

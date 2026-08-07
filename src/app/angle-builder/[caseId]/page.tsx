@@ -130,6 +130,14 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       });
   }, [researched, caseData]);
 
+  function handleScriptGenerated(originalIndex: number, script: string) {
+    setAngles((prev) =>
+      prev.map((a, i) =>
+        i === originalIndex ? { ...a, script, scriptGeneratedAt: new Date().toISOString() } : a
+      )
+    );
+  }
+
   const selectedAngle = selectedIndex !== null ? angles[selectedIndex] ?? null : null;
 
   return (
@@ -186,6 +194,8 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onRegenerate={handleRegenerateClick}
+              caseId={caseData.id}
+              onScriptGenerated={handleScriptGenerated}
             />
             <SelectedAnglePanel angle={selectedAngle} onClear={() => setSelectedIndex(null)} />
             <div className="space-y-4">

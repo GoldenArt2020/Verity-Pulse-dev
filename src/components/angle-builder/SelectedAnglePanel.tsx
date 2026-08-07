@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, FileText } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
 function totalScore(a: GeneratedAngle) {
@@ -42,14 +42,20 @@ export function SelectedAnglePanel({
             <p className="flex-1 text-lg font-semibold text-white">{angle.title}</p>
           </div>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Core Question</p>
+          <p className="mt-4 text-xs font-medium text-slate-400">Core Question / Curiosity Driver</p>
           <p className="mt-1 text-sm italic leading-relaxed text-slate-300">{angle.coreQuestion}</p>
 
           <p className="mt-4 text-xs font-medium text-slate-400">Opening Hook</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-300">&quot;{angle.openingHook}&quot;</p>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Why This Angle Works</p>
+          <p className="mt-4 text-xs font-medium text-slate-400">Case Narration Fit</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.whyItWorks}</p>
+
+          <p className="mt-4 text-xs font-medium text-slate-400">Channel Fit</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-300">
+            Score {totalScore(angle)}/50 — strongest on{" "}
+            {Object.entries(angle.scores).sort((a, b) => b[1] - a[1])[0][0].replace(/([A-Z])/g, " $1").toLowerCase()}.
+          </p>
 
           <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
           <ul className="mt-1.5 space-y-1">
@@ -59,6 +65,17 @@ export function SelectedAnglePanel({
               </li>
             ))}
           </ul>
+
+          {angle.script && (
+            <div className="mt-5 rounded-xl border border-emerald-900/40 bg-emerald-950/20 p-3">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                <FileText className="h-3.5 w-3.5" /> Script generated
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {angle.scriptGeneratedAt ? new Date(angle.scriptGeneratedAt).toLocaleString() : ""}
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>
