@@ -1,6 +1,5 @@
 "use client";
 
-<<<<<<< HEAD
 import { useState } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,7 +59,8 @@ export function ChannelInput() {
       setLoading(false);
     }
   }
-return (
+
+  return (
     <div className="glass-card flex items-center gap-3 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
       <div className="relative flex-1">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -79,63 +79,6 @@ return (
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {loading ? "Analyzing..." : "Analyze"}
-=======
-import { ShieldCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-
-/**
- * Drop this into the Channel Intelligence page below the channel input,
- * as before. It's a second, separate consent step — deliberately not
- * combined with channel connection.
- *
- * Usage: <ConnectYouTubeAnalytics channelRowId={channel.id} />
- */
-export function ConnectYouTubeAnalytics({
-  channelRowId,
-  connected,
-}: {
-  channelRowId: string;
-  connected?: boolean;
-}) {
-  async function handleConnectAnalytics() {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        scopes: "https://www.googleapis.com/auth/yt-analytics.readonly",
-        queryParams: { access_type: "offline", prompt: "consent" },
-        redirectTo: `${window.location.origin}/auth/analytics-connect-callback`,
-        // Supabase passes this straight through to Google's OAuth
-        // `state` param, which our callback reads back out.
-        // If your Supabase client version doesn't support a `state` option
-        // directly, append it to redirectTo as a query param instead:
-        // redirectTo: `${window.location.origin}/auth/analytics-connect-callback?state=${channelRowId}`
-      },
-    });
-  }
-
-  if (connected) {
-    return (
-      <div className="flex items-center gap-2 rounded-[14px] border border-white/[0.06] bg-[#18181B] px-4 py-3 text-sm text-[#A1A1AA]">
-        <ShieldCheck className="h-4 w-4 text-emerald-400" />
-        YouTube Analytics connected
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-[14px] border border-white/[0.06] bg-[#18181B] p-4">
-      <p className="text-sm text-[#FAFAFA]">YouTube Analytics</p>
-      <p className="mt-1 text-xs text-[#71717A]">
-        Grant analytics access to see real views, watch time, and subscriber
-        data for this channel.
-      </p>
-      <button
-        onClick={handleConnectAnalytics}
-        className="mt-3 flex h-10 items-center justify-center gap-2 rounded-[10px] bg-blue-500 px-4 text-sm font-semibold text-white transition-transform hover:scale-[1.01] active:scale-[0.98]"
-      >
-        Connect YouTube Analytics
->>>>>>> 5ba4604 (Recommendations: 8-factor VerityPulse scoring (Creator DNA/Audience/Search/Competition/Angles/Region/Momentum/Historical), real region display with exception badges, cross-channel exclusion preserved)
       </button>
     </div>
   );

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TwoFactorPrompt } from "@/components/auth/TwoFactorPrompt";
 import { MobileTopBar } from "@/components/layout/MobileTopBar";
@@ -12,7 +13,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <MobileTopBar />
         <DesktopTopBar />
         <main className="flex-1 overflow-y-auto">
-          <OnboardingGate>{children}</OnboardingGate>
+          <Suspense fallback={null}>
+            <OnboardingGate>{children}</OnboardingGate>
+          </Suspense>
         </main>
       </div>
       <TwoFactorPrompt />

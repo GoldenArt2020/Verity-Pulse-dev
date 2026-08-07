@@ -3,7 +3,7 @@
 import { Tv } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { ChannelInput } from "@/components/channel-intelligence/ChannelInput";
-import { AnalyticsConnectCard } from "@/components/channel-intelligence/AnalyticsConnectCard";
+import { AnalyticsConnectCard } from "@/components/case-intelligence/AnalyticsConnectCard";
 
 export default function ChannelIntelligencePage() {
   return (

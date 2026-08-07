@@ -6,9 +6,6 @@ import { useChannelId } from "@/hooks/useChannelId";
 import { ChannelOnboarding } from "@/components/discover/ChannelOnboarding";
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
-<<<<<<< ours
-  const { channels, loaded } = useChannelId();
-=======
   const { channels, loaded, saveChannel } = useChannelId();
   const router = useRouter();
   const pathname = usePathname();
@@ -28,7 +25,6 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
       });
     }
   }, [searchParams, saveChannel, router, pathname]);
->>>>>>> theirs
 
   if (!loaded) return null;
 
