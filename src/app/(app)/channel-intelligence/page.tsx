@@ -3,6 +3,7 @@
 import { Tv } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { ChannelInput } from "@/components/channel-intelligence/ChannelInput";
+import { AnalyticsConnectCard } from "@/components/channel-intelligence/AnalyticsConnectCard";
 
 export default function ChannelIntelligencePage() {
   return (
@@ -15,6 +16,7 @@ export default function ChannelIntelligencePage() {
 
       <div className="space-y-4 p-6">
         <ChannelInput />
+        <AnalyticsConnectCard />
         {/* rest of your existing Channel Intelligence components go here */}
       </div>
     </div>

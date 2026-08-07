@@ -1,8 +1,7 @@
-// src/components/discover/RecommendationsRowV2.tsx
 "use client";
 
 import { useState, useMemo } from "react";
-import { RefreshCw, Bookmark, ArrowRight, CheckCircle2, Tv, Star, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { RefreshCw, Bookmark, ArrowRight, Tv, Sparkles, TrendingUp, Zap, Globe2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRecommendations } from "@/hooks/useRecommendations";
 import { useCaseNavigation } from "@/hooks/useCaseNavigation";
@@ -28,6 +27,17 @@ const SECTION_META: Record<string, { label: string; description: string; icon: t
   },
 };
 
+const BREAKDOWN_LABELS: { key: string; label: string }[] = [
+  { key: "creatorDnaMatch", label: "Creator DNA Match" },
+  { key: "audienceInterest", label: "Audience Interest" },
+  { key: "searchOpportunity", label: "Search Opportunity" },
+  { key: "competition", label: "Competition" },
+  { key: "untappedAngles", label: "Untapped Angles" },
+  { key: "regionalMatch", label: "Regional Match" },
+  { key: "newsMomentum", label: "News Momentum" },
+  { key: "historicalPerformance", label: "Historical Performance" },
+];
+
 function RecommendationCard({
   r,
   isExpanded,
@@ -43,7 +53,11 @@ function RecommendationCard({
   isNavigating: boolean;
   navigatingTo: string | null;
 }) {
-  const matchScore = r.audienceMatch ?? 96;
+  const matchScore = r.audienceMatch ?? 0;
+  const displayRegion: string | null = r.displayRegion ?? null;
+  const isRegionException: boolean = r.isRegionException ?? false;
+  const breakdown = r.breakdown as Record<string, number> | undefined;
+  const whyRecommended: string[] = r.whyRecommended ?? (r.reason ? [r.reason] : []);
 
   return (
     <motion.div
@@ -53,11 +67,21 @@ function RecommendationCard({
     >
       <div className="flex flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
-          <div className="flex items-center gap-1">
-            {[...Array(5)].map((_, idx) => (
-              <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-            ))}
-          </div>
+          {displayRegion ? (
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs ${
+                isRegionException
+                  ? "border border-amber-500/30 bg-amber-500/10 text-amber-400"
+                  : "text-[#71717A]"
+              }`}
+            >
+              <Globe2 className="h-3 w-3" />
+              {displayRegion}
+              {isRegionException && <span className="font-medium">· Outside usual region</span>}
+            </div>
+          ) : (
+            <span />
+          )}
           <button className="text-[#71717A] hover:text-[#FAFAFA]" aria-label="Save">
             <Bookmark className="h-4 w-4" />
           </button>
@@ -67,39 +91,11 @@ function RecommendationCard({
           <h3 className="line-clamp-2 text-base font-bold text-[#FAFAFA] group-hover:text-blue-400 transition-colors">
             {r.title}
           </h3>
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-[#71717A]">
-            <span>{r.country || "United Kingdom"}</span>
-            {r.category && (
-              <>
-                <span>•</span>
-                <span className="truncate">{r.category}</span>
-              </>
-            )}
-          </div>
         </div>
 
         <div className="mt-4 flex items-baseline gap-1.5 border-t border-white/[0.06] pt-3">
           <span className="text-xl font-black text-emerald-400">{matchScore}</span>
-          <span className="text-xs font-medium text-[#71717A]">Match Score</span>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span className="truncate">Growing Search Demand</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span className="truncate">Low Competition</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span className="truncate">5 Untouched Angles</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-[#D4D4D8]">
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span className="truncate">High Audience Fit</span>
-          </div>
+          <span className="text-xs font-medium text-[#71717A]">Opportunity Score</span>
         </div>
 
         <AnimatePresence>
@@ -109,9 +105,24 @@ function RecommendationCard({
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
-              className="overflow-y-auto max-h-20 border-t border-white/[0.06] mt-3 pt-2 text-xs leading-relaxed text-[#A1A1AA]"
+              className="overflow-y-auto max-h-40 border-t border-white/[0.06] mt-3 pt-2 text-xs leading-relaxed text-[#A1A1AA]"
             >
-              {r.reason || "This case matches your channel's narrative profile. Viewer interest is rising while production saturation remains low."}
+              {breakdown ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {BREAKDOWN_LABELS.map(({ key, label }) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-[#71717A]">{label}</span>
+                      <span className="font-medium text-[#D4D4D8]">{breakdown[key] ?? "—"}%</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ul className="space-y-1">
+                  {whyRecommended.map((w, i) => (
+                    <li key={i}>· {w}</li>
+                  ))}
+                </ul>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

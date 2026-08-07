@@ -3,7 +3,7 @@ import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
-import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate } from "@/services/recommendationScoring";
+import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
@@ -13,6 +13,18 @@ export interface Recommendation {
   reason: string;
   trendStatus: TrendStatus;
   whyRecommended: string[];
+  displayRegion: string | null;
+  isRegionException: boolean;
+  breakdown: {
+    creatorDnaMatch: number;
+    audienceInterest: number;
+    searchOpportunity: number;
+    competition: number;
+    untappedAngles: number;
+    regionalMatch: number;
+    newsMomentum: number;
+    historicalPerformance: number;
+  };
 }
 
 interface TopicExtraction {
@@ -43,18 +55,20 @@ const CANDIDATE_SHAPE = `{
       "region": string or null (country the case occurred in, if determinable),
       "caseTypeTags": string[] (2-5 tags, e.g. "police-misconduct", "missing-person", "institutional-failure"),
       "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" | null (best-fit narrative lens for this case),
-      "audienceDnaMatch": number (0-100 — your honest judgment of how well this case fits the audience DNA profile provided, based on case-type and demographic preferences),
-      "storytellingMatch": number (0-100 — how well this case suits the creator's storytelling style described below),
+      "creatorDnaMatch": number (0-100 — how closely this case matches THIS channel's proven content style, subject matter, and tone, based on the profile below),
+      "audienceInterest": number (0-100 — predicted general audience engagement for this case, based on how it compares to similar well-performing true crime content),
+      "searchOpportunity": number (0-100 — current search/Google Trends/YouTube search demand for this case),
       "competitionScore": number (0-100 — higher = LESS existing YouTube coverage, more opportunity),
-      "trendPotential": number (0-100 — current or emerging public interest level)
+      "untappedAnglesScore": number (0-100 — how many genuinely fresh, unexplored storytelling angles this case likely has, based on what's typically covered for cases like this),
+      "newsMomentum": number (0-100 — whether this case is currently developing, breaking, or receiving renewed attention right now; 0 if it's a static/settled older case)
     }`;
 
 function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
   if (!dna?.audienceDNA) {
-    return "No Audience DNA profile available yet for this channel — score audienceDnaMatch conservatively at 50.";
+    return "No Creator DNA profile available yet for this channel — score creatorDnaMatch and audienceInterest conservatively at 50.";
   }
   const a = dna.audienceDNA;
-  return `AUDIENCE DNA PROFILE:
+  return `CREATOR DNA PROFILE:
 - Preferred case types (ranked): ${a.caseTypePreferences.join(", ") || "unknown"}
 - Victim demographic pattern: ethnicity=${a.victimDemographicPreferences.ethnicity ?? "no clear pattern"}, age range=${a.victimDemographicPreferences.ageRange ?? "no clear pattern"}
 - Narrative style: ${a.narrativeStyle}
@@ -126,7 +140,7 @@ ${searchContext}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 { "candidates": [${CANDIDATE_SHAPE}] }
 
-Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score audienceDnaMatch and storytellingMatch honestly against the profile above — do not give every candidate the same scores.${buildExclusionBlock(excludedTitles ?? new Set())}`;
+Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score every field honestly and distinctly — do not give every candidate the same scores.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
 function buildTrendPrompt(
@@ -150,7 +164,7 @@ ${searchContext}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 { "candidates": [${CANDIDATE_SHAPE}] }
 
-Only include real, distinct, currently real-world cases — do not invent anything. Score audienceDnaMatch and storytellingMatch honestly against the profile above, even for trending cases outside the creator's usual coverage.${buildExclusionBlock(excludedTitles ?? new Set())}`;
+Only include real, distinct, currently real-world cases — do not invent anything. Score creatorDnaMatch and audienceInterest honestly against the profile above, even for trending cases outside the creator's usual coverage.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
 function parseJSON<T>(raw: string): T {
@@ -160,6 +174,32 @@ function parseJSON<T>(raw: string): T {
     .replace(/```$/i, "")
     .trim();
   return JSON.parse(cleaned);
+}
+
+function toRecommendation(
+  candidate: ScoredCandidate,
+  breakdown: ScoreBreakdown,
+  trendStatus: TrendStatus
+): Recommendation {
+  return {
+    title: candidate.title,
+    audienceMatch: breakdown.finalScore,
+    reason: candidate.reason,
+    trendStatus,
+    whyRecommended: breakdown.whyRecommended,
+    displayRegion: breakdown.displayRegion,
+    isRegionException: breakdown.isRegionException,
+    breakdown: {
+      creatorDnaMatch: breakdown.creatorDnaMatch,
+      audienceInterest: breakdown.audienceInterest,
+      searchOpportunity: breakdown.searchOpportunity,
+      competition: breakdown.competition,
+      untappedAngles: breakdown.untappedAngles,
+      regionalMatch: breakdown.regionalMatch,
+      newsMomentum: breakdown.newsMomentum,
+      historicalPerformance: breakdown.historicalPerformance,
+    },
+  };
 }
 
 function scoreAndFilter(
@@ -179,20 +219,23 @@ function scoreAndFilter(
       reason: c.reason,
       trendStatus,
       whyRecommended: [c.reason],
+      displayRegion: c.region,
+      isRegionException: false,
+      breakdown: {
+        creatorDnaMatch: 50,
+        audienceInterest: 50,
+        searchOpportunity: 50,
+        competition: 50,
+        untappedAngles: 50,
+        regionalMatch: 50,
+        newsMomentum: 50,
+        historicalPerformance: 50,
+      },
     }));
   }
 
   return filtered
-    .map((c) => {
-      const breakdown = scoreCandidate(c, dna);
-      return {
-        title: c.title,
-        audienceMatch: breakdown.finalScore,
-        reason: c.reason,
-        trendStatus,
-        whyRecommended: breakdown.whyRecommended,
-      };
-    })
+    .map((c) => toRecommendation(c, scoreCandidate(c, dna), trendStatus))
     .filter((r) => r.audienceMatch >= RECOMMENDATION_THRESHOLD)
     .sort((a, b) => b.audienceMatch - a.audienceMatch);
 }
@@ -212,7 +255,7 @@ async function fetchPersonalizedRecommendations(
 
   const raw = await groqProvider.generateText(
     buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 1400 }
+    { temperature: 0.4, maxTokens: 1600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles);
@@ -237,7 +280,7 @@ async function fetchTrendRecommendations(
 
   const raw = await groqProvider.generateText(
     buildTrendPrompt(searchContext, label, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 1400 }
+    { temperature: 0.4, maxTokens: 1600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles);
@@ -247,8 +290,10 @@ async function fetchTrendRecommendations(
  * Computes personalized case recommendations based on the channel's
  * top-performing videos, PLUS two independent trend-signal batches not
  * gated by the channel's history. Every candidate is scored against the
- * channel's Creator DNA using the fixed weighted formula and filtered to
- * >= 80/100 before being shown.
+ * channel's Creator DNA using VerityPulse's 8-factor weighted formula
+ * (see recommendationScoring.ts) and filtered to >= 80/100 before being
+ * shown. Cross-channel exclusion prevents two different channels from
+ * both being told to cover the same case.
  *
  * Takes an injected Supabase client (rather than creating its own)
  * because this runs in two different contexts: a cookie/session-based

@@ -1,9 +1,7 @@
 // src/app/api/channel/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getOrBuildChannelDNA } from "@/services/creatorDNA";
-import { generateRecommendations } from "@/services/recommendations";
-import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { createClient } from "@/lib/supabase/server";
+import { connectChannel } from "@/services/connectChannel";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 
 const MAX_CHANNELS_PER_USER = 6;
@@ -21,6 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
+<<<<<<< HEAD
 
     const { count, error: countError } = await supabase
       .from("channels")
@@ -71,6 +70,10 @@ export async function POST(req: NextRequest) {
     const recommendations = await generateRecommendations(supabase, channelRow.id, videos, dna);
 
     return NextResponse.json({ dna, recommendations, channelRowId: channelRow.id });
+=======
+    const result = await connectChannel(supabase, channelSummary, userId);
+    return NextResponse.json(result);
+>>>>>>> 5ba4604 (Recommendations: 8-factor VerityPulse scoring (Creator DNA/Audience/Search/Competition/Angles/Region/Momentum/Historical), real region display with exception badges, cross-channel exclusion preserved)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to build Creator DNA";
     return NextResponse.json({ error: message }, { status: 500 });

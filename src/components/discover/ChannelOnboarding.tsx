@@ -18,15 +18,25 @@ const ANALYSIS_STEPS = [
 const CHANNEL_INPUT_HINT =
   "Paste your YouTube channel link (youtube.com/@yourhandle or youtube.com/channel/UC...), your @handle, or your channel ID.";
 
+<<<<<<< HEAD
+=======
+/**
+ * Reverted to manual-only channel connection. The user adds their
+ * channel themselves here; YouTube Analytics permission is a separate,
+ * later step on the Channel Intelligence page (see
+ * ConnectYouTubeAnalytics.tsx) rather than bundled into this flow.
+ */
+>>>>>>> 5ba4604 (Recommendations: 8-factor VerityPulse scoring (Creator DNA/Audience/Search/Competition/Angles/Region/Momentum/Historical), real region display with exception badges, cross-channel exclusion preserved)
 export function ChannelOnboarding({ onConnected }: { onConnected?: () => void }) {
   const { saveChannel } = useChannelId();
   const { user, isAuthenticated } = useAuthUser();
+
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
 
-  async function handleConnect() {
+  async function handleManualConnect() {
     if (!handle.trim()) return;
     if (!isAuthenticated || !user) {
       setError("You must be signed in to connect a channel.");
@@ -97,28 +107,28 @@ export function ChannelOnboarding({ onConnected }: { onConnected?: () => void })
               The more VerityPulse understands your content, the better it can recommend stories your audience is most likely to watch.
             </p>
 
-            <div className="mt-10 w-full">
+            <div className="mt-10 w-full text-left">
               <div className="relative" title={CHANNEL_INPUT_HINT}>
                 <AtSign className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#71717A]" />
                 <input
                   value={handle}
                   onChange={(e) => setHandle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                  onKeyDown={(e) => e.key === "Enter" && handleManualConnect()}
                   placeholder="Link your channel"
                   title={CHANNEL_INPUT_HINT}
                   className="h-14 w-full rounded-[18px] border border-white/[0.06] bg-[#18181B] pl-11 pr-5 text-[#FAFAFA] placeholder:text-[#71717A] transition-colors focus:border-blue-500/50 focus:outline-none"
                 />
               </div>
               <p className="mt-2 text-xs text-[#71717A]">
-                Paste your channel link, @handle, or channel ID.
+                Paste your channel link, @handle, or channel ID. You can grant YouTube Analytics access afterward from Channel Intelligence.
               </p>
 
               {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 
               <button
-                onClick={handleConnect}
+                onClick={handleManualConnect}
                 disabled={!handle.trim()}
-                className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-blue-500 font-semibold text-white transition-transform hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50"
+                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-blue-500 font-semibold text-white transition-transform hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
                 Connect Channel
