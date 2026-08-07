@@ -14,7 +14,7 @@ export function StepTabs() {
   const [active, setActive] = useState(0);
 
   return (
-    <div className="flex gap-6 border-b border-slate-800/60">
+    <div className="flex w-fit gap-5 border-b border-slate-800/60">
       {STEPS.map((s, i) => {
         const isActive = i === active;
         return (

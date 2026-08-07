@@ -192,7 +192,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       )}
 
       {!loading && !error && caseData && researched && (
-        <div className="p-6 space-y-4">
+        <div className="mx-auto max-w-[1600px] space-y-4 p-6">
           <AngleBuilderHeader caseData={caseData} onRegenerate={handleRegenerateClick} regenerating={anglesLoading} />
           <StepTabs />
 
