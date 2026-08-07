@@ -196,7 +196,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
           <AngleBuilderHeader caseData={caseData} onRegenerate={handleRegenerateClick} regenerating={anglesLoading} />
           <StepTabs />
 
-          <div className="grid grid-cols-[1fr_1fr_340px] gap-4">
+          <div className="grid grid-cols-[0.8fr_1.4fr_340px] gap-4">
             <GeneratedAnglesList
               angles={angles}
               loading={anglesLoading}
