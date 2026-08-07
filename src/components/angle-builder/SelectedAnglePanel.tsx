@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { Sparkles, FileText } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, FileText, Loader2, ExternalLink } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
 function totalScore(a: GeneratedAngle) {
@@ -11,10 +12,37 @@ function totalScore(a: GeneratedAngle) {
 export function SelectedAnglePanel({
   angle,
   onClear,
+  caseId,
+  onScriptGenerated,
 }: {
   angle: GeneratedAngle | null;
   onClear: () => void;
+  caseId: string;
+  onScriptGenerated: (angleId: string, script: string) => void;
 }) {
+  const [writing, setWriting] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
+
+  async function handleWriteScript() {
+    if (!angle) return;
+    setWriting(true);
+    setWriteError(null);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleId: angle.id, caseId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
+      onScriptGenerated(angle.id, data.script);
+    } catch (err) {
+      setWriteError(err instanceof Error ? err.message : "Failed to generate script");
+    } finally {
+      setWriting(false);
+    }
+  }
+
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
       <div className="flex items-center justify-between">
@@ -42,20 +70,45 @@ export function SelectedAnglePanel({
             <p className="flex-1 text-lg font-semibold text-white">{angle.title}</p>
           </div>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Core Question / Curiosity Driver</p>
+          {angle.caseWriteup && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Case Writeup</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.caseWriteup}</p>
+            </>
+          )}
+
+          <p className="mt-4 text-xs font-medium text-slate-400">Core Question</p>
           <p className="mt-1 text-sm italic leading-relaxed text-slate-300">{angle.coreQuestion}</p>
 
           <p className="mt-4 text-xs font-medium text-slate-400">Opening Hook</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-300">&quot;{angle.openingHook}&quot;</p>
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Case Narration Fit</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.whyItWorks}</p>
+          {angle.channelFit && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Why This Fits Your Channel</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.channelFit}</p>
+            </>
+          )}
 
-          <p className="mt-4 text-xs font-medium text-slate-400">Channel Fit</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-300">
-            Score {totalScore(angle)}/50 — strongest on{" "}
-            {Object.entries(angle.scores).sort((a, b) => b[1] - a[1])[0][0].replace(/([A-Z])/g, " $1").toLowerCase()}.
-          </p>
+          {angle.whyWorkOnIt && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Why Work On This Now</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.whyWorkOnIt}</p>
+            </>
+          )}
+
+          {angle.curiosityGaps.length > 0 && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Curiosity Gaps</p>
+              <ul className="mt-1.5 space-y-1">
+                {angle.curiosityGaps.map((g) => (
+                  <li key={g} className="flex items-start gap-1.5 text-[13px] text-slate-300">
+                    <span className="mt-0.5 text-amber-400">?</span> {g}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
           <ul className="mt-1.5 space-y-1">
@@ -66,16 +119,45 @@ export function SelectedAnglePanel({
             ))}
           </ul>
 
-          {angle.script && (
-            <div className="mt-5 rounded-xl border border-emerald-900/40 bg-emerald-950/20 p-3">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-                <FileText className="h-3.5 w-3.5" /> Script generated
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {angle.scriptGeneratedAt ? new Date(angle.scriptGeneratedAt).toLocaleString() : ""}
-              </p>
-            </div>
+          {angle.latestFindings.length > 0 && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Latest Findings</p>
+              <ul className="mt-1.5 space-y-2">
+                {angle.latestFindings.map((f) => (
+                  <li key={f.url} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2">
+                    
+                      href={f.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-[12px] font-medium text-blue-400 hover:text-blue-300"
+                    >
+                      {f.title} <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{f.snippet}</p>
+                    {f.publishedDate && <p className="mt-0.5 text-[10px] text-slate-600">{f.publishedDate}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
+
+          <div className="mt-5">
+            {writeError && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
+            {angle.script ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400">
+                <FileText className="h-3.5 w-3.5" /> Script ready
+              </span>
+            ) : (
+              <button
+                onClick={handleWriteScript}
+                disabled={writing}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
+              >
+                {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {writing ? "Writing..." : "Write Script"}
+              </button>
+            )}
+          </div>
         </>
       )}
     </div>

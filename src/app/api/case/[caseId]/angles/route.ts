@@ -7,10 +7,11 @@ export async function GET(
 ) {
   const { caseId } = await params;
   const supabase = await createClient();
-
   const { data, error } = await supabase
     .from("angles")
-    .select("id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at")
+    .select(
+      "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
+    )
     .eq("case_id", caseId)
     .eq("status", "active")
     .order("created_at", { ascending: true });
@@ -29,6 +30,12 @@ export async function GET(
     scores: row.scores,
     script: row.script,
     scriptGeneratedAt: row.script_generated_at,
+    caseWriteup: row.case_writeup ?? "",
+    channelFit: row.channel_fit ?? "",
+    whyWorkOnIt: row.why_work_on_it ?? "",
+    curiosityGaps: row.curiosity_gaps ?? [],
+    latestFindings: row.latest_findings ?? [],
+    titleIdeas: row.title_ideas ?? [],
   }));
 
   return NextResponse.json({ angles });

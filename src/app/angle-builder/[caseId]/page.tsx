@@ -21,6 +21,13 @@ export interface AngleScores {
   audienceMatch: number;
 }
 
+export interface FindingItem {
+  title: string;
+  snippet: string;
+  url: string;
+  publishedDate?: string;
+}
+
 export interface GeneratedAngle {
   id: string;
   title: string;
@@ -31,6 +38,12 @@ export interface GeneratedAngle {
   scores: AngleScores;
   script: string | null;
   scriptGeneratedAt: string | null;
+  caseWriteup: string;
+  channelFit: string;
+  whyWorkOnIt: string;
+  curiosityGaps: string[];
+  latestFindings: FindingItem[];
+  titleIdeas: string[];
 }
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {
@@ -106,9 +119,6 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
     handleGenerateAngles();
   }
 
-  // Load already-saved angles first — only auto-generate if this case truly
-  // has none yet. Auto-regenerating on every visit would now archive a
-  // perfectly good batch (and any scripts) each time someone opens the page.
   useEffect(() => {
     if (!researched || !caseData || anglesTriggeredRef.current) return;
     anglesTriggeredRef.current = true;
@@ -130,10 +140,10 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       });
   }, [researched, caseData]);
 
-  function handleScriptGenerated(originalIndex: number, script: string) {
+  function handleScriptGenerated(angleId: string, script: string) {
     setAngles((prev) =>
-      prev.map((a, i) =>
-        i === originalIndex ? { ...a, script, scriptGeneratedAt: new Date().toISOString() } : a
+      prev.map((a) =>
+        a.id === angleId ? { ...a, script, scriptGeneratedAt: new Date().toISOString() } : a
       )
     );
   }
@@ -194,10 +204,13 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onRegenerate={handleRegenerateClick}
+            />
+            <SelectedAnglePanel
+              angle={selectedAngle}
+              onClear={() => setSelectedIndex(null)}
               caseId={caseData.id}
               onScriptGenerated={handleScriptGenerated}
             />
-            <SelectedAnglePanel angle={selectedAngle} onClear={() => setSelectedIndex(null)} />
             <div className="space-y-4">
               <AudienceProfileMatch angle={selectedAngle} />
               <AngleScoreBreakdown angle={selectedAngle} />

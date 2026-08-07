@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
+import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
+import type { ChannelDNA } from "@/services/creatorDNA";
+import type { YouTubeVideoDetail } from "@/providers/youtube/types";
+import type { SearchResult } from "@/providers/search/types";
 
 export interface AngleScores {
   searchDemand: number;
@@ -9,6 +13,13 @@ export interface AngleScores {
   emotionalImpact: number;
   originality: number;
   audienceMatch: number;
+}
+
+export interface FindingItem {
+  title: string;
+  snippet: string;
+  url: string;
+  publishedDate?: string;
 }
 
 export interface GeneratedAngle {
@@ -21,6 +32,12 @@ export interface GeneratedAngle {
   scores: AngleScores;
   script: string | null;
   scriptGeneratedAt: string | null;
+  channelFit: string;
+  whyWorkOnIt: string;
+  curiosityGaps: string[];
+  caseWriteup: string;
+  latestFindings: FindingItem[];
+  titleIdeas: string[];
 }
 
 interface RawAngle {
@@ -30,50 +47,88 @@ interface RawAngle {
   researchFocus: string[];
   openingHook: string;
   scores: AngleScores;
+  channelFit: string;
+  whyWorkOnIt: string;
+  curiosityGaps: string[];
 }
 
-function buildPrompt(caseName: string, summary: string, youtubeTitles: string[]): string {
+interface ParsedResponse {
+  angles: RawAngle[];
+  caseWriteup: string;
+  titleIdeas: string[];
+}
+
+function buildPrompt(
+  caseName: string,
+  summary: string,
+  youtubeVideos: YouTubeVideoDetail[],
+  findings: SearchResult[],
+  channelDNA: ChannelDNA | null
+): string {
+  const topPerformers = [...youtubeVideos]
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, 10);
+
   const coverageBlock =
-    youtubeTitles.length > 0
-      ? `EXISTING YOUTUBE COVERAGE (titles already published on this case):\n${youtubeTitles
-          .map((t, i) => `${i + 1}. ${t}`)
+    topPerformers.length > 0
+      ? `EXISTING YOUTUBE COVERAGE (top performing titles on this case, by views â€” study these for what title FORMULAS work: structure, curiosity gaps, use of numbers/colons/questions, emotional hooks):\n${topPerformers
+          .map((v, i) => `${i + 1}. "${v.title}" â€” ${v.viewCount.toLocaleString()} views`)
           .join("\n")}`
       : `No existing YouTube coverage data is available for this case.`;
 
-  return `You are an investigative documentary producer for a true crime YouTube channel. For the case "${caseName}", generate narrative angles that avoid the generic "here's what happened" structure most true crime videos use.
+  const findingsBlock =
+    findings.length > 0
+      ? `LATEST DEVELOPMENTS (recent web search results â€” use these for real, current case status; do not invent anything beyond what's here):\n${findings
+          .slice(0, 6)
+          .map((f, i) => `${i + 1}. ${f.title} (${f.publishedDate ?? "undated"}): ${f.snippet.slice(0, 220)}`)
+          .join("\n")}`
+      : `No recent web coverage found beyond the case summary.`;
 
-Each angle must be built around a CENTRAL QUESTION the documentary answers, not a chronological recap. Angles should surface a perspective existing coverage ignores or barely touches.
+  const channelBlock = channelDNA
+    ? `CHANNEL DNA (this creator's established style/tone/audience â€” use to judge genuine channel fit):\n${JSON.stringify(channelDNA).slice(0, 1500)}`
+    : `No channel DNA available â€” score channel fit generically for a true crime documentary audience.`;
+
+  return `You are an investigative documentary producer and YouTube growth strategist for a true crime channel. For the case "${caseName}", produce a full production brief.
 
 CASE SUMMARY:
 ${summary}
 
+${findingsBlock}
+
 ${coverageBlock}
+
+${channelBlock}
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
+  "caseWriteup": string (3-4 sentence narrative writeup of the case grounded strictly in the summary and latest developments above â€” written like a producer's brief, not a Wikipedia recap),
+  "titleIdeas": string[] (8-10 REAL, publishable YouTube titles for this case, each built using a proven formula observed in the top-performing coverage titles above â€” vary the formulas used: question hooks, numbered/countdown structure, "The Truth About X", colon-split dramatic statements, name+shocking detail. Do not just restate angle titles â€” these are click-optimized titles a creator could upload today),
   "angles": [
     {
-      "title": string (a compelling angle title, e.g. "The Fire Was Never the Crime; It Was the Cover-Up"),
-      "coreQuestion": string (the single question this angle answers, e.g. "Why was the house set on fire, and how did that decision work against the killer?"),
-      "whyItWorks": string (2 concise sentences: why this is underexplored in existing coverage, and why it creates a fresh entry point into the case),
-      "researchFocus": string[] (4-5 specific, concrete research directions — facts, records, or evidence types to investigate for this angle, grounded in the case summary, not generic),
-      "openingHook": string (one sentence a narrator would use to open the episode on this angle, phrased as a question or a striking statement),
+      "title": string (a compelling angle title),
+      "coreQuestion": string (the single question this angle answers),
+      "whyItWorks": string (2 concise sentences: why this is underexplored, why it's a fresh entry point),
+      "researchFocus": string[] (4-5 specific research directions grounded in the case summary),
+      "openingHook": string (one narrator sentence to open the episode),
+      "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above â€” be concrete, not generic),
+      "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now â€” freshness, timeliness given latest developments, competitive gap),
+      "curiosityGaps": string[] (3-4 specific unresolved questions or missing pieces of information that would pull a viewer to watch to the end),
       "scores": {
-        "searchDemand": number (0-25, how likely this specific angle is to match rising search interest, reasoned from how distinctive/newsworthy this specific question is),
-        "competition": number (0-20, higher = LESS saturated on YouTube for this angle — base this on the existing coverage list; if no coverage data exists, score conservatively at 10),
-        "emotionalImpact": number (0-25, how emotionally resonant this specific angle is, grounded in the actual case facts),
-        "originality": number (0-15, how distinct this angle is from the other angles generated and from existing coverage),
-        "audienceMatch": number (0-15, general true-crime audience appeal for this specific angle; score at 8 if uncertain)
+        "searchDemand": number (0-25),
+        "competition": number (0-20, higher = LESS saturated),
+        "emotionalImpact": number (0-25),
+        "originality": number (0-15),
+        "audienceMatch": number (0-15)
       }
     }
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise — this response must stay compact enough to complete in full. Do not repeat the same core question in different words. Score each angle honestly and distinctly — do not give every angle the same scores. Order angles by total score (sum of all 5 score fields) descending. Ground every angle strictly in the case summary provided — do not invent facts not implied by it. Return ONLY the JSON object.`;
+Generate between 6 and 8 angles. Keep every field concise â€” this response must complete in full within token limits. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary and findings provided â€” never invent facts. Return ONLY the JSON object.`;
 }
 
-function tryParseJson(text: string): { angles?: RawAngle[] } | null {
+function tryParseJson(text: string): Partial<ParsedResponse> | null {
   try {
     return JSON.parse(text);
   } catch {
@@ -81,15 +136,48 @@ function tryParseJson(text: string): { angles?: RawAngle[] } | null {
   }
 }
 
+function extractStringField(text: string, key: string): string {
+  const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+  const m = text.match(re);
+  if (!m) return "";
+  try {
+    return JSON.parse(`"${m[1]}"`);
+  } catch {
+    return m[1];
+  }
+}
+
+function extractStringArrayField(text: string, key: string): string[] {
+  const keyIdx = text.indexOf(`"${key}"`);
+  if (keyIdx === -1) return [];
+  const bracketStart = text.indexOf("[", keyIdx);
+  if (bracketStart === -1) return [];
+  let depth = 0;
+  for (let i = bracketStart; i < text.length; i++) {
+    if (text[i] === "[") depth++;
+    else if (text[i] === "]") {
+      depth--;
+      if (depth === 0) {
+        const candidate = text.slice(bracketStart, i + 1);
+        const parsed = tryParseJson(`{"v":${candidate}}`) as { v?: unknown } | null;
+        if (parsed && Array.isArray(parsed.v)) return parsed.v as string[];
+        break;
+      }
+    }
+  }
+  return [];
+}
+
 /**
  * Groq responses occasionally get cut off mid-object when the batch runs
- * long (hitting the token limit). Rather than fail the whole request, walk
- * the "angles" array brace-by-brace and keep every angle object that
- * finished generating before the cutoff, discarding only the incomplete
- * tail.
+ * long. Walk the "angles" array brace-by-brace (locating it by key, not by
+ * first "[" in the text, since titleIdeas is also an array) and keep every
+ * angle object that finished generating before the cutoff.
  */
 function salvageTruncatedAngles(cleaned: string): RawAngle[] {
-  const arrayStart = cleaned.indexOf("[");
+  const anglesKeyIdx = cleaned.indexOf('"angles"');
+  const searchFrom = anglesKeyIdx === -1 ? 0 : anglesKeyIdx;
+  const arrayStart = cleaned.indexOf("[", searchFrom);
   if (arrayStart === -1) return [];
 
   const salvaged: RawAngle[] = [];
@@ -110,8 +198,6 @@ function salvageTruncatedAngles(cleaned: string): RawAngle[] {
           salvaged.push(parsed as unknown as RawAngle);
           objStart = -1;
         } else {
-          // First malformed object hit — everything after this is also
-          // unreliable, stop here rather than risk garbage entries.
           break;
         }
       }
@@ -120,12 +206,10 @@ function salvageTruncatedAngles(cleaned: string): RawAngle[] {
   return salvaged;
 }
 
-function parseAngles(raw: string): RawAngle[] {
+function parseResponse(raw: string): ParsedResponse {
   const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
-  if (firstBrace === -1) {
-    throw new Error("empty_response");
-  }
+  if (firstBrace === -1) throw new Error("empty_response");
   const fromFirstBrace = cleaned.slice(firstBrace);
 
   const lastBrace = fromFirstBrace.lastIndexOf("}");
@@ -133,13 +217,21 @@ function parseAngles(raw: string): RawAngle[] {
     const wholeCandidate = fromFirstBrace.slice(0, lastBrace + 1);
     const parsed = tryParseJson(wholeCandidate);
     if (parsed?.angles?.length) {
-      return parsed.angles;
+      return {
+        angles: parsed.angles,
+        caseWriteup: parsed.caseWriteup ?? "",
+        titleIdeas: parsed.titleIdeas ?? [],
+      };
     }
   }
 
-  const salvaged = salvageTruncatedAngles(fromFirstBrace);
-  if (salvaged.length > 0) {
-    return salvaged;
+  const salvagedAngles = salvageTruncatedAngles(fromFirstBrace);
+  if (salvagedAngles.length > 0) {
+    return {
+      angles: salvagedAngles,
+      caseWriteup: extractStringField(fromFirstBrace, "caseWriteup"),
+      titleIdeas: extractStringArrayField(fromFirstBrace, "titleIdeas"),
+    };
   }
 
   throw new Error("unparseable_response");
@@ -148,13 +240,15 @@ function parseAngles(raw: string): RawAngle[] {
 async function generateAngleBatch(
   caseName: string,
   summary: string,
-  youtubeTitles: string[]
-): Promise<RawAngle[]> {
-  const raw = await groqProvider.generateText(buildPrompt(caseName, summary, youtubeTitles), {
-    temperature: 0.7,
-    maxTokens: 4500,
-  });
-  return parseAngles(raw);
+  youtubeVideos: YouTubeVideoDetail[],
+  findings: SearchResult[],
+  channelDNA: ChannelDNA | null
+): Promise<ParsedResponse> {
+  const raw = await groqProvider.generateText(
+    buildPrompt(caseName, summary, youtubeVideos, findings, channelDNA),
+    { temperature: 0.7, maxTokens: 5500 }
+  );
+  return parseResponse(raw);
 }
 
 export async function POST(req: NextRequest) {
@@ -182,42 +276,71 @@ export async function POST(req: NextRequest) {
 
   if (!caseRow.summary) {
     return NextResponse.json(
-      { error: "This case hasn't been researched yet — no summary available to build an angle from" },
+      { error: "This case hasn't been researched yet â€” no summary available to build an angle from" },
       { status: 400 }
     );
   }
 
-  const youtubeTitles = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
+  const youtubeVideos = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
 
-  let rawAngles: RawAngle[];
+  const findings = tavilyProvider.isConfigured()
+    ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 8).catch(() => [])
+    : [];
+
+  let channelDNA: ChannelDNA | null = null;
   try {
-    rawAngles = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeTitles);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: activeRow } = await supabase
+        .from("active_channel")
+        .select("channel_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (activeRow?.channel_id) {
+        const { data: channelRow } = await supabase
+          .from("channels")
+          .select("channel_dna")
+          .eq("id", activeRow.channel_id)
+          .maybeSingle();
+        channelDNA = (channelRow?.channel_dna as unknown as ChannelDNA) ?? null;
+      }
+    }
+  } catch {
+    channelDNA = null;
+  }
+
+  let parsed: ParsedResponse;
+  try {
+    parsed = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeVideos, findings, channelDNA);
   } catch (firstErr) {
-    // One automatic retry — a fresh generation attempt usually succeeds
-    // even when the first one got cut off or came back malformed, since
-    // Groq's output length varies call to call.
     try {
-      rawAngles = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeTitles);
+      parsed = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeVideos, findings, channelDNA);
     } catch (secondErr) {
       console.error("generate-angle: both attempts failed", firstErr, secondErr);
       return NextResponse.json(
         {
           error:
-            "We couldn't generate angles for this case just now — the response came back incomplete. Please try again.",
+            "We couldn't generate angles for this case just now â€” the response came back incomplete. Please try again.",
         },
         { status: 502 }
       );
     }
   }
 
-  if (rawAngles.length === 0) {
+  if (parsed.angles.length === 0) {
     return NextResponse.json({ error: "No angles were generated. Please try again." }, { status: 500 });
   }
 
+  const latestFindings: FindingItem[] = findings.slice(0, 6).map((f) => ({
+    title: f.title,
+    snippet: f.snippet,
+    url: f.url,
+    publishedDate: f.publishedDate,
+  }));
+
   try {
-    // Archive the previous active batch rather than deleting — archived
-    // angles (and any scripts already written against them) stay saved
-    // under the case's project, they just stop showing as "current."
     const { error: archiveError } = await supabase
       .from("angles")
       .update({ status: "archived" })
@@ -231,7 +354,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rowsToInsert = rawAngles.map((a) => ({
+    const rowsToInsert = parsed.angles.map((a) => ({
       case_id: caseId,
       title: a.title,
       core_question: a.coreQuestion,
@@ -240,12 +363,20 @@ export async function POST(req: NextRequest) {
       opening_hook: a.openingHook,
       scores: a.scores,
       status: "active",
+      case_writeup: parsed.caseWriteup,
+      channel_fit: a.channelFit,
+      why_work_on_it: a.whyWorkOnIt,
+      curiosity_gaps: a.curiosityGaps,
+      latest_findings: latestFindings,
+      title_ideas: parsed.titleIdeas,
     }));
 
     const { data: inserted, error: insertError } = await supabase
       .from("angles")
       .insert(rowsToInsert)
-      .select("id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at");
+      .select(
+        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
+      );
 
     if (insertError || !inserted) {
       return NextResponse.json(
@@ -264,6 +395,12 @@ export async function POST(req: NextRequest) {
       scores: row.scores,
       script: row.script,
       scriptGeneratedAt: row.script_generated_at,
+      caseWriteup: row.case_writeup ?? "",
+      channelFit: row.channel_fit ?? "",
+      whyWorkOnIt: row.why_work_on_it ?? "",
+      curiosityGaps: row.curiosity_gaps ?? [],
+      latestFindings: row.latest_findings ?? [],
+      titleIdeas: row.title_ideas ?? [],
     }));
 
     return NextResponse.json({ angles });
