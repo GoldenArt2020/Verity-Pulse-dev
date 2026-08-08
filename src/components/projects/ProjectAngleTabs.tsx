@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Sparkles, FileText, Copy, Check, RotateCcw } from "lucide-react";
+import { Loader2, Sparkles, FileText, Check } from "lucide-react";
+import { StepTabs } from "@/components/angle-builder/StepTabs";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
+import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 interface AngleScores {
@@ -23,6 +25,7 @@ interface ProjectAngle {
   scores: AngleScores;
   script: string | null;
   scriptGeneratedAt: string | null;
+  scriptWordCount?: number | null;
 }
 
 interface ScriptSeoSummary {
@@ -36,8 +39,6 @@ function totalScore(a: ProjectAngle) {
 }
 
 export function ProjectAngleTabs({ caseId }: { caseId: string }) {
-  // Reads ?angle=<id> from the URL without needing a Suspense boundary
-  // (useSearchParams would require one; this component isn't wrapped in one).
   const [requestedAngleId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("angle");
@@ -50,8 +51,16 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [writingId, setWritingId] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [seoByAngle, setSeoByAngle] = useState<Record<string, ScriptSeoSummary>>({});
+
+  // Which step of the workflow is highlighted. Jumps to "Analyze & Refine"
+  // automatically the moment a script finishes generating.
+  const [step, setStep] = useState(0);
+
+  // The script that just finished (or was reopened) — drives the preview modal.
+  const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
+    null
+  );
 
   useEffect(() => {
     let active = true;
@@ -67,6 +76,8 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
               ? requestedAngleId
               : loaded[0]?.id ?? null;
           setActiveId(preferred);
+          const preferredAngle = loaded.find((a) => a.id === preferred);
+          if (preferredAngle?.script) setStep(1);
         }
       })
       .catch((err) => {
@@ -92,18 +103,26 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       const res = await fetch("/api/case/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ angleId: activeAngle.id, caseId, wordCount }),
+        body: JSON.stringify({ angleId: activeAngle.id, caseId, wordCount, seo: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to write script");
+
+      const finalWordCount = data.wordCount ?? wordCount;
       setAngles((prev) =>
         prev.map((a) =>
-          a.id === activeAngle.id ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString() } : a
+          a.id === activeAngle.id
+            ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
+            : a
         )
       );
       if (data.seo) {
         setSeoByAngle((prev) => ({ ...prev, [activeAngle.id]: data.seo }));
       }
+      // Script is ready to review — open it, then move the workflow into
+      // Analyze & Refine.
+      setPreview({ script: data.script, wordCount: finalWordCount, seo: data.seo ?? null });
+      setStep(1);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to write script");
     } finally {
@@ -111,10 +130,10 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
     }
   }
 
-  async function handleCopy(script: string) {
-    await navigator.clipboard.writeText(script);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  function handleReopenScript(angle: ProjectAngle) {
+    if (!angle.script) return;
+    const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
+    setPreview({ script: angle.script, wordCount, seo: seoByAngle[angle.id] ?? null });
   }
 
   if (loading) {
@@ -140,12 +159,11 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
     );
   }
 
-  const activeSeo = activeAngle ? seoByAngle[activeAngle.id] : undefined;
-
   return (
     <div className="mt-10">
-      <p className="text-xs text-slate-500">Angles</p>
+      <StepTabs active={step} onChange={setStep} />
 
+      <p className="mt-4 text-xs text-slate-500">Angles</p>
       <div className="mt-2 flex flex-wrap gap-2 border-b border-slate-800/60 pb-3">
         {angles.map((a) => (
           <button
@@ -203,56 +221,29 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
             {writeError && <p className="mt-2 text-xs text-rose-400">{writeError}</p>}
 
             {activeAngle.script && writingId !== activeAngle.id && (
-              <div className="mt-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-400">
-                    Script
-                    {activeAngle.scriptGeneratedAt && (
-                      <span className="ml-2 text-slate-600">
-                        Generated {new Date(activeAngle.scriptGeneratedAt).toLocaleDateString()}
-                      </span>
-                    )}
-                  </p>
-                  <button
-                    onClick={() => handleCopy(activeAngle.script!)}
-                    className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                </div>
-                <div className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm leading-relaxed text-slate-300">
-                  {activeAngle.script}
-                </div>
-
-                {activeSeo && (
-                  <div className="mt-3 rounded-xl border border-slate-800/60 bg-slate-900/40 p-3">
-                    <p className="text-[11px] font-medium text-slate-400">SEO Snapshot (for your video upload)</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {activeSeo.keywords.map((k) => (
-                        <span key={k} className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
-                          {k}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{activeSeo.description}</p>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setDialogOpen(true)}
-                  className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-200"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Rewrite script
-                </button>
-              </div>
+              <button
+                onClick={() => handleReopenScript(activeAngle)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-950/40"
+              >
+                <FileText className="h-3.5 w-3.5" /> Script ready — view
+              </button>
             )}
           </div>
         </div>
       )}
 
-      <ScriptLengthDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onSelect={handleWriteScript} />
+      <ScriptLengthDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onSelect={handleWriteScript} busy={!!writingId} />
+
+      {preview && (
+        <ScriptPreviewModal
+          script={preview.script}
+          wordCount={preview.wordCount}
+          seo={preview.seo}
+          primaryLabel="Close & keep editing here"
+          onPrimaryAction={() => setPreview(null)}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }

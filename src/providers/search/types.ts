@@ -6,8 +6,14 @@ export interface SearchResult {
   source?: string;
 }
 
+export type SearchTopic = "general" | "news";
+
+export interface SearchOptions {
+  topic?: SearchTopic;
+}
+
 export interface SearchProvider {
   name: string;
   isConfigured(): boolean;
-  search(query: string, maxResults?: number): Promise<SearchResult[]>;
+  search(query: string, maxResults?: number, options?: SearchOptions): Promise<SearchResult[]>;
 }

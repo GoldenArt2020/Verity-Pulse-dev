@@ -166,6 +166,19 @@ export function SelectedAnglePanel({
             </>
           )}
 
+          {(angle.mouthWateringSurprises?.length ?? 0) > 0 && (
+            <>
+              <p className="mt-4 text-xs font-medium text-slate-400">Mouth-Watering Surprises</p>
+              <ul className="mt-1.5 space-y-1">
+                {angle.mouthWateringSurprises.map((s) => (
+                  <li key={s} className="flex items-start gap-1.5 text-[13px] text-slate-300">
+                    <span className="mt-0.5 text-pink-400">★</span> {s}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
           <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
           <ul className="mt-1.5 space-y-1">
             {(angle.researchFocus ?? []).map((r) => (
@@ -177,7 +190,7 @@ export function SelectedAnglePanel({
 
           {(angle.latestFindings?.length ?? 0) > 0 && (
             <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Latest Findings</p>
+              <p className="mt-4 text-xs font-medium text-slate-400">Latest News Coverage</p>
               <ul className="mt-1.5 space-y-2">
                 {angle.latestFindings.map((f) => (
                   <li key={f.url} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2">

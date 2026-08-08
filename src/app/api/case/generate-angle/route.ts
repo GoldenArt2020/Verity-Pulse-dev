@@ -35,6 +35,7 @@ export interface GeneratedAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
+  mouthWateringSurprises: string[];
   caseWriteup: string;
   latestFindings: FindingItem[];
   titleIdeas: string[];
@@ -50,6 +51,7 @@ interface RawAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
+  mouthWateringSurprises: string[];
 }
 
 interface ParsedResponse {
@@ -71,22 +73,22 @@ function buildPrompt(
 
   const coverageBlock =
     topPerformers.length > 0
-      ? `EXISTING YOUTUBE COVERAGE (top performing titles on this case, by views â€” study these for what title FORMULAS work: structure, curiosity gaps, use of numbers/colons/questions, emotional hooks):\n${topPerformers
-          .map((v, i) => `${i + 1}. "${v.title}" â€” ${v.viewCount.toLocaleString()} views`)
+      ? `EXISTING YOUTUBE COVERAGE (top performing titles on this case, by views — study these for what title FORMULAS work: structure, curiosity gaps, use of numbers/colons/questions, emotional hooks):\n${topPerformers
+          .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount.toLocaleString()} views`)
           .join("\n")}`
       : `No existing YouTube coverage data is available for this case.`;
 
   const findingsBlock =
     findings.length > 0
-      ? `LATEST DEVELOPMENTS (recent web search results â€” use these for real, current case status; do not invent anything beyond what's here):\n${findings
+      ? `LATEST NEWS COVERAGE (recent news search results — use these for real, current case status; do not invent anything beyond what's here):\n${findings
           .slice(0, 6)
           .map((f, i) => `${i + 1}. ${f.title} (${f.publishedDate ?? "undated"}): ${f.snippet.slice(0, 220)}`)
           .join("\n")}`
-      : `No recent web coverage found beyond the case summary.`;
+      : `No recent news coverage found beyond the case summary.`;
 
   const channelBlock = channelDNA
-    ? `CHANNEL DNA (this creator's established style/tone/audience â€” use to judge genuine channel fit):\n${JSON.stringify(channelDNA).slice(0, 1500)}`
-    : `No channel DNA available â€” score channel fit generically for a true crime documentary audience.`;
+    ? `CHANNEL DNA (this creator's established style/tone/audience — use to judge genuine channel fit):\n${JSON.stringify(channelDNA).slice(0, 1500)}`
+    : `No channel DNA available — score channel fit generically for a true crime documentary audience.`;
 
   return `You are an investigative documentary producer and YouTube growth strategist for a true crime channel. For the case "${caseName}", produce a full production brief.
 
@@ -102,8 +104,8 @@ ${channelBlock}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
-  "caseWriteup": string (3-4 sentence narrative writeup of the case grounded strictly in the summary and latest developments above â€” written like a producer's brief, not a Wikipedia recap),
-  "titleIdeas": string[] (8-10 REAL, publishable YouTube titles for this case, each built using a proven formula observed in the top-performing coverage titles above â€” vary the formulas used: question hooks, numbered/countdown structure, "The Truth About X", colon-split dramatic statements, name+shocking detail. Do not just restate angle titles â€” these are click-optimized titles a creator could upload today),
+  "caseWriteup": string (3-4 sentence narrative writeup of the case grounded strictly in the summary and latest developments above — written like a producer's brief, not a Wikipedia recap),
+  "titleIdeas": string[] (8-10 REAL, publishable YouTube titles for this case, each built using a proven formula observed in the top-performing coverage titles above — vary the formulas used: question hooks, numbered/countdown structure, "The Truth About X", colon-split dramatic statements, name+shocking detail. Do not just restate angle titles — these are click-optimized titles a creator could upload today),
   "angles": [
     {
       "title": string (a compelling angle title),
@@ -111,9 +113,10 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
       "whyItWorks": string (2 concise sentences: why this is underexplored, why it's a fresh entry point),
       "researchFocus": string[] (4-5 specific research directions grounded in the case summary),
       "openingHook": string (one narrator sentence to open the episode),
-      "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above â€” be concrete, not generic),
-      "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now â€” freshness, timeliness given latest developments, competitive gap),
+      "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above — be concrete, not generic),
+      "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap),
       "curiosityGaps": string[] (3-4 specific unresolved questions or missing pieces of information that would pull a viewer to watch to the end),
+      "mouthWateringSurprises": string[] (2-3 genuinely surprising, hard-to-believe true facts from this case that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
       "scores": {
         "searchDemand": number (0-25),
         "competition": number (0-20, higher = LESS saturated),
@@ -125,7 +128,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise â€” this response must complete in full within token limits. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary and findings provided â€” never invent facts. Return ONLY the JSON object.`;
+Generate between 6 and 8 angles. Keep every field concise — this response must complete in full within token limits. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary and findings provided — never invent facts. Return ONLY the JSON object.`;
 }
 
 function tryParseJson(text: string): Partial<ParsedResponse> | null {
@@ -276,7 +279,7 @@ export async function POST(req: NextRequest) {
 
   if (!caseRow.summary) {
     return NextResponse.json(
-      { error: "This case hasn't been researched yet â€” no summary available to build an angle from" },
+      { error: "This case hasn't been researched yet — no summary available to build an angle from" },
       { status: 400 }
     );
   }
@@ -284,7 +287,9 @@ export async function POST(req: NextRequest) {
   const youtubeVideos = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
 
   const findings = tavilyProvider.isConfigured()
-    ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 8).catch(() => [])
+    ? await tavilyProvider
+        .search(`${caseRow.name} news article latest update trial`, 8, { topic: "news" })
+        .catch(() => [])
     : [];
 
   let channelDNA: ChannelDNA | null = null;
@@ -322,7 +327,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "We couldn't generate angles for this case just now â€” the response came back incomplete. Please try again.",
+            "We couldn't generate angles for this case just now — the response came back incomplete. Please try again.",
         },
         { status: 502 }
       );
@@ -367,6 +372,7 @@ export async function POST(req: NextRequest) {
       channel_fit: a.channelFit,
       why_work_on_it: a.whyWorkOnIt,
       curiosity_gaps: a.curiosityGaps,
+      mouth_watering_surprises: a.mouthWateringSurprises,
       latest_findings: latestFindings,
       title_ideas: parsed.titleIdeas,
     }));
@@ -375,7 +381,7 @@ export async function POST(req: NextRequest) {
       .from("angles")
       .insert(rowsToInsert)
       .select(
-        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
+        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, mouth_watering_surprises, latest_findings, title_ideas"
       );
 
     if (insertError || !inserted) {
@@ -399,6 +405,7 @@ export async function POST(req: NextRequest) {
       channelFit: row.channel_fit ?? "",
       whyWorkOnIt: row.why_work_on_it ?? "",
       curiosityGaps: row.curiosity_gaps ?? [],
+      mouthWateringSurprises: row.mouth_watering_surprises ?? [],
       latestFindings: row.latest_findings ?? [],
       titleIdeas: row.title_ideas ?? [],
     }));

@@ -44,6 +44,7 @@ export interface GeneratedAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
+  mouthWateringSurprises: string[];
   latestFindings: FindingItem[];
   titleIdeas: string[];
 }
