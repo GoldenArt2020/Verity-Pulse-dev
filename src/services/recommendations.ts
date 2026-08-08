@@ -74,8 +74,11 @@ function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
 - Victim demographic pattern: ethnicity=${a.victimDemographicPreferences.ethnicity ?? "no clear pattern"}, age range=${a.victimDemographicPreferences.ageRange ?? "no clear pattern"}
 - Narrative style: ${a.narrativeStyle}
 - Evidence emphasis: ${a.evidenceWeight.join(", ") || "unknown"}
-- Content freshness preference: ${a.contentFreshness}
-- Storytelling style: ${dna.channelStyle.storytellingStyle}, tone: ${dna.channelStyle.emotionalTone}`;
+- Content freshness preference: ${a.contentFreshness}${
+    dna.channelStyle
+      ? `\n- Storytelling style: ${dna.channelStyle.storytellingStyle}, tone: ${dna.channelStyle.emotionalTone}`
+      : ""
+  }`;
 }
 
 function normalizeTitle(title: string): string {
@@ -326,10 +329,10 @@ export async function generateRecommendations(
     topics = parsed.topics;
   }
 
-  if (topics.length === 0 && channelDNA) {
+  if (topics.length === 0 && channelDNA?.channelStyle) {
     topics = [
-      ...channelDNA.channelStyle.preferredSubjects,
-      ...channelDNA.channelStyle.typicalHooks,
+      ...(channelDNA.channelStyle.preferredSubjects ?? []),
+      ...(channelDNA.channelStyle.typicalHooks ?? []),
     ];
   }
 

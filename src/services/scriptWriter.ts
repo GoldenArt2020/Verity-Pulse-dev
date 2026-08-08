@@ -153,17 +153,36 @@ function buildSectionPrompt(
   plan: SectionPlan,
   previousTail: string | null
 ): string {
-  const dnaBlock = dna
-    ? `CHANNEL VOICE TO WRITE IN:
-- Storytelling style: ${dna.channelStyle.storytellingStyle}
-- Pacing: ${dna.channelStyle.averagePacing}
-- Emotional tone: ${dna.channelStyle.emotionalTone}
-- Typical hooks this channel uses: ${dna.channelStyle.typicalHooks.join(", ")}
-- Narrative style (audience-preferred): ${dna.audienceDNA.narrativeStyle}
-- Evidence emphasis audience responds to: ${dna.audienceDNA.evidenceWeight.join(", ")}
-- Content freshness framing: ${dna.audienceDNA.contentFreshness}`
-    : `No Channel DNA profile is available — write in a clear, engaging, emotionally grounded true crime documentary voice.`;
+  // channel_dna rows saved before audienceDNA (or channelStyle sub-fields)
+  // existed in the schema won't have these keys — fall back per-field
+  // instead of crashing, same as lensHistoricalScore below.
+  const style = dna?.channelStyle;
+  const audience = dna?.audienceDNA;
 
+  const styleLines = style
+    ? [
+        `- Storytelling style: ${style.storytellingStyle}`,
+        `- Pacing: ${style.averagePacing}`,
+        `- Emotional tone: ${style.emotionalTone}`,
+        style.typicalHooks?.length ? `- Typical hooks this channel uses: ${style.typicalHooks.join(", ")}` : null,
+      ].filter(Boolean)
+    : [];
+
+  const audienceLines = audience
+    ? [
+        `- Narrative style (audience-preferred): ${audience.narrativeStyle}`,
+        audience.evidenceWeight?.length
+          ? `- Evidence emphasis audience responds to: ${audience.evidenceWeight.join(", ")}`
+          : null,
+        audience.contentFreshness ? `- Content freshness framing: ${audience.contentFreshness}` : null,
+      ].filter(Boolean)
+    : [];
+
+  const dnaLines = [...styleLines, ...audienceLines];
+
+  const dnaBlock = dnaLines.length > 0
+    ? `CHANNEL VOICE TO WRITE IN:\n${dnaLines.join("\n")}`
+    : `No Channel DNA profile is available — write in a clear, engaging, emotionally grounded true crime documentary voice.`;
   const continuityBlock = previousTail
     ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense.`
     : `THIS IS THE OPENING of the full script. Open with this hook direction, in your own words: ${angle.openingHook}`;
