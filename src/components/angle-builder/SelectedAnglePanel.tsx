@@ -135,7 +135,7 @@ export function SelectedAnglePanel({
             </>
           )}
 
-          {angle.curiosityGaps.length > 0 && (
+          {(angle.curiosityGaps?.length ?? 0) > 0 && (
             <>
               <p className="mt-4 text-xs font-medium text-slate-400">Curiosity Gaps</p>
               <ul className="mt-1.5 space-y-1">
@@ -150,14 +150,14 @@ export function SelectedAnglePanel({
 
           <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
           <ul className="mt-1.5 space-y-1">
-            {angle.researchFocus.map((r) => (
+            {(angle.researchFocus ?? []).map((r) => (
               <li key={r} className="flex items-start gap-1.5 text-[13px] text-slate-300">
                 <span className="mt-0.5 text-emerald-400">✓</span> {r}
               </li>
             ))}
           </ul>
 
-          {angle.latestFindings.length > 0 && (
+          {(angle.latestFindings?.length ?? 0) > 0 && (
             <>
               <p className="mt-4 text-xs font-medium text-slate-400">Latest Findings</p>
               <ul className="mt-1.5 space-y-2">

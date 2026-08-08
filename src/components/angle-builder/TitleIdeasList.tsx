@@ -3,7 +3,7 @@
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 
 export function TitleIdeasList({ angles }: { angles: GeneratedAngle[] }) {
-  const titleIdeas = angles.find((a) => a.titleIdeas.length > 0)?.titleIdeas ?? [];
+  const titleIdeas = angles.find((a) => (a.titleIdeas?.length ?? 0) > 0)?.titleIdeas ?? [];
 
   return (
     <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
