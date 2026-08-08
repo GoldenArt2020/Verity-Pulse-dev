@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeTitleIdeas } from "@/lib/titleIdeas";
 
 export async function GET(
   _req: NextRequest,
@@ -11,7 +12,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("angles")
     .select(
-      "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, script_word_count, seo_title, seo_description, seo_tags"
+      "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, script_word_count, seo_title, seo_description, seo_tags, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
     )
     .eq("case_id", caseId)
     .eq("status", "active")
@@ -36,6 +37,12 @@ export async function GET(
       row.seo_title || row.seo_description || row.seo_tags
         ? { title: row.seo_title, description: row.seo_description, tags: row.seo_tags ?? [] }
         : null,
+    caseWriteup: row.case_writeup ?? "",
+    channelFit: row.channel_fit ?? "",
+    whyWorkOnIt: row.why_work_on_it ?? "",
+    curiosityGaps: row.curiosity_gaps ?? [],
+    latestFindings: row.latest_findings ?? [],
+    titleIdeas: normalizeTitleIdeas(row.title_ideas),
   }));
 
   return NextResponse.json({ angles });

@@ -12,6 +12,7 @@ import { AudienceProfileMatch } from "@/components/angle-builder/AudienceProfile
 import { AngleScoreBreakdown } from "@/components/angle-builder/AngleScoreBreakdown";
 import { TitleIdeasList } from "@/components/angle-builder/TitleIdeasList";
 import { AngleBuilderStatsBar } from "@/components/angle-builder/AngleBuilderStatsBar";
+import type { TitleIdea } from "@/lib/titleIdeas";
 
 export interface AngleScores {
   searchDemand: number;
@@ -46,7 +47,7 @@ export interface GeneratedAngle {
   curiosityGaps: string[];
   mouthWateringSurprises: string[];
   latestFindings: FindingItem[];
-  titleIdeas: string[];
+  titleIdeas: TitleIdea[];
 }
 
 export default function AngleBuilderPage({ params }: { params: Promise<{ caseId: string }> }) {

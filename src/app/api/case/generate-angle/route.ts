@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
+import { getOrFetchYouTubeCoverage, getOrFetchGenreBenchmarkTitles } from "@/services/youtubeCoverage";
 import { formatSourcesWithReliability } from "@/lib/sourceReliability";
+import { topByVelocity, formatVelocityBlock } from "@/lib/titleVelocity";
+import { normalizeTitleIdeas, type TitleIdea } from "@/lib/titleIdeas";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { SearchResult } from "@/providers/search/types";
@@ -38,7 +40,7 @@ export interface GeneratedAngle {
   curiosityGaps: string[];
   caseWriteup: string;
   latestFindings: FindingItem[];
-  titleIdeas: string[];
+  titleIdeas: TitleIdea[];
 }
 
 interface RawAngle {
@@ -56,27 +58,31 @@ interface RawAngle {
 interface ParsedResponse {
   angles: RawAngle[];
   caseWriteup: string;
-  titleIdeas: string[];
+  titleIdeas: TitleIdea[];
 }
 
 function buildPrompt(
   caseName: string,
+  category: string | null,
   summary: string,
   caseFacts: unknown,
   youtubeVideos: YouTubeVideoDetail[],
+  genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
   channelDNA: ChannelDNA | null
 ): string {
-  const topPerformers = [...youtubeVideos]
-    .sort((a, b) => b.viewCount - a.viewCount)
-    .slice(0, 10);
+  const caseVelocity = topByVelocity(youtubeVideos, { limit: 8, minViews: 500 });
+  const genreVelocity = topByVelocity(genreVideos, { limit: 8, minViews: 5000 });
 
   const coverageBlock =
-    topPerformers.length > 0
-      ? `EXISTING YOUTUBE COVERAGE (top performing titles on this case, by views — study these for what title FORMULAS work: structure, curiosity gaps, use of numbers/colons/questions, emotional hooks):\n${topPerformers
-          .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount.toLocaleString()} views`)
-          .join("\n")}`
-      : `No existing YouTube coverage data is available for this case.`;
+    caseVelocity.length > 0
+      ? `EXISTING YOUTUBE COVERAGE ON THIS CASE (ranked by views-per-day — a real momentum/CTR proxy, NOT raw views, since raw views wrongly favor old videos regardless of how well their title is actually performing right now. Study these for what title FORMULAS are actually driving clicks: structure, curiosity gaps, numbers/colons/questions, emotional hooks):\n${formatVelocityBlock(caseVelocity)}`
+      : `No existing YouTube coverage data is available for this specific case yet.`;
+
+  const genreBlock =
+    genreVelocity.length > 0
+      ? `BROADER GENRE BENCHMARK TITLES (currently high-momentum true crime titles across the wider genre${category ? `, biased toward "${category}"-type cases` : ""} — use these when the case-specific coverage above is thin, and to confirm which formulas are working RIGHT NOW across the genre, not just historically on this one case):\n${formatVelocityBlock(genreVelocity)}`
+      : `No genre benchmark data available.`;
 
   const findingsBlock =
     findings.length > 0
@@ -102,13 +108,21 @@ ${findingsBlock}
 
 ${coverageBlock}
 
+${genreBlock}
+
 ${channelBlock}
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
   "caseWriteup": string (3-4 sentence narrative writeup grounded in the case facts dossier above — name the actual people, dates, and figures involved, not a vague paraphrase),
-  "titleIdeas": string[] (8-10 REAL, publishable YouTube titles for this case, each built using a proven formula observed in the top-performing coverage titles above — vary the formulas used: question hooks, numbered/countdown structure, "The Truth About X", colon-split dramatic statements, name+shocking detail. Do not just restate angle titles — these are click-optimized titles a creator could upload today),
+  "titleIdeas": [
+    {
+      "title": string (a REAL, publishable YouTube title for this case — click-optimized, a creator could upload this today; do NOT just restate an angle title),
+      "formula": string (name the specific title mechanic used — e.g. "Colon-split shock reveal", "Question hook", "Numbered/countdown structure", "The Truth About X", "Name + shocking detail" — be specific about the mechanic, not just "clickbait"),
+      "inspiredBy": string (the exact reference title, copied verbatim from either the case coverage or genre benchmark list above, whose formula this was modeled on — must be one of the titles actually listed above, never invented)
+    }
+  ] (8-10 items, covering at least 4 distinct formulas across the set — do not repeat the same formula more than 3 times. If both reference lists above are empty, ground "formula" in well-known true crime YouTube title patterns and leave "inspiredBy" as an empty string),
   "angles": [
     {
       "title": string (a compelling angle title),
@@ -133,7 +147,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, and findings provided — never invent facts. Return ONLY the JSON object.`;
 }
 
-function tryParseJson(text: string): Partial<ParsedResponse> | null {
+function tryParseJson(text: string): Partial<{ angles: RawAngle[]; caseWriteup: string; titleIdeas: unknown }> | null {
   try {
     return JSON.parse(text);
   } catch {
@@ -152,7 +166,7 @@ function extractStringField(text: string, key: string): string {
   }
 }
 
-function extractStringArrayField(text: string, key: string): string[] {
+function extractArrayField(text: string, key: string): unknown[] {
   const keyIdx = text.indexOf(`"${key}"`);
   if (keyIdx === -1) return [];
   const bracketStart = text.indexOf("[", keyIdx);
@@ -165,7 +179,7 @@ function extractStringArrayField(text: string, key: string): string[] {
       if (depth === 0) {
         const candidate = text.slice(bracketStart, i + 1);
         const parsed = tryParseJson(`{"v":${candidate}}`) as { v?: unknown } | null;
-        if (parsed && Array.isArray(parsed.v)) return parsed.v as string[];
+        if (parsed && Array.isArray(parsed.v)) return parsed.v;
         break;
       }
     }
@@ -225,7 +239,7 @@ function parseResponse(raw: string): ParsedResponse {
       return {
         angles: parsed.angles,
         caseWriteup: parsed.caseWriteup ?? "",
-        titleIdeas: parsed.titleIdeas ?? [],
+        titleIdeas: normalizeTitleIdeas(parsed.titleIdeas),
       };
     }
   }
@@ -235,7 +249,7 @@ function parseResponse(raw: string): ParsedResponse {
     return {
       angles: salvagedAngles,
       caseWriteup: extractStringField(fromFirstBrace, "caseWriteup"),
-      titleIdeas: extractStringArrayField(fromFirstBrace, "titleIdeas"),
+      titleIdeas: normalizeTitleIdeas(extractArrayField(fromFirstBrace, "titleIdeas")),
     };
   }
 
@@ -244,14 +258,16 @@ function parseResponse(raw: string): ParsedResponse {
 
 async function generateAngleBatch(
   caseName: string,
+  category: string | null,
   summary: string,
   caseFacts: unknown,
   youtubeVideos: YouTubeVideoDetail[],
+  genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
   channelDNA: ChannelDNA | null
 ): Promise<ParsedResponse> {
   const raw = await groqProvider.generateText(
-    buildPrompt(caseName, summary, caseFacts, youtubeVideos, findings, channelDNA),
+    buildPrompt(caseName, category, summary, caseFacts, youtubeVideos, genreVideos, findings, channelDNA),
     { temperature: 0.7, maxTokens: 5500 }
   );
   return parseResponse(raw);
@@ -272,7 +288,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: caseRow, error: caseError } = await supabase
     .from("cases")
-    .select("name, summary, case_facts")
+    .select("name, summary, case_facts, category")
     .eq("id", caseId)
     .single();
 
@@ -287,7 +303,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const youtubeVideos = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
+  const [youtubeVideos, genreVideos] = await Promise.all([
+    getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []),
+    getOrFetchGenreBenchmarkTitles(caseRow.category ?? null).catch(() => []),
+  ]);
 
   const findings = tavilyProvider.isConfigured()
     ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 8).catch(() => [])
@@ -319,10 +338,28 @@ export async function POST(req: NextRequest) {
 
   let parsed: ParsedResponse;
   try {
-    parsed = await generateAngleBatch(caseRow.name, caseRow.summary, caseRow.case_facts, youtubeVideos, findings, channelDNA);
+    parsed = await generateAngleBatch(
+      caseRow.name,
+      caseRow.category ?? null,
+      caseRow.summary,
+      caseRow.case_facts,
+      youtubeVideos,
+      genreVideos,
+      findings,
+      channelDNA
+    );
   } catch (firstErr) {
     try {
-      parsed = await generateAngleBatch(caseRow.name, caseRow.summary, caseRow.case_facts, youtubeVideos, findings, channelDNA);
+      parsed = await generateAngleBatch(
+        caseRow.name,
+        caseRow.category ?? null,
+        caseRow.summary,
+        caseRow.case_facts,
+        youtubeVideos,
+        genreVideos,
+        findings,
+        channelDNA
+      );
     } catch (secondErr) {
       console.error("generate-angle: both attempts failed", firstErr, secondErr);
       return NextResponse.json(
@@ -406,7 +443,7 @@ export async function POST(req: NextRequest) {
       whyWorkOnIt: row.why_work_on_it ?? "",
       curiosityGaps: row.curiosity_gaps ?? [],
       latestFindings: row.latest_findings ?? [],
-      titleIdeas: row.title_ideas ?? [],
+      titleIdeas: normalizeTitleIdeas(row.title_ideas),
     }));
 
     return NextResponse.json({ angles });
