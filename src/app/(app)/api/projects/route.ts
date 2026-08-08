@@ -3,11 +3,21 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -35,10 +45,19 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { data: existing } = await supabase
     .from("projects")
     .select("id")
     .eq("case_id", caseId)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (existing) {
@@ -47,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("projects")
-    .insert({ case_id: caseId, status })
+    .insert({ case_id: caseId, status, user_id: user.id })
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )

@@ -38,6 +38,8 @@ export interface GeneratedAngle {
   scores: AngleScores;
   script: string | null;
   scriptGeneratedAt: string | null;
+  scriptWordCount?: number | null;
+  seo?: { title: string | null; description: string | null; tags: string[] } | null;
   caseWriteup: string;
   channelFit: string;
   whyWorkOnIt: string;
@@ -146,10 +148,23 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       });
   }, [researched, caseData]);
 
-  function handleScriptGenerated(angleId: string, script: string) {
+  function handleScriptGenerated(
+    angleId: string,
+    script: string,
+    wordCount: number,
+    seo: { description: string; keywords: string[] } | null
+  ) {
     setAngles((prev) =>
       prev.map((a) =>
-        a.id === angleId ? { ...a, script, scriptGeneratedAt: new Date().toISOString() } : a
+        a.id === angleId
+          ? {
+              ...a,
+              script,
+              scriptGeneratedAt: new Date().toISOString(),
+              scriptWordCount: wordCount,
+              seo: seo ? { title: null, description: seo.description, tags: seo.keywords } : null,
+            }
+          : a
       )
     );
     // Script is ready to review — move the workflow into Analyze & Refine.

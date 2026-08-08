@@ -23,7 +23,12 @@ export function SelectedAnglePanel({
   angle: GeneratedAngle | null;
   onClear: () => void;
   caseId: string;
-  onScriptGenerated: (angleId: string, script: string) => void;
+  onScriptGenerated: (
+    angleId: string,
+    script: string,
+    wordCount: number,
+    seo: { description: string; keywords: string[] } | null
+  ) => void;
 }) {
   const router = useRouter();
   const [writing, setWriting] = useState(false);
@@ -47,7 +52,7 @@ export function SelectedAnglePanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
-      onScriptGenerated(angle.id, data.script);
+      onScriptGenerated(angle.id, data.script, data.wordCount ?? wordCount, data.seo ?? null);
       // Show the script for review before doing anything else with it.
       setPreview({ script: data.script, wordCount: data.wordCount ?? wordCount, seo: data.seo ?? null });
     } catch (err) {
@@ -55,6 +60,19 @@ export function SelectedAnglePanel({
     } finally {
       setWriting(false);
     }
+  }
+
+  // Reopen the preview modal for a script that was already generated
+  // (either earlier this session or loaded back from the saved angle),
+  // instead of forcing a regeneration just to look at it again.
+  function handleReopenScript() {
+    if (!angle?.script) return;
+    const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
+    setPreview({
+      script: angle.script,
+      wordCount,
+      seo: angle.seo ? { description: angle.seo.description ?? "", keywords: angle.seo.tags ?? [] } : null,
+    });
   }
 
   // Get-or-create the project row for this case (see POST /api/projects),
@@ -177,9 +195,12 @@ export function SelectedAnglePanel({
           <div className="mt-5">
             {writeError && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
             {angle.script ? (
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400">
-                <FileText className="h-3.5 w-3.5" /> Script ready
-              </span>
+              <button
+                onClick={handleReopenScript}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-950/40"
+              >
+                <FileText className="h-3.5 w-3.5" /> Script ready — view
+              </button>
             ) : (
               <button
                 onClick={() => setDialogOpen(true)}

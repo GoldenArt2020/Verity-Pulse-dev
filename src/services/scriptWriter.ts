@@ -256,7 +256,9 @@ Return ONLY the JSON object.`;
  *   4. SEO       — a short Groq pass extracts keywords/description from the
  *      finished script for the creator to reuse when publishing.
  *
- * SERVER-ONLY. Saves the assembled script to angles.script / angles.script_generated_at.
+ * SERVER-ONLY. Saves the assembled script — plus its word count and SEO
+ * summary — to the angles row, so it survives a reload instead of only
+ * living in the response payload of this one request.
  */
 export async function generateScriptForAngle(
   angleId: string,
@@ -365,7 +367,13 @@ export async function generateScriptForAngle(
 
   const { error: saveError } = await supabase
     .from("angles")
-    .update({ script: cleanScript, script_generated_at: new Date().toISOString() })
+    .update({
+      script: cleanScript,
+      script_generated_at: new Date().toISOString(),
+      script_word_count: actualWordCount,
+      seo_description: seo?.description ?? null,
+      seo_tags: seo?.keywords ?? null,
+    })
     .eq("id", angleId);
 
   if (saveError) {

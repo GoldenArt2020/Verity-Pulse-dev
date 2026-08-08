@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = await createClient();
+  const user = await getAuthedUser(supabase);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )
     .eq("id", id)
+    .eq("user_id", user.id)
     .single();
 
   if (error || !data) {
@@ -39,10 +52,16 @@ export async function PATCH(
   }
 
   const supabase = await createClient();
+  const user = await getAuthedUser(supabase);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .update({ status })
     .eq("id", id)
+    .eq("user_id", user.id)
     .select(
       "id, status, created_at, case_id, cases(name, category, country, summary, opportunity_score, competition_score)"
     )
@@ -60,7 +79,16 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const { error } = await supabase.from("projects").delete().eq("id", id);
+  const user = await getAuthedUser(supabase);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const { error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
