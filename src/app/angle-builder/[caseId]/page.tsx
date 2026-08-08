@@ -62,6 +62,11 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
   const anglesTriggeredRef = useRef(false);
 
+  // Which step of the Angle Builder workflow is active. Advances
+  // automatically to "Analyze & Refine" (index 1) the moment a script
+  // finishes generating for the selected angle.
+  const [step, setStep] = useState(0);
+
   const isStub = !loading && !!caseData && caseData.summary === null;
   const researched = !isStub || researchDone;
 
@@ -101,6 +106,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       if (!res.ok) throw new Error(data.error ?? "Failed to generate angles");
       setAngles(data.angles ?? []);
       setLastGeneratedAt(new Date().toISOString());
+      setStep(0);
     } catch (err) {
       setAnglesError(err instanceof Error ? err.message : "Failed to generate angles");
     } finally {
@@ -146,6 +152,8 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
         a.id === angleId ? { ...a, script, scriptGeneratedAt: new Date().toISOString() } : a
       )
     );
+    // Script is ready to review — move the workflow into Analyze & Refine.
+    setStep(1);
   }
 
   const selectedAngle = selectedIndex !== null ? angles[selectedIndex] ?? null : null;
@@ -194,7 +202,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       {!loading && !error && caseData && researched && (
         <div className="mx-auto max-w-[1400px] space-y-4 p-6">
           <AngleBuilderHeader caseData={caseData} onRegenerate={handleRegenerateClick} regenerating={anglesLoading} />
-          <StepTabs />
+          <StepTabs active={step} onChange={setStep} />
 
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_340px] gap-4">
             <GeneratedAnglesList

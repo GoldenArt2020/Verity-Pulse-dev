@@ -4,6 +4,7 @@ import { groqProvider } from "@/providers/ai/groqProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
+import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
@@ -53,7 +54,7 @@ const CANDIDATE_SHAPE = `{
       "title": string,
       "reason": string (1 sentence),
       "region": string or null (country the case occurred in, if determinable),
-      "caseTypeTags": string[] (2-5 tags, e.g. "police-misconduct", "missing-person", "institutional-failure"),
+      "caseTypeTags": string[] (2-4 tags describing what kind of case this is — choose ONLY from this exact list so it can be matched against the channel's proven history: ${CASE_TYPE_TAG_LIST_TEXT}),
       "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" | null (best-fit narrative lens for this case),
       "creatorDnaMatch": number (0-100 — how closely this case matches THIS channel's proven content style, subject matter, and tone, based on the profile below),
       "audienceInterest": number (0-100 — predicted general audience engagement for this case, based on how it compares to similar well-performing true crime content),
@@ -291,7 +292,7 @@ async function fetchTrendRecommendations(
  * top-performing videos, PLUS two independent trend-signal batches not
  * gated by the channel's history. Every candidate is scored against the
  * channel's Creator DNA using VerityPulse's 8-factor weighted formula
- * (see recommendationScoring.ts) and filtered to >= 80/100 before being
+ * (see recommendationScoring.ts) and filtered to >= threshold before being
  * shown. Cross-channel exclusion prevents two different channels from
  * both being told to cover the same case.
  *

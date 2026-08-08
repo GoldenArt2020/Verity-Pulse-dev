@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Sparkles, FileText, Copy, Check } from "lucide-react";
+import { Loader2, Sparkles, FileText, Copy, Check, RotateCcw } from "lucide-react";
+import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
+import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 interface AngleScores {
   searchDemand: number;
@@ -23,19 +25,33 @@ interface ProjectAngle {
   scriptGeneratedAt: string | null;
 }
 
+interface ScriptSeoSummary {
+  keywords: string[];
+  description: string;
+}
+
 function totalScore(a: ProjectAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
 }
 
 export function ProjectAngleTabs({ caseId }: { caseId: string }) {
+  // Reads ?angle=<id> from the URL without needing a Suspense boundary
+  // (useSearchParams would require one; this component isn't wrapped in one).
+  const [requestedAngleId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("angle");
+  });
+
   const [angles, setAngles] = useState<ProjectAngle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [writingId, setWritingId] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [seoByAngle, setSeoByAngle] = useState<Record<string, ScriptSeoSummary>>({});
 
   useEffect(() => {
     let active = true;
@@ -44,8 +60,13 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load angles");
         if (active) {
-          setAngles(data.angles ?? []);
-          setActiveId(data.angles?.[0]?.id ?? null);
+          const loaded: ProjectAngle[] = data.angles ?? [];
+          setAngles(loaded);
+          const preferred =
+            requestedAngleId && loaded.some((a) => a.id === requestedAngleId)
+              ? requestedAngleId
+              : loaded[0]?.id ?? null;
+          setActiveId(preferred);
         }
       })
       .catch((err) => {
@@ -57,26 +78,32 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
 
   const activeAngle = angles.find((a) => a.id === activeId) ?? null;
 
-  async function handleWriteScript(angle: ProjectAngle) {
-    setWritingId(angle.id);
+  async function handleWriteScript(wordCount: ScriptWordCount) {
+    setDialogOpen(false);
+    if (!activeAngle) return;
+    setWritingId(activeAngle.id);
     setWriteError(null);
     try {
       const res = await fetch("/api/case/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ angleId: angle.id, caseId }),
+        body: JSON.stringify({ angleId: activeAngle.id, caseId, wordCount }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to write script");
       setAngles((prev) =>
         prev.map((a) =>
-          a.id === angle.id ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString() } : a
+          a.id === activeAngle.id ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString() } : a
         )
       );
+      if (data.seo) {
+        setSeoByAngle((prev) => ({ ...prev, [activeAngle.id]: data.seo }));
+      }
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to write script");
     } finally {
@@ -112,6 +139,8 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       </div>
     );
   }
+
+  const activeSeo = activeAngle ? seoByAngle[activeAngle.id] : undefined;
 
   return (
     <div className="mt-10">
@@ -154,29 +183,26 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           </ul>
 
           <div className="mt-5 border-t border-slate-800/60 pt-4">
-            {!activeAngle.script && (
+            {!activeAngle.script && writingId !== activeAngle.id && (
               <button
-                onClick={() => handleWriteScript(activeAngle)}
-                disabled={writingId === activeAngle.id}
-                className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-60"
+                onClick={() => setDialogOpen(true)}
+                className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.01]"
               >
-                {writingId === activeAngle.id ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Researching &amp; writing script...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-4 w-4" />
-                    Write Script
-                  </>
-                )}
+                <FileText className="h-4 w-4" />
+                Write Script
               </button>
+            )}
+
+            {writingId === activeAngle.id && (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Researching &amp; writing script — longer scripts can take a few minutes...
+              </div>
             )}
 
             {writeError && <p className="mt-2 text-xs text-rose-400">{writeError}</p>}
 
-            {activeAngle.script && (
+            {activeAngle.script && writingId !== activeAngle.id && (
               <div className="mt-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-slate-400">
@@ -198,18 +224,35 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
                 <div className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm leading-relaxed text-slate-300">
                   {activeAngle.script}
                 </div>
+
+                {activeSeo && (
+                  <div className="mt-3 rounded-xl border border-slate-800/60 bg-slate-900/40 p-3">
+                    <p className="text-[11px] font-medium text-slate-400">SEO Snapshot (for your video upload)</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {activeSeo.keywords.map((k) => (
+                        <span key={k} className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{activeSeo.description}</p>
+                  </div>
+                )}
+
                 <button
-                  onClick={() => handleWriteScript(activeAngle)}
-                  disabled={writingId === activeAngle.id}
-                  className="mt-3 text-xs font-medium text-slate-400 hover:text-slate-200 disabled:opacity-60"
+                  onClick={() => setDialogOpen(true)}
+                  className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-200"
                 >
-                  {writingId === activeAngle.id ? "Rewriting..." : "Rewrite script"}
+                  <RotateCcw className="h-3 w-3" />
+                  Rewrite script
                 </button>
               </div>
             )}
           </div>
         </div>
       )}
+
+      <ScriptLengthDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onSelect={handleWriteScript} />
     </div>
   );
 }

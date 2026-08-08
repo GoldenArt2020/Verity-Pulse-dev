@@ -1,4 +1,5 @@
 import type { ChannelDNA, LensPerformance } from "@/services/creatorDNA";
+import { normalizeCaseTypeTag } from "@/lib/caseTypeTaxonomy";
 
 const LENS_IDS = [
   "victim-centered",
@@ -15,7 +16,7 @@ export interface ScoredCandidate {
   region: string | null;
   caseTypeTags: string[];
   lens: Lens | null;
-  creatorDnaMatch: number; // 0-100, Groq: style/subject fit to this channel's proven content
+  creatorDnaMatch: number; // 0-100, Groq's raw holistic judgment — blended with tag-overlap below
   audienceInterest: number; // 0-100, Groq: predicted general engagement for this case
   searchOpportunity: number; // 0-100, Groq: search/trend demand
   competitionScore: number; // 0-100, higher = less saturated
@@ -58,6 +59,31 @@ function lensHistoricalScore(lens: Lens | null, lensPerformance: LensPerformance
   if (match.avgViewsRelativeToChannel === "above average") return 100;
   if (match.avgViewsRelativeToChannel === "below average") return 15;
   return 55;
+}
+
+/**
+ * Deterministic case-type overlap between a candidate case and this
+ * channel's proven case-type preferences (learned from its own video
+ * history in creatorDNA.ts, not assigned). This is the mechanism that
+ * differentiates, e.g., a channel whose audience responds to
+ * gang-related/drug-related cases from one whose audience responds to
+ * institutional-failure or missing-person cases — grounded in case type,
+ * not demographic labeling of victims or channels.
+ */
+function caseTypeOverlapScore(
+  candidateTags: string[],
+  preferences: string[]
+): { score: number; matched: string[] } {
+  if (candidateTags.length === 0 || preferences.length === 0) {
+    return { score: 50, matched: [] }; // insufficient data either side — stay neutral
+  }
+  const prefSet = new Set(preferences.map(normalizeCaseTypeTag));
+  const matched = candidateTags.map(normalizeCaseTypeTag).filter((t) => prefSet.has(t));
+  if (matched.length === 0) {
+    return { score: 30, matched: [] };
+  }
+  const ratio = matched.length / candidateTags.length;
+  return { score: Math.round(40 + ratio * 60), matched };
 }
 
 function regionalMatchScore(candidateRegion: string | null, dna: ChannelDNA): number {
@@ -107,19 +133,29 @@ function resolveDisplayRegion(
  * Creator DNA Match 25% / Audience Interest 20% / Search Opportunity 15%
  * / Competition 10% / Untapped Angles 10% / Regional Match 10% /
  * News Momentum 5% / Historical Performance 5%.
- * Creator DNA, Audience Interest, Search Opportunity, Untapped Angles,
- * and News Momentum are Groq's qualitative judgment on the candidate.
- * Regional Match and Historical Performance are computed deterministically
- * here from real stored channel data, so those two dimensions are never
- * left to the model's discretion.
+ *
+ * Creator DNA Match is now a BLEND: 60% Groq's holistic judgment + 40% a
+ * deterministic case-type tag-overlap check computed here in code against
+ * the channel's own proven history — so audience fit is grounded in real
+ * tag data, not left entirely to the model's discretion. Regional Match
+ * and Historical Performance are fully deterministic. Audience Interest,
+ * Search Opportunity, Untapped Angles, and News Momentum remain Groq's
+ * qualitative judgment.
  */
 export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): ScoreBreakdown {
   const historicalPerformance = lensHistoricalScore(candidate.lens, dna.lensPerformance);
   const regionalMatch = regionalMatchScore(candidate.region, dna);
   const { displayRegion, isRegionException } = resolveDisplayRegion(candidate.region, dna);
 
+  const { score: caseTypeScore, matched: matchedCaseTypes } = caseTypeOverlapScore(
+    candidate.caseTypeTags,
+    dna.audienceDNA?.caseTypePreferences ?? []
+  );
+
+  const creatorDnaMatch = Math.round(candidate.creatorDnaMatch * 0.6 + caseTypeScore * 0.4);
+
   const finalScore = Math.round(
-    candidate.creatorDnaMatch * WEIGHTS.creatorDna +
+    creatorDnaMatch * WEIGHTS.creatorDna +
       candidate.audienceInterest * WEIGHTS.audienceInterest +
       candidate.searchOpportunity * WEIGHTS.searchOpportunity +
       candidate.competitionScore * WEIGHTS.competition +
@@ -130,8 +166,11 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
   );
 
   const whyRecommended: string[] = [];
-  if (candidate.creatorDnaMatch >= 80) {
-    whyRecommended.push(`${candidate.creatorDnaMatch}% match to your channel's proven content style.`);
+  if (matchedCaseTypes.length > 0) {
+    whyRecommended.push(`Matches case types your audience already responds well to (${matchedCaseTypes.join(", ")}).`);
+  }
+  if (creatorDnaMatch >= 80) {
+    whyRecommended.push(`${creatorDnaMatch}% match to your channel's proven content style.`);
   }
   if (historicalPerformance >= 80 && candidate.lens) {
     whyRecommended.push(`Matches your best-performing storytelling lens (${candidate.lens.replace("-", " ")}).`);
@@ -153,7 +192,7 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
   }
 
   return {
-    creatorDnaMatch: candidate.creatorDnaMatch,
+    creatorDnaMatch,
     audienceInterest: candidate.audienceInterest,
     searchOpportunity: candidate.searchOpportunity,
     competition: candidate.competitionScore,

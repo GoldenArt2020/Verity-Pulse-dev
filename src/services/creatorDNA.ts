@@ -3,6 +3,7 @@ import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { getOrFetchChannelVideos, saveLensTags } from "@/services/channelVideos";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
+import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 
 const REANALYSIS_INTERVAL_DAYS = 30; // never rebuild DNA automatically more than once/month
 const PRIMARY_REGION_THRESHOLD = 80; // % of content from one region before it's treated as the default filter
@@ -91,7 +92,7 @@ function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; vi
   "videoLensTags": [{ "index": number, "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" }],
   "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/subject matter — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region can't be determined, exclude it from the distribution rather than guessing.,
   "audienceDNA": {
-    "caseTypePreferences": string[] (3-6 case types this audience engages with most, ranked most-preferred first, e.g. "institutional failures", "missing persons", "police misconduct"),
+    "caseTypePreferences": string[] (3-6 case types this audience engages with most, ranked most-preferred first — choose ONLY from this exact list so it can be matched against future case candidates: ${CASE_TYPE_TAG_LIST_TEXT}),
     "victimDemographicPreferences": {
       "ethnicity": string or null (only if a clear, consistent pattern is visible across titles — never guess from a single video),
       "ageRange": string or null (e.g. "adults", "children", "no strong pattern")
