@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
+import { formatSourcesWithReliability } from "@/lib/sourceReliability";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { SearchResult } from "@/providers/search/types";
@@ -79,10 +80,7 @@ function buildPrompt(
 
   const findingsBlock =
     findings.length > 0
-      ? `LATEST DEVELOPMENTS (recent web search results — use these for real, current case status; do not invent anything beyond what's here):\n${findings
-          .slice(0, 8)
-          .map((f, i) => `${i + 1}. ${f.title} (${f.publishedDate ?? "undated"}): ${f.snippet.slice(0, 600)}`)
-          .join("\n")}`
+      ? `LATEST DEVELOPMENTS (recent web search results, tagged by reliability — use these for real, current case status; prefer HIGH/MEDIUM sources for anything stated as fact; do not invent anything beyond what's here):\n${formatSourcesWithReliability(findings.slice(0, 8), 600)}`
       : `No recent web coverage found beyond the case summary.`;
 
   const factsBlock = caseFacts

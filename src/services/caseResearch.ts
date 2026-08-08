@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { SearchResult } from "@/providers/search/types";
+import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
 
 interface VictimDemographics {
   ethnicity: string | null;
@@ -13,7 +14,7 @@ interface CaseFacts {
   people: { name: string; role: string; details: string }[];
   timeline: { date: string; event: string }[];
   charges: string[];
-  keyFigures: string[]; // concrete numbers/measurements/quotes worth citing, e.g. "61μg breath alcohol vs 35μg legal limit"
+  keyFigures: string[];
   locations: string[];
   unresolvedQuestions: string[];
 }
@@ -88,6 +89,8 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   }
 }
 
+Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH and MEDIUM sources for factual claims in "summary" and "caseFacts" — treat LOW-tier sources as context only, and do not state something as established fact if it only appears in a LOW-tier source.
+
 SOURCE MATERIAL:
 ${sourcesText}
 
@@ -98,10 +101,13 @@ function parseAnalysis(raw: string): ResearchAnalysis {
   let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
+
   if (firstBrace === -1 || lastBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
   }
+
   cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+
   try {
     return JSON.parse(cleaned);
   } catch (err) {
@@ -111,6 +117,27 @@ function parseAnalysis(raw: string): ResearchAnalysis {
   }
 }
 
+/**
+ * First-pass research for a stub Case: multi-query Tavily search (case
+ * name, victims, timeline, charges/court, latest news) + ONE Groq call to
+ * produce summary, category, tags, scores, a case-specific image search
+ * query, demographic/case-type tagging, AND a structured case_facts
+ * dossier (named people, dated timeline, charges, key figures/quotes,
+ * locations, unresolved questions) that later angle and script generation
+ * draw from directly instead of only the compressed summary. Every source
+ * is tagged HIGH/MEDIUM/LOW reliability (see src/lib/sourceReliability.ts)
+ * so the model — and later prompts reusing these sources — knows which
+ * claims to trust for stated fact vs. context only. Saves the result to
+ * the `cases` row. SERVER-ONLY — uses Tavily/Groq secret keys which must
+ * never be read in the browser. Only ever imported from
+ * /api/case/research/route.ts.
+ *
+ * `victimDemographics`/`caseTypeTags`/`solvedStatus` are extracted
+ * cautiously — the prompt explicitly instructs the model to leave
+ * demographic fields null rather than guess, since these feed the
+ * recommendation engine's audience-matching logic and a wrong or
+ * invented tag here would silently bias future recommendations.
+ */
 export async function runCaseResearch(caseId: string, caseName: string): Promise<void> {
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this case");
@@ -125,9 +152,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     throw new Error(`No sources found for "${caseName}"`);
   }
 
-  const sourcesText = results
-    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}\nSource: ${r.url}${r.publishedDate ? ` (${r.publishedDate})` : ""}`)
-    .join("\n\n");
+  const sourcesText = formatSourcesWithReliability(results, 800);
 
   const raw = await groqProvider.generateText(buildAnalysisPrompt(caseName, sourcesText), {
     temperature: 0.3,
@@ -164,7 +189,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     publisher: r.source ?? new URL(r.url).hostname,
     url: r.url,
     date: r.publishedDate ?? null,
-    reliability: "MEDIUM" as const,
+    reliability: classifySourceReliability(r.url),
     type: "web",
   }));
 
