@@ -52,8 +52,8 @@ const WEIGHTS = {
 
 export const RECOMMENDATION_THRESHOLD = 60;
 
-function lensHistoricalScore(lens: Lens | null, lensPerformance: LensPerformance[]): number {
-  if (!lens) return 50;
+function lensHistoricalScore(lens: Lens | null, lensPerformance: LensPerformance[] | undefined | null): number {
+  if (!lens || !lensPerformance) return 50;
   const match = lensPerformance.find((l) => l.lens === lens);
   if (!match || match.videoCount === 0) return 50;
   if (match.avgViewsRelativeToChannel === "above average") return 100;
@@ -87,7 +87,10 @@ function caseTypeOverlapScore(
 }
 
 function regionalMatchScore(candidateRegion: string | null, dna: ChannelDNA): number {
-  const { primaryRegion, isMultiRegion, distribution } = dna.regionDistribution;
+  const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
+  const isMultiRegion = dna.regionDistribution?.isMultiRegion ?? false;
+  const distribution = dna.regionDistribution?.distribution ?? {};
+
   if (!candidateRegion) return 50;
   if (primaryRegion) {
     return candidateRegion.toLowerCase() === primaryRegion.toLowerCase() ? 100 : 5;
@@ -111,7 +114,8 @@ function resolveDisplayRegion(
   candidateRegion: string | null,
   dna: ChannelDNA
 ): { displayRegion: string | null; isRegionException: boolean } {
-  const { primaryRegion, isMultiRegion } = dna.regionDistribution;
+  const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
+  const isMultiRegion = dna.regionDistribution?.isMultiRegion ?? false;
 
   if (primaryRegion) {
     const isException = !!candidateRegion && candidateRegion.toLowerCase() !== primaryRegion.toLowerCase();
