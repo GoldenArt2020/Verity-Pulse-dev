@@ -35,7 +35,6 @@ export interface GeneratedAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
-  mouthWateringSurprises: string[];
   caseWriteup: string;
   latestFindings: FindingItem[];
   titleIdeas: string[];
@@ -51,7 +50,6 @@ interface RawAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
-  mouthWateringSurprises: string[];
 }
 
 interface ParsedResponse {
@@ -63,6 +61,7 @@ interface ParsedResponse {
 function buildPrompt(
   caseName: string,
   summary: string,
+  caseFacts: unknown,
   youtubeVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
   channelDNA: ChannelDNA | null
@@ -80,11 +79,15 @@ function buildPrompt(
 
   const findingsBlock =
     findings.length > 0
-      ? `LATEST NEWS COVERAGE (recent news search results — use these for real, current case status; do not invent anything beyond what's here):\n${findings
-          .slice(0, 6)
-          .map((f, i) => `${i + 1}. ${f.title} (${f.publishedDate ?? "undated"}): ${f.snippet.slice(0, 220)}`)
+      ? `LATEST DEVELOPMENTS (recent web search results — use these for real, current case status; do not invent anything beyond what's here):\n${findings
+          .slice(0, 8)
+          .map((f, i) => `${i + 1}. ${f.title} (${f.publishedDate ?? "undated"}): ${f.snippet.slice(0, 600)}`)
           .join("\n")}`
-      : `No recent news coverage found beyond the case summary.`;
+      : `No recent web coverage found beyond the case summary.`;
+
+  const factsBlock = caseFacts
+    ? `CASE FACTS DOSSIER (every concrete fact gathered on this case — names, ages, dates, charges, figures, quotes. Use these liberally and specifically in caseWriteup, whyWorkOnIt, and curiosityGaps rather than staying generic):\n${JSON.stringify(caseFacts, null, 2)}`
+    : `No detailed facts dossier available yet — work from the case summary and findings below only.`;
 
   const channelBlock = channelDNA
     ? `CHANNEL DNA (this creator's established style/tone/audience — use to judge genuine channel fit):\n${JSON.stringify(channelDNA).slice(0, 1500)}`
@@ -95,6 +98,8 @@ function buildPrompt(
 CASE SUMMARY:
 ${summary}
 
+${factsBlock}
+
 ${findingsBlock}
 
 ${coverageBlock}
@@ -104,19 +109,18 @@ ${channelBlock}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
-  "caseWriteup": string (3-4 sentence narrative writeup of the case grounded strictly in the summary and latest developments above — written like a producer's brief, not a Wikipedia recap),
+  "caseWriteup": string (3-4 sentence narrative writeup grounded in the case facts dossier above — name the actual people, dates, and figures involved, not a vague paraphrase),
   "titleIdeas": string[] (8-10 REAL, publishable YouTube titles for this case, each built using a proven formula observed in the top-performing coverage titles above — vary the formulas used: question hooks, numbered/countdown structure, "The Truth About X", colon-split dramatic statements, name+shocking detail. Do not just restate angle titles — these are click-optimized titles a creator could upload today),
   "angles": [
     {
       "title": string (a compelling angle title),
       "coreQuestion": string (the single question this angle answers),
       "whyItWorks": string (2 concise sentences: why this is underexplored, why it's a fresh entry point),
-      "researchFocus": string[] (4-5 specific research directions grounded in the case summary),
-      "openingHook": string (one narrator sentence to open the episode),
+      "researchFocus": string[] (4-5 specific research directions, referencing named people/events from the facts dossier where relevant),
+      "openingHook": string (one narrator sentence to open the episode, using a real concrete detail from the facts dossier, not generic scene-setting),
       "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above — be concrete, not generic),
-      "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap),
-      "curiosityGaps": string[] (3-4 specific unresolved questions or missing pieces of information that would pull a viewer to watch to the end),
-      "mouthWateringSurprises": string[] (2-3 genuinely surprising, hard-to-believe true facts from this case that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
+      "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap, citing specific dated developments from the facts dossier),
+      "curiosityGaps": string[] (3-4 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
       "scores": {
         "searchDemand": number (0-25),
         "competition": number (0-20, higher = LESS saturated),
@@ -128,7 +132,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise — this response must complete in full within token limits. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary and findings provided — never invent facts. Return ONLY the JSON object.`;
+Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, and findings provided — never invent facts. Return ONLY the JSON object.`;
 }
 
 function tryParseJson(text: string): Partial<ParsedResponse> | null {
@@ -243,12 +247,13 @@ function parseResponse(raw: string): ParsedResponse {
 async function generateAngleBatch(
   caseName: string,
   summary: string,
+  caseFacts: unknown,
   youtubeVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
   channelDNA: ChannelDNA | null
 ): Promise<ParsedResponse> {
   const raw = await groqProvider.generateText(
-    buildPrompt(caseName, summary, youtubeVideos, findings, channelDNA),
+    buildPrompt(caseName, summary, caseFacts, youtubeVideos, findings, channelDNA),
     { temperature: 0.7, maxTokens: 5500 }
   );
   return parseResponse(raw);
@@ -269,7 +274,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: caseRow, error: caseError } = await supabase
     .from("cases")
-    .select("name, summary")
+    .select("name, summary, case_facts")
     .eq("id", caseId)
     .single();
 
@@ -287,9 +292,7 @@ export async function POST(req: NextRequest) {
   const youtubeVideos = await getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []);
 
   const findings = tavilyProvider.isConfigured()
-    ? await tavilyProvider
-        .search(`${caseRow.name} news article latest update trial`, 8, { topic: "news" })
-        .catch(() => [])
+    ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 8).catch(() => [])
     : [];
 
   let channelDNA: ChannelDNA | null = null;
@@ -318,10 +321,10 @@ export async function POST(req: NextRequest) {
 
   let parsed: ParsedResponse;
   try {
-    parsed = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeVideos, findings, channelDNA);
+    parsed = await generateAngleBatch(caseRow.name, caseRow.summary, caseRow.case_facts, youtubeVideos, findings, channelDNA);
   } catch (firstErr) {
     try {
-      parsed = await generateAngleBatch(caseRow.name, caseRow.summary, youtubeVideos, findings, channelDNA);
+      parsed = await generateAngleBatch(caseRow.name, caseRow.summary, caseRow.case_facts, youtubeVideos, findings, channelDNA);
     } catch (secondErr) {
       console.error("generate-angle: both attempts failed", firstErr, secondErr);
       return NextResponse.json(
@@ -372,7 +375,6 @@ export async function POST(req: NextRequest) {
       channel_fit: a.channelFit,
       why_work_on_it: a.whyWorkOnIt,
       curiosity_gaps: a.curiosityGaps,
-      mouth_watering_surprises: a.mouthWateringSurprises,
       latest_findings: latestFindings,
       title_ideas: parsed.titleIdeas,
     }));
@@ -381,7 +383,7 @@ export async function POST(req: NextRequest) {
       .from("angles")
       .insert(rowsToInsert)
       .select(
-        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, mouth_watering_surprises, latest_findings, title_ideas"
+        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
       );
 
     if (insertError || !inserted) {
@@ -405,7 +407,6 @@ export async function POST(req: NextRequest) {
       channelFit: row.channel_fit ?? "",
       whyWorkOnIt: row.why_work_on_it ?? "",
       curiosityGaps: row.curiosity_gaps ?? [],
-      mouthWateringSurprises: row.mouth_watering_surprises ?? [],
       latestFindings: row.latest_findings ?? [],
       titleIdeas: row.title_ideas ?? [],
     }));
