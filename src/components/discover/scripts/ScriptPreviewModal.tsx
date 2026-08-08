@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Copy, Check, Loader2, X, FolderOpen } from "lucide-react";
-import type { SEOMetadata } from "@/hooks/useScriptGeneration";
+import type { ScriptSeoSummary } from "@/services/scriptWriter";
 
 export function ScriptPreviewModal({
   script,
@@ -15,7 +15,7 @@ export function ScriptPreviewModal({
 }: {
   script: string;
   wordCount: number;
-  seo: SEOMetadata | null;
+  seo: ScriptSeoSummary | null;
   primaryLabel?: string;
   primaryLoading?: boolean;
   onPrimaryAction: () => void;
@@ -48,14 +48,13 @@ export function ScriptPreviewModal({
         <div className="flex-1 overflow-y-auto p-5">
           {seo && (
             <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <p className="text-xs font-semibold text-emerald-400">SEO</p>
-              <p className="mt-2 text-sm font-medium text-white">{seo.title}</p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-400">{seo.description}</p>
-              {seo.tags?.length > 0 && (
+              <p className="text-xs font-semibold text-emerald-400">SEO Snapshot (for your video upload)</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-400">{seo.description}</p>
+              {seo.keywords?.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {seo.tags.map((t) => (
-                    <span key={t} className="rounded-md bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-300">
-                      {t}
+                  {seo.keywords.map((k) => (
+                    <span key={k} className="rounded-md bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-300">
+                      {k}
                     </span>
                   ))}
                 </div>

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Sparkles, FileText, Loader2, ExternalLink } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
+import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
+import type { ScriptSeoSummary } from "@/services/scriptWriter";
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
@@ -27,11 +29,16 @@ export function SelectedAnglePanel({
   const [writing, setWriting] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
+    null
+  );
+  const [openingProject, setOpeningProject] = useState(false);
 
   async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
     setWriting(true);
     setWriteError(null);
+    setDialogOpen(false);
     try {
       const res = await fetch("/api/generate-script", {
         method: "POST",
@@ -41,12 +48,36 @@ export function SelectedAnglePanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
       onScriptGenerated(angle.id, data.script);
-      setDialogOpen(false);
-      router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+      // Show the script for review before doing anything else with it.
+      setPreview({ script: data.script, wordCount: data.wordCount ?? wordCount, seo: data.seo ?? null });
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
     } finally {
       setWriting(false);
+    }
+  }
+
+  // Get-or-create the project row for this case (see POST /api/projects),
+  // then navigate to its real project id. Projects default to a non-finished
+  // status, so this lands automatically in the "Ongoing" bucket on
+  // /projects, opened straight to this angle's Analyze & Refine work.
+  async function handleOpenInProject() {
+    if (!angle) return;
+    setOpeningProject(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId, status: "NARRATIVE" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to open project");
+      setPreview(null);
+      router.push(`/projects/${data.id}?angle=${angle.id}`);
+    } catch (err) {
+      setWriteError(err instanceof Error ? err.message : "Failed to open project");
+    } finally {
+      setOpeningProject(false);
     }
   }
 
@@ -169,6 +200,18 @@ export function SelectedAnglePanel({
         onSelect={handleWriteScript}
         busy={writing}
       />
+
+      {preview && (
+        <ScriptPreviewModal
+          script={preview.script}
+          wordCount={preview.wordCount}
+          seo={preview.seo}
+          primaryLabel="Open in Project"
+          primaryLoading={openingProject}
+          onPrimaryAction={handleOpenInProject}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }
