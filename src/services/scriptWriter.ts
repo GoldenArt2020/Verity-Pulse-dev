@@ -100,9 +100,10 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** ~1,700 words/section keeps each Groq call well inside safe output-token limits. */
+/** ~2,600 words/section — fewer, larger sections means fewer sequential
+ * Groq round-trips, which matters a lot on Vercel Hobby's 60s hard cap. */
 function sectionCountFor(wordCount: ScriptWordCount): number {
-  return Math.max(3, Math.ceil(wordCount / 1700));
+  return Math.max(2, Math.ceil(wordCount / 2600));
 }
 
 function buildOutlinePrompt(
@@ -317,7 +318,7 @@ export async function generateScriptForAngle(
   let previousTail: string | null = null;
 
   for (const plan of plans) {
-    const maxTokens = Math.min(3200, Math.max(600, Math.ceil(plan.targetWords * 1.8)));
+    const maxTokens = Math.min(4096, Math.max(600, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
       groqProvider.generateText(buildSectionPrompt(caseRow, angle, brief, channelDNA, outline, plan, previousTail), {
         temperature: 0.65,

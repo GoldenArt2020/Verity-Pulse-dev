@@ -4,9 +4,9 @@ import { Loader2, X } from "lucide-react";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
 const LABELS: Record<ScriptWordCount, { title: string; sub: string }> = {
-  5000: { title: "5,000 words", sub: "~30–35 min narration · shorter, tighter episode" },
-  10000: { title: "10,000 words", sub: "~60–70 min narration · standard full-length episode" },
-  15000: { title: "15,000 words", sub: "~90–100 min narration · deep-dive, multi-part episode" },
+  3000: { title: "3,000 words", sub: "~18–20 min narration · short, tight episode" },
+  6000: { title: "6,000 words", sub: "~35–40 min narration · standard episode" },
+  9000: { title: "9,000 words", sub: "~55–60 min narration · extended, in-depth episode" },
 };
 
 export function ScriptLengthDialog({

@@ -2,19 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, FileText, Loader2, ExternalLink, X } from "lucide-react";
+import { Sparkles, FileText, Loader2, ExternalLink } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
+import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
+import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
 }
-
-const WORD_COUNT_OPTIONS = [
-  { value: 5000, label: "5,000 words", hint: "Short-form, tight and punchy" },
-  { value: 10000, label: "10,000 words", hint: "Standard long-form deep dive" },
-  { value: 15000, label: "15,000 words", hint: "Full documentary-length script" },
-] as const;
 
 export function SelectedAnglePanel({
   angle,
@@ -32,9 +28,8 @@ export function SelectedAnglePanel({
   const [writeError, setWriteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  async function handleWriteScript(wordCount: number) {
+  async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
-    setDialogOpen(false);
     setWriting(true);
     setWriteError(null);
     try {
@@ -46,6 +41,7 @@ export function SelectedAnglePanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
       onScriptGenerated(angle.id, data.script);
+      setDialogOpen(false);
       router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
@@ -167,33 +163,12 @@ export function SelectedAnglePanel({
         </>
       )}
 
-      {dialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-800/60 bg-slate-900 p-5 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-white">Choose script length</h4>
-              <button onClick={() => setDialogOpen(false)} className="rounded-md p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Every script is written with high-SEO structure baked in, regardless of length.
-            </p>
-            <div className="mt-4 space-y-2">
-              {WORD_COUNT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => handleWriteScript(opt.value)}
-                  className="flex w-full flex-col items-start rounded-xl border border-slate-800/60 bg-slate-950/40 px-3.5 py-2.5 text-left transition hover:border-blue-500/60 hover:bg-slate-900"
-                >
-                  <span className="text-sm font-semibold text-white">{opt.label}</span>
-                  <span className="text-[11px] text-slate-500">{opt.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <ScriptLengthDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSelect={handleWriteScript}
+        busy={writing}
+      />
     </div>
   );
 }
