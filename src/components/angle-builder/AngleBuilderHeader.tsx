@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, Sparkles, Loader2, ChevronDown, Info } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
+import { useChannelDNA } from "@/hooks/useChannelDNA";
+import { useChannelId } from "@/hooks/useChannelId";
+import { personalizeCaseScore } from "@/lib/personalizeCaseScore";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -27,7 +30,7 @@ function InfoTooltip({ text }: { text: string }) {
         <Info className="h-3 w-3" />
       </button>
       {open && (
-        <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
           {text}
           <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
         </span>
@@ -49,6 +52,20 @@ export function AngleBuilderHeader({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const { channelHandle } = useChannelId();
+  const { dna, loading: dnaLoading } = useChannelDNA();
+
+  const scores = personalizeCaseScore(
+    {
+      opportunityScore: caseData.opportunity_score,
+      competitionScore: caseData.competition_score,
+      coverageScore: caseData.coverage_score,
+      caseTypeTags: caseData.tags ?? [],
+      country: caseData.country,
+    },
+    dna
+  );
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -151,46 +168,56 @@ export function AngleBuilderHeader({
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-3 gap-4 border-t border-slate-800/60 pt-5">
-        <div className="text-center">
-          <p className="mb-1 flex items-center justify-center gap-1 text-[11px] text-slate-500">
-            Opportunity Score
-            <InfoTooltip text="Overall strength of this case as a documentary opportunity — combines how much verifiable evidence exists, how well-documented the case is, and how much public interest it's likely to draw. Higher is better." />
-          </p>
-          <div className="relative mx-auto h-16 w-16">
-            <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
-              <circle cx="18" cy="18" r="15.5" fill="none" stroke="#1e293b" strokeWidth="3" />
-              <circle
-                cx="18" cy="18" r="15.5" fill="none" stroke="#10B981" strokeWidth="3"
-                strokeDasharray="97.4"
-                strokeDashoffset={97.4 * (1 - (caseData.opportunity_score ?? 0) / 100)}
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
-              {caseData.opportunity_score ?? "—"}
-            </span>
+      <div className="mt-5 border-t border-slate-800/60 pt-3">
+        <p className="text-center text-[10px] font-medium uppercase tracking-wide text-slate-600">
+          {dnaLoading
+            ? "Loading channel profile…"
+            : scores.isPersonalized
+                ? `Personalized for ${channelHandle ?? "your channel"}`
+              : "General score — connect a channel to personalize"}
+        </p>
+
+        <div className="mt-3 grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <p className="mb-1 flex items-center justify-center gap-1 text-[11px] text-slate-500">
+              Opportunity Score
+              <InfoTooltip text="How strong a fit this case is for the connected channel specifically — blends the case's overall documentary strength with how well its case type and region match this channel's proven audience. Higher is better." />
+            </p>
+            <div className="relative mx-auto h-16 w-16">
+              <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#1e293b" strokeWidth="3" />
+                <circle
+                  cx="18" cy="18" r="15.5" fill="none" stroke="#10B981" strokeWidth="3"
+                  strokeDasharray="97.4"
+                  strokeDashoffset={97.4 * (1 - scores.opportunityScore / 100)}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
+                {scores.opportunityScore}
+              </span>
+            </div>
           </div>
-        </div>
 
-        <div className="text-center">
-          <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
-            YouTube Coverage
-            <InfoTooltip text="A 0–10 estimate of how much true-crime documentary coverage this case already has on YouTube. Lower means the story is fresher and less oversaturated — more room for a new take." />
-          </p>
-          <p className="mt-1 text-xl font-semibold text-white">
-            {caseData.coverage_score != null ? `${caseData.coverage_score}/10` : "—"}
-          </p>
-        </div>
+          <div className="text-center">
+            <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+              YouTube Coverage
+              <InfoTooltip text="A 0–10 estimate of how much true-crime documentary coverage this case already has on YouTube overall. This is a market-wide fact, so it doesn't change per channel — lower means the story is fresher." />
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {scores.coverageScore != null ? `${scores.coverageScore}/10` : "—"}
+            </p>
+          </div>
 
-        <div className="text-center">
-          <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
-            Competition Score
-            <InfoTooltip text="0–100 estimate of how saturated this case is across media and YouTube coverage combined. A higher score means more existing coverage and more competition — you'll want a sharper, more distinct angle to stand out." />
-          </p>
-          <p className="mt-1 text-xl font-semibold text-white">
-            {caseData.competition_score ?? "—"} <span className="text-[11px] font-normal text-slate-500">/100</span>
-          </p>
+          <div className="text-center">
+            <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+              Competition Score
+              <InfoTooltip text="0–100 estimate of how saturated this case is, adjusted for the connected channel's niche. If most existing coverage sits outside this channel's proven case-type strength, the effective competition for this channel is shown as lower than the raw global number." />
+            </p>
+            <p className="mt-1 text-xl font-semibold text-white">
+              {scores.competitionScore} <span className="text-[11px] font-normal text-slate-500">/100</span>
+            </p>
+          </div>
         </div>
       </div>
     </div>
