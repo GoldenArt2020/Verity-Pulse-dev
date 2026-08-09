@@ -309,7 +309,7 @@ export async function generateScriptForAngle(
     throw new Error("Tavily is not configured — cannot research this script");
   }
   if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot write this script");
+    throw new Error("Gemini is not configured — cannot write this script");
   }
 
   const supabase = await createClient();
