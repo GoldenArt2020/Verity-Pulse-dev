@@ -5,6 +5,7 @@ import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
+import { deriveChannelSubniche } from "@/lib/channelSubniche";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
@@ -36,6 +37,13 @@ export interface Recommendation {
 
 interface TopicExtraction {
   topics: string[];
+}
+
+/** Every case name + which channel(s) have already claimed it, keyed by
+ * normalized title, with each claiming channel's derived subniche. */
+interface ClaimedAssignment {
+  channelIds: Set<string>;
+  subniches: Set<string>;
 }
 
 function buildTopicExtractionPrompt(videos: YouTubeVideoDetail[]): string {
@@ -104,11 +112,11 @@ function normalizeTitle(title: string): string {
  *
  * This pulls the titles currently live in every OTHER channel's
  * recommendations column, so we can both instruct the model to avoid them
- * and hard-filter them out afterward as a safety net. Because
- * `channels.recommendations` gets fully overwritten on every regeneration
- * (not appended to), this naturally stays fresh rather than permanently
- * locking a case out forever — once another channel's batch is
- * regenerated without that case, it becomes available again.
+ * and hard-filter them out afterward. This is a same-day safety net only —
+ * `channels.recommendations` gets fully overwritten on every regeneration,
+ * so a title that rolls off someone else's list stops being excluded here.
+ * That volatility is exactly why claimed-case exclusion (below) exists as
+ * the permanent record.
  */
 async function fetchExcludedTitles(
   supabase: SupabaseClient,
@@ -129,6 +137,71 @@ async function fetchExcludedTitles(
     }
   }
   return excluded;
+}
+
+/**
+ * The permanent record: every `cases` row a channel has actually CLAIMED
+ * (channel_id set — see getOrCreateCase.ts) survives forever, unlike a
+ * channel's live `recommendations` list. This is what makes the "never
+ * suggest the same case to a 3rd channel, never suggest it twice within
+ * the same subniche" rule durable rather than something that quietly
+ * decays as recommendation batches get regenerated.
+ */
+async function fetchClaimedAssignments(
+  supabase: SupabaseClient,
+  currentChannelId: string
+): Promise<Map<string, ClaimedAssignment>> {
+  const { data, error } = await supabase
+    .from("cases")
+    .select("name, channel_id, channels(channel_dna)")
+    .not("channel_id", "is", null)
+    .neq("channel_id", currentChannelId);
+
+  if (error || !data) return new Map();
+
+  const map = new Map<string, ClaimedAssignment>();
+  for (const row of data as unknown as { name: string; channel_id: string; channels: { channel_dna: unknown } | null }[]) {
+    if (!row.name || !row.channel_id) continue;
+    const key = normalizeTitle(row.name);
+    const subniche = deriveChannelSubniche(row.channels?.channel_dna as ChannelDNA | null);
+    const entry = map.get(key) ?? { channelIds: new Set<string>(), subniches: new Set<string>() };
+    entry.channelIds.add(row.channel_id);
+    entry.subniches.add(subniche);
+    map.set(key, entry);
+  }
+  return map;
+}
+
+/**
+ * A claimed case is off-limits to this channel when either:
+ *  - it's already claimed by 2+ OTHER channels (never let a case reach a
+ *    3rd claimant), or
+ *  - it's already claimed by any channel sharing this channel's subniche
+ *    (zero-tolerance for same-subniche overlap, even a single one).
+ */
+function isBlockedByAssignment(
+  title: string,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
+): boolean {
+  const entry = assignments.get(normalizeTitle(title));
+  if (!entry) return false;
+  if (entry.channelIds.size >= 2) return true;
+  if (entry.subniches.has(currentSubniche)) return true;
+  return false;
+}
+
+function assignmentExclusionSample(
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
+): Set<string> {
+  const set = new Set<string>();
+  for (const [title, entry] of assignments) {
+    if (entry.channelIds.size >= 2 || entry.subniches.has(currentSubniche)) {
+      set.add(title);
+    }
+  }
+  return set;
 }
 
 function buildExclusionBlock(excludedTitles: Set<string>): string {
@@ -244,11 +317,17 @@ function scoreAndFilter(
   candidates: ScoredCandidate[],
   dna: ChannelDNA | null | undefined,
   trendStatus: TrendStatus,
-  excludedTitles: Set<string>
+  excludedTitles: Set<string>,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
 ): Recommendation[] {
-  // Safety net: drop anything matching an excluded title even if the model
-  // ignored the instruction not to suggest it.
-  const filtered = candidates.filter((c) => !excludedTitles.has(normalizeTitle(c.title)));
+  // Safety net: drop anything matching an excluded/claimed title even if
+  // the model ignored the instruction not to suggest it.
+  const filtered = candidates.filter(
+    (c) =>
+      !excludedTitles.has(normalizeTitle(c.title)) &&
+      !isBlockedByAssignment(c.title, assignments, currentSubniche)
+  );
 
   if (!dna) {
     return filtered.map((c) => ({
@@ -340,7 +419,9 @@ const ABOUT_TO_TREND_QUERIES = [
 async function fetchPersonalizedRecommendations(
   topics: string[],
   dna: ChannelDNA | null | undefined,
-  excludedTitles: Set<string>
+  excludedTitles: Set<string>,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
 ): Promise<Recommendation[]> {
   const topicsJoined = topics.slice(0, 5).join(", ");
   // Base query anchored on the channel's own covered topics, plus two
@@ -364,13 +445,15 @@ async function fetchPersonalizedRecommendations(
     { temperature: 0.4, maxTokens: 2600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
-  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles);
+  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
 }
 
 async function fetchTrendRecommendations(
   label: "currently-trending" | "about-to-trend",
   dna: ChannelDNA | null | undefined,
-  excludedTitles: Set<string>
+  excludedTitles: Set<string>,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
 ): Promise<Recommendation[]> {
   const queries = label === "currently-trending" ? CURRENTLY_TRENDING_QUERIES : ABOUT_TO_TREND_QUERIES;
 
@@ -394,7 +477,7 @@ async function fetchTrendRecommendations(
     { temperature: 0.4, maxTokens: 2600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
-  return scoreAndFilter(candidates ?? [], dna, label, excludedTitles);
+  return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
 }
 
 /**
@@ -443,14 +526,24 @@ export async function generateRecommendations(
     ];
   }
 
-  const excludedTitles = await fetchExcludedTitles(supabase, channelId);
+  const currentSubniche = deriveChannelSubniche(channelDNA);
+
+  const [liveExcludedTitles, assignments] = await Promise.all([
+    fetchExcludedTitles(supabase, channelId),
+    fetchClaimedAssignments(supabase, channelId),
+  ]);
+
+  const excludedTitles = new Set([
+    ...liveExcludedTitles,
+    ...assignmentExclusionSample(assignments, currentSubniche),
+  ]);
 
   const [personalized, currentlyTrending, aboutToTrend] = await Promise.all([
     topics.length > 0
-      ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles)
+      ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles, assignments, currentSubniche)
       : Promise.resolve([]),
-    fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles),
-    fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles),
+    fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles, assignments, currentSubniche),
+    fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
   ]);
 
   const recommendations = [...personalized, ...currentlyTrending, ...aboutToTrend];

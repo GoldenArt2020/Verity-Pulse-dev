@@ -18,6 +18,7 @@ export const tavilyProvider: SearchProvider = {
           max_results: maxResults,
           search_depth: "advanced",
           topic: options?.topic ?? "general",
+          ...(options?.topic === "news" && options?.days ? { days: options.days } : {}),
         }),
       });
 

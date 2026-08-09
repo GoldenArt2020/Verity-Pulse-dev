@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getMyChannelIds } from "@/lib/myChannelIds";
 
 interface DashboardStats {
   totalCases: number;
@@ -33,10 +34,18 @@ export function useDashboardStats() {
       setLoading(true);
       setError(null);
       try {
+        const channelIds = await getMyChannelIds();
+        if (!active) return;
+        if (channelIds.length === 0) {
+          setStats(null);
+          return;
+        }
+
         const supabase = createClient();
         const { data, error: dbError } = await supabase
           .from("cases")
-          .select("name, category, opportunity_score, created_at");
+          .select("name, category, opportunity_score, created_at")
+          .in("channel_id", channelIds);
 
         if (!active) return;
         if (dbError) {

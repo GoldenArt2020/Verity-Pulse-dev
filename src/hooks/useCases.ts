@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getMyChannelIds } from "@/lib/myChannelIds";
 
 interface CaseRow {
   id: string;
@@ -25,8 +26,15 @@ export function useCases() {
     async function load() {
       setLoading(true);
       try {
+        const channelIds = await getMyChannelIds();
+        if (!active) return;
+        if (channelIds.length === 0) {
+          setCases([]);
+          return;
+        }
+
         const supabase = createClient();
-        const { data, error } = await supabase.from("cases").select("*");
+        const { data, error } = await supabase.from("cases").select("*").in("channel_id", channelIds);
 
         if (!active) return;
         if (error) setError(error.message);

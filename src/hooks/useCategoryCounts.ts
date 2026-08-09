@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getMyChannelIds } from "@/lib/myChannelIds";
 
 export interface CategoryCount {
   label: string;
@@ -15,8 +16,16 @@ export function useCategoryCounts() {
   useEffect(() => {
     let active = true;
     async function load() {
+      const channelIds = await getMyChannelIds();
+      if (!active) return;
+      if (channelIds.length === 0) {
+        setCategories([]);
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClient();
-      const { data, error } = await supabase.from("cases").select("category");
+      const { data, error } = await supabase.from("cases").select("category").in("channel_id", channelIds);
       if (!active) return;
       if (error || !data) {
         setLoading(false);
