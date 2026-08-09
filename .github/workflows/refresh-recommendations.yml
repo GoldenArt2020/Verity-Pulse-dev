@@ -1,0 +1,15 @@
+name: Refresh recommendations (4x daily)
+
+on:
+  schedule:
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call recommendations cron endpoint
+        run: |
+          curl -sf -X GET "${{ secrets.APP_URL }}/api/cron/recommendations" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
