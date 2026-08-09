@@ -14,6 +14,10 @@ export const TRUE_CRIME_RETENTION_PRINCIPLES: string[] = [
   "End every section other than the final one on an open question, unresolved detail, or rising tension — a cliffhanger that pulls the viewer into the next section rather than a settled, resolved beat.",
   "For long-form scripts, treat the middle sections as the highest drop-off risk — deploy pattern interrupts and mini-reveals more deliberately through the middle third, not just at the open and close.",
   "Vary sentence rhythm and pacing — short, punchy sentences at tension points; longer, descriptive sentences during scene-setting — to keep the narration audibly dynamic rather than monotone.",
+  "NEVER repeat the same rhetorical question, fact, or framing more than once across the entire script. If an earlier section already asked something like 'could this have been prevented,' no later section may ask any version of that question again — every section must add genuinely new information or move the story forward, never restate what's already been said.",
+  "NEVER use stock article-writing filler: banned phrases include 'as we delve into,' 'it's essential to consider,' 'the question on everyone's mind,' 'let's take a look,' 'in conclusion,' 'as the investigation continues,' 'stay tuned,' and any sentence that exists only to transition rather than to advance the story. Every sentence must either reveal a fact, build tension, or move time forward — cut anything that doesn't.",
+  "When the facts dossier includes an exact quoted statement — a confession, a witness account, a 911 call line, a text message, a courtroom exchange — quote it directly and attribute it (e.g. \"she told her mother, '...'\") rather than paraphrasing it into indirect description. Real quoted material, not summary, is what makes a script feel investigative rather than recapped.",
+  "Plant a specific, concrete promise early in the script — a detail, object, or question the viewer is told to remember — and pay it off explicitly later. This is a deliberate narrative device (e.g. 'keep that detail in mind'), not a vague sense of mystery.",
 ];
 
 export const LONG_SCRIPT_WORD_THRESHOLD = 10000;

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
+import { geminiProvider } from "@/providers/ai/geminiProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 import { TRUE_CRIME_RETENTION_PRINCIPLES, LONG_SCRIPT_WORD_THRESHOLD } from "@/constants/retentionTechniques";
@@ -103,6 +104,22 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * The actual narration prose (outline + section writing) is noticeably
+ * better on Gemini 2.5 Pro than on Groq's llama-3.3-70b — llama has a
+ * known weakness on long-form creative generation where it starts
+ * re-covering ground it already wrote a few sections back instead of
+ * advancing the story, which is exactly the repetition problem this was
+ * built to fix. Research/SEO extraction stays on Groq (fast, structured
+ * JSON, quality-insensitive) since Gemini's latency isn't worth paying for
+ * calls that aren't actually prose. Falls back to Groq automatically if no
+ * Gemini key is configured, so nothing breaks for environments that
+ * haven't added one yet.
+ */
+function proseProvider() {
+  return geminiProvider.isConfigured() ? geminiProvider : groqProvider;
+}
+
 /** ~2,600 words/section — fewer, larger sections means fewer sequential
  * Groq round-trips, which matters a lot on Vercel Hobby's 60s hard cap. */
 function sectionCountFor(wordCount: ScriptWordCount): number {
@@ -201,7 +218,7 @@ function buildSectionPrompt(
 
   const continuityBlock = previousTail
     ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense.`
-    : `THIS IS THE OPENING of the full script. Open cold — hook the viewer within the first 15-30 seconds of narration, before any scene-setting or preamble. Open with this hook direction, in your own words: ${angle.openingHook}`;
+    : `THIS IS THE OPENING of the full script. Open cold — hook the viewer within the first 15-30 seconds of narration, before any scene-setting or preamble. Open with this hook direction, in your own words: ${angle.openingHook}\n\nSomewhere in this opening, plant a specific, concrete detail, object, or question and explicitly tell the viewer to hold onto it (e.g. "keep that in mind" / "remember that name" — your own phrasing, not this exact line). That planted detail must genuinely pay off later in the script — do not plant something and abandon it.`;
 
   const ctaBlock = plan.includeCTA
     ? `Include exactly ONE natural, spoken subscribe/follow moment in this section, phrased as a line the narrator would actually say — not labeled, not bracketed. Use this guidance for where/how it fits naturally:\n${brief.ctaGuidance}`
@@ -215,7 +232,7 @@ function buildSectionPrompt(
 
   const cliffhangerBlock = !isLast
     ? `This is NOT the final section — end it on an open question, unresolved detail, or rising tension. Do not let this section land on a settled, resolved beat; leave a thread that pulls the viewer into the next section.`
-    : `This IS the final section — this is where the withheld resolution/reveal from earlier in the outline should land and the core question gets fully answered.`;
+    : `This IS the final section — this is where the withheld resolution/reveal from earlier in the outline should land and the core question gets fully answered. Do not end on a trailing-off restatement of the core question or a generic "stay tuned" line. Close on a specific, reflective beat that returns to the central figure as a person, not as a case file — one concrete image or detail that humanizes them, landing the emotional weight rather than just closing the procedural facts.`;
 
   const longScriptBlock =
     wordCount >= LONG_SCRIPT_WORD_THRESHOLD && !isFirst && !isLast
@@ -281,14 +298,16 @@ Return ONLY the JSON object.`;
  *      anything more recent than the dossier. Every additional source is
  *      tagged HIGH/MEDIUM/LOW reliability so the model knows which claims
  *      to trust for stated fact vs. context only.
- *   2. Outline   — Groq breaks the target word count into N sequential
- *      sections, structured as a withhold/reveal arc (see
- *      TRUE_CRIME_RETENTION_PRINCIPLES) rather than resolving evenly.
- *   3. Sections  — Groq writes each section in order, carrying the tail of
- *      the previous section forward for continuity, with SEO, CTA, and the
- *      fixed retention techniques (cold open, pattern interrupts, spread
- *      facts, cliffhanger endings) applied per-section so long scripts stay
- *      coherent and don't sag in the middle.
+ *   2. Outline   — Gemini (falls back to Groq) breaks the target word
+ *      count into N sequential sections, structured as a withhold/reveal
+ *      arc (see TRUE_CRIME_RETENTION_PRINCIPLES) rather than resolving
+ *      evenly.
+ *   3. Sections  — Gemini (falls back to Groq) writes each section in
+ *      order, carrying the tail of the previous section forward for
+ *      continuity, with SEO, CTA, and the fixed retention techniques (cold
+ *      open, pattern interrupts, spread facts, cliffhanger endings, zero
+ *      repetition, real quoted material) applied per-section so long
+ *      scripts stay coherent and don't sag or loop in the middle.
  *   4. SEO       — a short Groq pass extracts keywords/description from the
  *      finished script for the creator to reuse when publishing.
  *
@@ -309,7 +328,7 @@ export async function generateScriptForAngle(
     throw new Error("Tavily is not configured — cannot research this script");
   }
   if (!groqProvider.isConfigured()) {
-    throw new Error("Gemini is not configured — cannot write this script");
+    throw new Error("Groq is not configured — cannot research this script");
   }
 
   const supabase = await createClient();
@@ -361,7 +380,7 @@ export async function generateScriptForAngle(
 
   const sectionCount = sectionCountFor(wordCount);
   const outlineRaw = await withRetry(() =>
-    groqProvider.generateText(buildOutlinePrompt(caseData, angle, brief, sectionCount, wordCount), {
+    proseProvider().generateText(buildOutlinePrompt(caseData, angle, brief, sectionCount, wordCount), {
       temperature: 0.4,
       maxTokens: 700,
     })
@@ -381,7 +400,7 @@ export async function generateScriptForAngle(
   for (const plan of plans) {
     const maxTokens = Math.min(4096, Math.max(600, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      groqProvider.generateText(
+      proseProvider().generateText(
         buildSectionPrompt(caseData, angle, brief, channelDNA, outline, plan, previousTail, wordCount),
         { temperature: 0.65, maxTokens }
       )
