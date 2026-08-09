@@ -82,6 +82,7 @@ export function SelectedAnglePanel({
   async function handleOpenInProject() {
     if (!angle) return;
     setOpeningProject(true);
+    setWriteError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -111,102 +112,48 @@ export function SelectedAnglePanel({
       </div>
 
       {!angle && (
-        <div className="mt-6 flex flex-col items-center gap-2 py-8 text-center">
-          <Sparkles className="h-5 w-5 text-slate-600" />
-          <p className="text-xs text-slate-500">Select an angle from the list to see details here.</p>
+        <div className="mt-6 flex flex-col items-center py-8 text-center">
+          <Sparkles className="h-6 w-6 text-slate-600" />
+          <p className="mt-3 text-xs text-slate-500">Select an angle from the list to see details here.</p>
         </div>
       )}
 
       {angle && (
         <>
-          <div className="mt-3 flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 text-sm font-bold text-emerald-400">
-              {totalScore(angle)}
+          <div className="mt-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 border-emerald-500 text-xs font-bold text-emerald-400">
+                {totalScore(angle)}
+              </div>
+              <h4 className="text-sm font-semibold text-white">{angle.title}</h4>
             </div>
-            <p className="flex-1 text-lg font-semibold text-white">{angle.title}</p>
+            <p className="mt-2 text-xs italic leading-relaxed text-slate-500">{angle.coreQuestion}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">{angle.whyItWorks}</p>
           </div>
 
-          {angle.caseWriteup && (
+          {angle.researchFocus?.length > 0 && (
             <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Case Writeup</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.caseWriteup}</p>
-            </>
-          )}
-
-          <p className="mt-4 text-xs font-medium text-slate-400">Core Question</p>
-          <p className="mt-1 text-sm italic leading-relaxed text-slate-300">{angle.coreQuestion}</p>
-
-          <p className="mt-4 text-xs font-medium text-slate-400">Opening Hook</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-300">&quot;{angle.openingHook}&quot;</p>
-
-          {angle.channelFit && (
-            <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Why This Fits Your Channel</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.channelFit}</p>
-            </>
-          )}
-
-          {angle.whyWorkOnIt && (
-            <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Why Work On This Now</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">{angle.whyWorkOnIt}</p>
-            </>
-          )}
-
-          {(angle.curiosityGaps?.length ?? 0) > 0 && (
-            <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Curiosity Gaps</p>
-              <ul className="mt-1.5 space-y-1">
-                {angle.curiosityGaps.map((g) => (
-                  <li key={g} className="flex items-start gap-1.5 text-[13px] text-slate-300">
-                    <span className="mt-0.5 text-amber-400">?</span> {g}
+              <p className="mt-5 text-xs font-semibold text-slate-300">Research Focus</p>
+              <ul className="mt-2 space-y-1.5">
+                {angle.researchFocus.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs leading-snug text-slate-400">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-blue-400" />
+                    {f}
                   </li>
                 ))}
               </ul>
             </>
           )}
 
-          {(angle.mouthWateringSurprises?.length ?? 0) > 0 && (
-            <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Mouth-Watering Surprises</p>
-              <ul className="mt-1.5 space-y-1">
-                {angle.mouthWateringSurprises.map((s) => (
-                  <li key={s} className="flex items-start gap-1.5 text-[13px] text-slate-300">
-                    <span className="mt-0.5 text-pink-400">★</span> {s}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          <p className="mt-4 text-xs font-medium text-slate-400">Research Focus</p>
-          <ul className="mt-1.5 space-y-1">
-            {(angle.researchFocus ?? []).map((r) => (
-              <li key={r} className="flex items-start gap-1.5 text-[13px] text-slate-300">
-                <span className="mt-0.5 text-emerald-400">✓</span> {r}
-              </li>
-            ))}
-          </ul>
-
-          {(angle.latestFindings?.length ?? 0) > 0 && (
-            <>
-              <p className="mt-4 text-xs font-medium text-slate-400">Latest News Coverage</p>
-              <ul className="mt-1.5 space-y-2">
-                {angle.latestFindings.map((f) => (
-                  <li key={f.url} className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2">
-                    <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] font-medium text-blue-400 hover:text-blue-300">
-                      {f.title} <ExternalLink className="h-3 w-3 shrink-0" />
-                    </a>
-                    <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{f.snippet}</p>
-                    {f.publishedDate && <p className="mt-0.5 text-[10px] text-slate-600">{f.publishedDate}</p>}
-                  </li>
-                ))}
-              </ul>
-            </>
+          {angle.openingHook && (
+            <div className="mt-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+              <p className="text-[11px] font-semibold text-blue-400">Opening Hook</p>
+              <p className="mt-1 text-xs italic leading-relaxed text-slate-300">{angle.openingHook}</p>
+            </div>
           )}
 
           <div className="mt-5">
-            {writeError && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
+            {writeError && !preview && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
             {angle.script ? (
               <button
                 onClick={handleReopenScript}
@@ -242,8 +189,12 @@ export function SelectedAnglePanel({
           seo={preview.seo}
           primaryLabel="Open in Project"
           primaryLoading={openingProject}
+          primaryError={writeError}
           onPrimaryAction={handleOpenInProject}
-          onClose={() => setPreview(null)}
+          onClose={() => {
+            setPreview(null);
+            setWriteError(null);
+          }}
         />
       )}
     </div>

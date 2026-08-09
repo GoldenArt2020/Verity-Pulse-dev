@@ -10,6 +10,7 @@ export function ScriptPreviewModal({
   seo,
   primaryLabel = "Open in Project",
   primaryLoading = false,
+  primaryError = null,
   onPrimaryAction,
   onClose,
 }: {
@@ -18,6 +19,7 @@ export function ScriptPreviewModal({
   seo: ScriptSeoSummary | null;
   primaryLabel?: string;
   primaryLoading?: boolean;
+  primaryError?: string | null;
   onPrimaryAction: () => void;
   onClose: () => void;
 }) {
@@ -67,30 +69,37 @@ export function ScriptPreviewModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-slate-800/60 p-5">
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300"
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? "Copied" : "Copy script"}
-          </button>
+        <div className="flex flex-col gap-2 border-t border-slate-800/60 p-5">
+          {primaryError && (
+            <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+              {primaryError}
+            </p>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy script"}
+            </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-slate-700 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50"
-            >
-              Close
-            </button>
-            <button
-              onClick={onPrimaryAction}
-              disabled={primaryLoading}
-              className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-60"
-            >
-              {primaryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-              {primaryLoading ? "Opening..." : primaryLabel}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="rounded-lg border border-slate-700 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50"
+              >
+                Close
+              </button>
+              <button
+                onClick={onPrimaryAction}
+                disabled={primaryLoading}
+                className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-60"
+              >
+                {primaryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                {primaryLoading ? "Opening..." : primaryLabel}
+              </button>
+            </div>
           </div>
         </div>
       </div>
