@@ -65,7 +65,7 @@ List the distinct real case/person names you can confidently identify (max 10). 
 }
 
 const CANDIDATE_SHAPE = `{
-      "title": string,
+      "title": string (the case's FULL identifying name — a complete victim/subject name and/or descriptive case title, e.g. "The Murder of Jane Smith" or "Jane Smith Disappearance Case". NEVER a bare first name or fragment alone (e.g. never just "Jane"). If you cannot confidently identify a complete, specific real case this way, do not include it as a candidate at all — skip it rather than guess.),
       "reason": string (1 sentence),
       "region": string or null (country the case occurred in, if determinable),
       "caseTypeTags": string[] (2-4 tags describing what kind of case this is — choose ONLY from this exact list so it can be matched against the channel's proven history: ${CASE_TYPE_TAG_LIST_TEXT}),

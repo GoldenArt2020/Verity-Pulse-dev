@@ -144,7 +144,9 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, and findings provided — never invent facts. Return ONLY the JSON object.`;
+Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, and findings provided — never invent facts.
+
+CRITICAL — do not fabricate connections between this case and unrelated real events, people, or cases (including other true crime cases, mass-casualty events, or public tragedies) unless a findings source explicitly and directly states that connection as documented fact. A search result merely mentioning another event, or this case sharing a superficial theme with another event (e.g. both involving violence, both involving a school, similar names), is NOT a documented connection — do not propose an angle implying one exists. If the provided findings are thin, noisy, or not clearly about "${caseName}" specifically, do not stretch them into a narrative — prefer fewer, well-grounded angles over inventing an angle to fill the count. Return ONLY the JSON object.`;
 }
 
 function tryParseJson(text: string): Partial<{ angles: RawAngle[]; caseWriteup: string; titleIdeas: unknown }> | null {
