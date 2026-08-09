@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bookmark, BookmarkCheck, Sparkles, Loader2, ChevronDown, Info } from "lucide-react";
 import type { CaseRow } from "@/hooks/useCase";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
@@ -52,6 +53,7 @@ export function AngleBuilderHeader({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const { channelHandle } = useChannelId();
   const { dna, loading: dnaLoading } = useChannelDNA();
@@ -94,6 +96,10 @@ export function AngleBuilderHeader({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save project");
       setSaveState("saved");
+      // Take the user straight to the project they just saved/claimed,
+      // rather than leaving them stuck on a static "Saved" badge with no
+      // way to actually get to it.
+      router.push(`/projects/${data.id}`);
     } catch (err) {
       setSaveState("error");
       setSaveError(err instanceof Error ? err.message : "Failed to save project");
