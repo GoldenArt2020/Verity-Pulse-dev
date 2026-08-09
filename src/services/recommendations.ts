@@ -16,6 +16,11 @@ export interface Recommendation {
   whyRecommended: string[];
   displayRegion: string | null;
   isRegionException: boolean;
+  viralityScore: number;
+  viralityReason: string;
+  bestAngle: string;
+  thumbnailConcept: string;
+  openingHook: string;
   breakdown: {
     creatorDnaMatch: number;
     audienceInterest: number;
@@ -25,6 +30,7 @@ export interface Recommendation {
     regionalMatch: number;
     newsMomentum: number;
     historicalPerformance: number;
+    viralityScore: number;
   };
 }
 
@@ -61,7 +67,12 @@ const CANDIDATE_SHAPE = `{
       "searchOpportunity": number (0-100 — current search/Google Trends/YouTube search demand for this case),
       "competitionScore": number (0-100 — higher = LESS existing YouTube coverage, more opportunity),
       "untappedAnglesScore": number (0-100 — how many genuinely fresh, unexplored storytelling angles this case likely has, based on what's typically covered for cases like this),
-      "newsMomentum": number (0-100 — whether this case is currently developing, breaking, or receiving renewed attention right now; 0 if it's a static/settled older case)
+      "newsMomentum": number (0-100 — whether this case is currently developing, breaking, or receiving renewed attention right now; 0 if it's a static/settled older case),
+      "viralityScore": number (0-100 — the CASE VIRALITY SCORE, computed using this exact weighted rubric: strong mystery/unanswered questions=20pts, emotional/relatable victim story=15pts, shocking twist or contradiction=15pts, recent development reviving the case=15pts, compelling suspect relationship/betrayal angle=10pts, strong evidence such as CCTV/DNA/documents=10pts, potential for public debate/differing interpretations=5pts, current search interest=5pts, strong thumbnail/curiosity-gap potential=5pts. Sum the factors that genuinely apply to this real case — do not inflate. Below 55 means skip unless there's a special angle.),
+      "viralityReason": string (1 short sentence citing the 2-4 specific virality factors that drove the score, e.g. "New court development + relatable victim + conflicting timeline + unexpected suspect"),
+      "bestAngle": string (the single best storytelling angle for this case, framed as a specific unanswered question or narrative thread — not just a restatement of the case name),
+      "thumbnailConcept": string (a short, concrete thumbnail concept — what should be shown/juxtaposed to create a curiosity gap),
+      "openingHook": string (a single compelling opening line for the video script, promising a story/question rather than just naming the case)
     }`;
 
 function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
@@ -126,6 +137,19 @@ function buildExclusionBlock(excludedTitles: Set<string>): string {
   return `\n\nDO NOT recommend any of these cases — they are already assigned to a different channel on this platform:\n${sample.map((t) => `- ${t}`).join("\n")}`;
 }
 
+const VIRALITY_RUBRIC = `CASE VIRALITY RUBRIC (use this to score viralityScore honestly for every candidate):
+A true-crime case goes viral when it has a strong emotional hook + unanswered questions + a compelling human story + new developments people want to discuss. Score out of 100 using these weighted factors:
+- Strong mystery / unanswered questions (20pts): missing person, locked-room mystery, conflicting witness accounts, evidence that doesn't fit the official story.
+- Emotional, relatable victim story (15pts): viewers feel immediately connected — not about age, about relatability.
+- Shocking twist or contradiction (15pts): "everyone believed X, then evidence revealed Y."
+- Recent development reviving the case (15pts): arrest, trial, sentencing, new DNA/evidence, new witness, confession, cold-case breakthrough, family speaking publicly.
+- Compelling suspect relationship / betrayal angle (10pts): trusted person turning out to be the suspect is far more compelling than a stranger.
+- Strong evidence available (10pts): CCTV, DNA, documents, surveillance footage, court filings.
+- Potential for public debate (5pts): reasonable viewers could interpret the evidence differently.
+- Current search interest (5pts).
+- Strong thumbnail/curiosity-gap potential (5pts): the story promises a specific unanswered question, not just a case name.
+Do not manufacture facts to inflate any factor — only score what's genuinely supported by the case as reported.`;
+
 function buildPersonalizedPrompt(
   topics: string[],
   searchContext: string,
@@ -135,6 +159,8 @@ function buildPersonalizedPrompt(
   return `You are an editorial analyst for a true crime YouTube intelligence platform. A creator's content focuses on: ${topics.join(", ")}.
 
 ${buildAudienceDnaBlock(dna)}
+
+${VIRALITY_RUBRIC}
 
 Based on the following search results about true crime cases matching this creator's focus, propose up to 6 candidate cases this creator could cover next.
 
@@ -161,6 +187,8 @@ function buildTrendPrompt(
   return `You are a trend analyst for a true crime YouTube intelligence platform. Based on the search results below, identify up to 5 ${framing}.
 
 ${buildAudienceDnaBlock(dna)}
+
+${VIRALITY_RUBRIC}
 
 SEARCH RESULTS:
 ${searchContext}
@@ -193,6 +221,11 @@ function toRecommendation(
     whyRecommended: breakdown.whyRecommended,
     displayRegion: breakdown.displayRegion,
     isRegionException: breakdown.isRegionException,
+    viralityScore: candidate.viralityScore,
+    viralityReason: candidate.viralityReason,
+    bestAngle: candidate.bestAngle,
+    thumbnailConcept: candidate.thumbnailConcept,
+    openingHook: candidate.openingHook,
     breakdown: {
       creatorDnaMatch: breakdown.creatorDnaMatch,
       audienceInterest: breakdown.audienceInterest,
@@ -202,6 +235,7 @@ function toRecommendation(
       regionalMatch: breakdown.regionalMatch,
       newsMomentum: breakdown.newsMomentum,
       historicalPerformance: breakdown.historicalPerformance,
+      viralityScore: breakdown.viralityScore,
     },
   };
 }
@@ -225,6 +259,11 @@ function scoreAndFilter(
       whyRecommended: [c.reason],
       displayRegion: c.region,
       isRegionException: false,
+      viralityScore: c.viralityScore,
+      viralityReason: c.viralityReason,
+      bestAngle: c.bestAngle,
+      thumbnailConcept: c.thumbnailConcept,
+      openingHook: c.openingHook,
       breakdown: {
         creatorDnaMatch: 50,
         audienceInterest: 50,
@@ -234,6 +273,7 @@ function scoreAndFilter(
         regionalMatch: 50,
         newsMomentum: 50,
         historicalPerformance: 50,
+        viralityScore: c.viralityScore,
       },
     }));
   }
@@ -244,13 +284,75 @@ function scoreAndFilter(
     .sort((a, b) => b.audienceMatch - a.audienceMatch);
 }
 
+function normalizeUrl(url: string): string {
+  return url.trim().toLowerCase().replace(/\/$/, "");
+}
+
+/**
+ * Runs several Tavily queries in parallel and merges the results, deduped
+ * by URL. A single generic query only surfaces whatever happens to rank
+ * well for that phrase — running several queries themed around distinct
+ * virality factors (mystery, betrayal, new developments, etc.) means the
+ * candidate POOL itself is shaped by the rubric, not just the scoring
+ * that happens after the fact.
+ */
+async function fetchMultiQuery(
+  queries: string[],
+  maxResultsEach: number,
+  options?: Parameters<typeof tavilyProvider.search>[2],
+  cap = 20
+) {
+  const batches = await Promise.all(
+    queries.map((q) => tavilyProvider.search(q, maxResultsEach, options).catch(() => []))
+  );
+  const seen = new Set<string>();
+  const merged = [];
+  for (const batch of batches) {
+    for (const r of batch) {
+      const key = normalizeUrl(r.url);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(r);
+    }
+  }
+  return merged.slice(0, cap);
+}
+
+// Each query targets a distinct virality factor from the rubric, so the
+// search step actively hunts for mystery/betrayal/twist-shaped stories
+// rather than just whatever a single generic phrase happens to return.
+const CURRENTLY_TRENDING_QUERIES = [
+  "breaking true crime case news",
+  "missing person case investigation update",
+  "murder trial verdict sentencing news",
+  "cold case new evidence arrest",
+  "wrongful conviction appeal overturned",
+];
+
+const ABOUT_TO_TREND_QUERIES = [
+  "cold case breakthrough renewed investigation",
+  "true crime new witness confession",
+  "court filing unsealed case development",
+  "true crime family speaks out case",
+  "unsolved case DNA match identified",
+];
+
 async function fetchPersonalizedRecommendations(
   topics: string[],
   dna: ChannelDNA | null | undefined,
   excludedTitles: Set<string>
 ): Promise<Recommendation[]> {
-  const searchQuery = `trending true crime cases: ${topics.slice(0, 5).join(", ")}`;
-  const searchResults = await tavilyProvider.search(searchQuery, 8);
+  const topicsJoined = topics.slice(0, 5).join(", ");
+  // Base query anchored on the channel's own covered topics, plus two
+  // virality-angle queries over the same topics so mystery/betrayal-shaped
+  // stories in this creator's wheelhouse actually surface, not just
+  // whatever ranks for the topic names alone.
+  const queries = [
+    `trending true crime cases: ${topicsJoined}`,
+    `${topicsJoined} unsolved mystery missing person`,
+    `${topicsJoined} betrayal suspect secret relationship`,
+  ];
+  const searchResults = await fetchMultiQuery(queries, 6);
   if (searchResults.length === 0) return [];
 
   const searchContext = searchResults
@@ -259,7 +361,7 @@ async function fetchPersonalizedRecommendations(
 
   const raw = await groqProvider.generateText(
     buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 1600 }
+    { temperature: 0.4, maxTokens: 2600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles);
@@ -270,12 +372,17 @@ async function fetchTrendRecommendations(
   dna: ChannelDNA | null | undefined,
   excludedTitles: Set<string>
 ): Promise<Recommendation[]> {
-  const query =
-    label === "currently-trending"
-      ? "breaking viral true crime news this week"
-      : "true crime case renewed attention new developments emerging";
+  const queries = label === "currently-trending" ? CURRENTLY_TRENDING_QUERIES : ABOUT_TO_TREND_QUERIES;
 
-  const searchResults = await tavilyProvider.search(query, 8);
+  // "currently-trending" needs Tavily's news mode + a hard recency window,
+  // or it silently falls back to generic web search and surfaces old,
+  // well-ranked evergreen pages instead of what's actually current.
+  // "about-to-trend" gets a wider window since it's meant to catch early
+  // signals, not just this week's headlines.
+  const searchResults = await fetchMultiQuery(queries, 5, {
+    topic: "news",
+    days: label === "currently-trending" ? 7 : 30,
+  });
   if (searchResults.length === 0) return [];
 
   const searchContext = searchResults
@@ -284,7 +391,7 @@ async function fetchTrendRecommendations(
 
   const raw = await groqProvider.generateText(
     buildTrendPrompt(searchContext, label, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 1600 }
+    { temperature: 0.4, maxTokens: 2600 }
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles);
@@ -294,7 +401,7 @@ async function fetchTrendRecommendations(
  * Computes personalized case recommendations based on the channel's
  * top-performing videos, PLUS two independent trend-signal batches not
  * gated by the channel's history. Every candidate is scored against the
- * channel's Creator DNA using VerityPulse's 8-factor weighted formula
+ * channel's Creator DNA using VerityPulse's 9-factor weighted formula
  * (see recommendationScoring.ts) and filtered to >= threshold before being
  * shown. Cross-channel exclusion prevents two different channels from
  * both being told to cover the same case.

@@ -22,6 +22,17 @@ export interface ScoredCandidate {
   competitionScore: number; // 0-100, higher = less saturated
   untappedAnglesScore: number; // 0-100, Groq: quality/quantity of fresh angles available
   newsMomentum: number; // 0-100, Groq: breaking/developing status right now
+  // Case Virality Score — computed by Groq using the 9-factor weighted
+  // viral-true-crime rubric (mystery, emotional victim story, twist,
+  // recent development, suspect/betrayal angle, evidence, public debate,
+  // search interest, thumbnail potential). Distinct from audienceInterest:
+  // this measures whether the STORY itself is inherently shareable/
+  // bingeable, independent of whether it fits this channel.
+  viralityScore: number; // 0-100
+  viralityReason: string; // short "why" explanation, e.g. "New court development + relatable victim + conflicting timeline"
+  bestAngle: string; // suggested storytelling angle/hook for the video
+  thumbnailConcept: string; // short thumbnail concept description
+  openingHook: string; // suggested opening line/hook for the script
 }
 
 export interface ScoreBreakdown {
@@ -33,6 +44,7 @@ export interface ScoreBreakdown {
   regionalMatch: number;
   newsMomentum: number;
   historicalPerformance: number;
+  viralityScore: number;
   finalScore: number;
   whyRecommended: string[];
   displayRegion: string | null;
@@ -40,14 +52,15 @@ export interface ScoreBreakdown {
 }
 
 const WEIGHTS = {
-  creatorDna: 0.25,
-  audienceInterest: 0.2,
-  searchOpportunity: 0.15,
-  competition: 0.1,
-  untappedAngles: 0.1,
-  regional: 0.1,
-  newsMomentum: 0.05,
-  historicalPerformance: 0.05,
+  creatorDna: 0.2125,
+  audienceInterest: 0.17,
+  searchOpportunity: 0.1275,
+  competition: 0.085,
+  untappedAngles: 0.085,
+  regional: 0.085,
+  newsMomentum: 0.0425,
+  historicalPerformance: 0.0425,
+  virality: 0.15,
 };
 
 export const RECOMMENDATION_THRESHOLD = 60;
@@ -133,18 +146,20 @@ function resolveDisplayRegion(
 }
 
 /**
- * Scores one candidate using VerityPulse's 8-factor weighted formula:
- * Creator DNA Match 25% / Audience Interest 20% / Search Opportunity 15%
- * / Competition 10% / Untapped Angles 10% / Regional Match 10% /
- * News Momentum 5% / Historical Performance 5%.
+ * Scores one candidate using VerityPulse's 9-factor weighted formula:
+ * Creator DNA Match 21.25% / Audience Interest 17% / Search Opportunity
+ * 12.75% / Competition 8.5% / Untapped Angles 8.5% / Regional Match 8.5%
+ * / News Momentum 4.25% / Historical Performance 4.25% / Virality 15%.
  *
- * Creator DNA Match is now a BLEND: 60% Groq's holistic judgment + 40% a
+ * Creator DNA Match is a BLEND: 60% Groq's holistic judgment + 40% a
  * deterministic case-type tag-overlap check computed here in code against
  * the channel's own proven history — so audience fit is grounded in real
  * tag data, not left entirely to the model's discretion. Regional Match
  * and Historical Performance are fully deterministic. Audience Interest,
- * Search Opportunity, Untapped Angles, and News Momentum remain Groq's
- * qualitative judgment.
+ * Search Opportunity, Untapped Angles, News Momentum, and Virality remain
+ * Groq's qualitative judgment (Virality is computed via an explicit
+ * weighted rubric in the prompt — see buildPersonalizedPrompt/buildTrendPrompt
+ * in recommendations.ts — rather than left to unguided discretion).
  */
 export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): ScoreBreakdown {
   const historicalPerformance = lensHistoricalScore(candidate.lens, dna.lensPerformance);
@@ -166,10 +181,16 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
       candidate.untappedAnglesScore * WEIGHTS.untappedAngles +
       regionalMatch * WEIGHTS.regional +
       candidate.newsMomentum * WEIGHTS.newsMomentum +
-      historicalPerformance * WEIGHTS.historicalPerformance
+      historicalPerformance * WEIGHTS.historicalPerformance +
+      candidate.viralityScore * WEIGHTS.virality
   );
 
   const whyRecommended: string[] = [];
+  if (candidate.viralityScore >= 85) {
+    whyRecommended.push(`🔥 Extremely strong virality candidate (${candidate.viralityScore}/100) — ${candidate.viralityReason}`);
+  } else if (candidate.viralityScore >= 70) {
+    whyRecommended.push(`Strong story virality (${candidate.viralityScore}/100) — ${candidate.viralityReason}`);
+  }
   if (matchedCaseTypes.length > 0) {
     whyRecommended.push(`Matches case types your audience already responds well to (${matchedCaseTypes.join(", ")}).`);
   }
@@ -204,6 +225,7 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
     regionalMatch,
     newsMomentum: candidate.newsMomentum,
     historicalPerformance,
+    viralityScore: candidate.viralityScore,
     finalScore,
     whyRecommended,
     displayRegion,
