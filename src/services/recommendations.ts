@@ -367,6 +367,23 @@ function normalizeUrl(url: string): string {
   return url.trim().toLowerCase().replace(/\/$/, "");
 }
 
+// Tavily's search_depth:"advanced" returns full extracted page content per
+// result — often 1,000-5,000+ characters, uncapped. Merging up to 20 of
+// those into one prompt (see fetchMultiQuery below) was blowing past
+// Groq's request size limit ("413 Payload Too Large"). A snippet this
+// long adds no real value for candidate identification anyway — cap it.
+const MAX_SNIPPET_CHARS = 500;
+
+function formatSearchContext(results: { title: string; snippet: string }[]): string {
+  return results
+    .map((r, i) => {
+      const snippet =
+        r.snippet.length > MAX_SNIPPET_CHARS ? `${r.snippet.slice(0, MAX_SNIPPET_CHARS)}…` : r.snippet;
+      return `${i + 1}. [${r.title}]\n${snippet}`;
+    })
+    .join("\n\n");
+}
+
 /**
  * Runs several Tavily queries in parallel and merges the results, deduped
  * by URL. A single generic query only surfaces whatever happens to rank
@@ -379,7 +396,7 @@ async function fetchMultiQuery(
   queries: string[],
   maxResultsEach: number,
   options?: Parameters<typeof tavilyProvider.search>[2],
-  cap = 20
+  cap = 16
 ) {
   const batches = await Promise.all(
     queries.map((q) => tavilyProvider.search(q, maxResultsEach, options).catch(() => []))
@@ -436,9 +453,7 @@ async function fetchPersonalizedRecommendations(
   const searchResults = await fetchMultiQuery(queries, 6);
   if (searchResults.length === 0) return [];
 
-  const searchContext = searchResults
-    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
-    .join("\n\n");
+  const searchContext = formatSearchContext(searchResults);
 
   const raw = await groqProvider.generateText(
     buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
@@ -468,9 +483,7 @@ async function fetchTrendRecommendations(
   });
   if (searchResults.length === 0) return [];
 
-  const searchContext = searchResults
-    .map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`)
-    .join("\n\n");
+  const searchContext = formatSearchContext(searchResults);
 
   const raw = await groqProvider.generateText(
     buildTrendPrompt(searchContext, label, dna, excludedTitles),
