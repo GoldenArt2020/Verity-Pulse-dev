@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { runCaseResearch } from "@/services/caseResearch";
 
 export async function GET(req: NextRequest) {
   try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q") || "";
     const channelCategory = searchParams.get("category") || ""; // Channel DNA context
@@ -12,12 +22,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // 1. Search existing real cases from the database (matches titles, summaries, tags)
+    // Uses the session-bound client, not service role — RLS scopes this to
+    // cases this user's channel(s) have already claimed, plus the
+    // unclaimed pool. No more searching the whole platform's cases.
     let dbQuery = supabase
       .from("cases")
       .select("id, name, country, category, summary, opportunity_score, created_at")
@@ -34,20 +41,36 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
-    // 2. If real cases exist, return them formatted immediately
+    // 1. If matching cases already exist (claimed by this user or unclaimed), return them.
     if (existingCases && existingCases.length > 0) {
       return NextResponse.json(existingCases);
     }
 
-    // 3. Fallback: If no real case exists yet in DB for the query, trigger AI deep research on demand
-    const newCaseId = `search-${Date.now()}`;
-    await runCaseResearch(newCaseId, query);
+    // 2. Nothing found — create a fresh, UNCLAIMED case stub and research
+    // it on demand. Left unclaimed deliberately: this is a "discover" flow,
+    // not a "commit to this case" flow. Actual claiming for a channel only
+    // happens via getOrCreateCase.ts, when the user navigates into a case
+    // from a recommendation or search result.
+    const { data: stub, error: stubError } = await supabase
+      .from("cases")
+      .insert({
+        name: query,
+        status: "UNSOLVED",
+        last_updated: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
 
-    // Fetch newly created case record
+    if (stubError || !stub) {
+      throw new Error(stubError?.message ?? "Failed to create case stub");
+    }
+
+    await runCaseResearch(stub.id, query);
+
     const { data: newCase } = await supabase
       .from("cases")
       .select("id, name, country, category, summary, opportunity_score, created_at")
-      .eq("name", query)
+      .eq("id", stub.id)
       .single();
 
     return NextResponse.json(newCase ? [newCase] : []);
@@ -57,9 +80,18 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Preserve existing POST handler for explicit trigger calls
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { caseId, caseName } = body as { caseId: string; caseName: string };
 
