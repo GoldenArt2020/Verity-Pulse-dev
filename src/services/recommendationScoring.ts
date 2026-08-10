@@ -14,6 +14,7 @@ export interface ScoredCandidate {
   title: string;
   reason: string;
   region: string | null;
+  victimEthnicity: string | null; // identified from real search coverage, never guessed — see demographicMatchScore
   caseTypeTags: string[];
   lens: Lens | null;
   creatorDnaMatch: number; // 0-100, Groq's raw holistic judgment — blended with tag-overlap below
@@ -99,6 +100,33 @@ function caseTypeOverlapScore(
   return { score: Math.round(40 + ratio * 60), matched };
 }
 
+/**
+ * Compares a candidate case's victim demographic (as identified from real
+ * search coverage of that case — never guessed) against this channel's own
+ * DEMONSTRATED pattern (derived from that channel's own past video titles
+ * in creatorDNA.ts, not an assumption imposed from outside). This is what
+ * was previously computed but silently unused — the audience DNA block
+ * showed this pattern to the model as context only, with nothing actually
+ * scoring against it, so recommendations regularly crossed a channel's own
+ * established audience pattern.
+ *
+ * Deliberately NOT a hard filter: stays neutral (50) whenever either side
+ * lacks a clear signal, and a mismatch lowers rather than zeroes a
+ * candidate out, since this is one input among several, not an
+ * absolute gate.
+ */
+function demographicMatchScore(
+  candidateEthnicity: string | null,
+  channelPattern: string | null
+): { score: number; matched: boolean } {
+  if (!candidateEthnicity || !channelPattern) {
+    return { score: 50, matched: false }; // no established pattern on one/both sides — stay neutral
+  }
+  const normalize = (s: string) => s.trim().toLowerCase();
+  const isMatch = normalize(candidateEthnicity) === normalize(channelPattern);
+  return { score: isMatch ? 100 : 35, matched: isMatch };
+}
+
 function regionalMatchScore(candidateRegion: string | null, dna: ChannelDNA): number {
   const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
   const isMultiRegion = dna.regionDistribution?.isMultiRegion ?? false;
@@ -151,10 +179,11 @@ function resolveDisplayRegion(
  * 12.75% / Competition 8.5% / Untapped Angles 8.5% / Regional Match 8.5%
  * / News Momentum 4.25% / Historical Performance 4.25% / Virality 15%.
  *
- * Creator DNA Match is a BLEND: 60% Groq's holistic judgment + 40% a
- * deterministic case-type tag-overlap check computed here in code against
- * the channel's own proven history — so audience fit is grounded in real
- * tag data, not left entirely to the model's discretion. Regional Match
+ * Creator DNA Match is a BLEND: 50% Groq's holistic judgment + 25% a
+ * deterministic case-type tag-overlap check + 25% a deterministic victim
+ * demographic-pattern check, both computed here in code against the
+ * channel's own proven history — so audience fit is grounded in real
+ * data, not left entirely to the model's discretion. Regional Match
  * and Historical Performance are fully deterministic. Audience Interest,
  * Search Opportunity, Untapped Angles, News Momentum, and Virality remain
  * Groq's qualitative judgment (Virality is computed via an explicit
@@ -171,7 +200,14 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
     dna.audienceDNA?.caseTypePreferences ?? []
   );
 
-  const creatorDnaMatch = Math.round(candidate.creatorDnaMatch * 0.6 + caseTypeScore * 0.4);
+  const { score: demographicScore, matched: demographicMatched } = demographicMatchScore(
+    candidate.victimEthnicity,
+    dna.audienceDNA?.victimDemographicPreferences?.ethnicity ?? null
+  );
+
+  const creatorDnaMatch = Math.round(
+    candidate.creatorDnaMatch * 0.5 + caseTypeScore * 0.25 + demographicScore * 0.25
+  );
 
   const finalScore = Math.round(
     creatorDnaMatch * WEIGHTS.creatorDna +
@@ -193,6 +229,9 @@ export function scoreCandidate(candidate: ScoredCandidate, dna: ChannelDNA): Sco
   }
   if (matchedCaseTypes.length > 0) {
     whyRecommended.push(`Matches case types your audience already responds well to (${matchedCaseTypes.join(", ")}).`);
+  }
+  if (demographicMatched) {
+    whyRecommended.push(`Matches the victim demographic pattern your channel's audience has proven to respond to.`);
   }
   if (creatorDnaMatch >= 80) {
     whyRecommended.push(`${creatorDnaMatch}% match to your channel's proven content style.`);
