@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Loader2, X, FolderOpen } from "lucide-react";
+import { Copy, Check, Loader2, X, FolderOpen, RefreshCw } from "lucide-react";
 import type { ScriptSeoSummary } from "@/services/scriptWriter";
 
 export function ScriptPreviewModal({
@@ -13,6 +13,8 @@ export function ScriptPreviewModal({
   primaryError = null,
   onPrimaryAction,
   onClose,
+  onRewrite,
+  rewriting = false,
 }: {
   script: string;
   wordCount: number;
@@ -22,6 +24,8 @@ export function ScriptPreviewModal({
   primaryError?: string | null;
   onPrimaryAction: () => void;
   onClose: () => void;
+  onRewrite?: () => void;
+  rewriting?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const actualWordCount = script.trim().split(/\s+/).filter(Boolean).length;
@@ -85,6 +89,20 @@ export function ScriptPreviewModal({
             </button>
 
             <div className="flex items-center gap-2">
+              {onRewrite && (
+                <button
+                  onClick={onRewrite}
+                  disabled={rewriting || primaryLoading}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50 disabled:opacity-50"
+                >
+                  {rewriting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {rewriting ? "Rewriting..." : "Rewrite"}
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="rounded-lg border border-slate-700 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/50"

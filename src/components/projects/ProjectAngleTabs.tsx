@@ -240,7 +240,10 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           wordCount={preview.wordCount}
           seo={preview.seo}
           primaryLabel="Close & keep editing here"
+          primaryError={writeError}
           onPrimaryAction={() => setPreview(null)}
+          onRewrite={() => setDialogOpen(true)}
+          rewriting={!!writingId}
           onClose={() => setPreview(null)}
         />
       )}
