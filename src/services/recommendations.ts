@@ -11,7 +11,7 @@ export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
 export interface Recommendation {
   title: string;
-  audienceMatch: number; // final weighted score
+  audienceMatch: number;
   reason: string;
   trendStatus: TrendStatus;
   whyRecommended: string[];
@@ -39,8 +39,6 @@ interface TopicExtraction {
   topics: string[];
 }
 
-/** Every case name + which channel(s) have already claimed it, keyed by
- * normalized title, with each claiming channel's derived subniche. */
 interface ClaimedAssignment {
   channelIds: Set<string>;
   subniches: Set<string>;
@@ -104,20 +102,6 @@ function normalizeTitle(title: string): string {
   return title.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/**
- * Every channel currently gets independently-generated recommendations with
- * zero awareness of other channels — so two channels (especially similar
- * ones) can easily get told to cover the exact same case, most often via
- * the trend batches, which run identical generic queries for everyone.
- *
- * This pulls the titles currently live in every OTHER channel's
- * recommendations column, so we can both instruct the model to avoid them
- * and hard-filter them out afterward. This is a same-day safety net only —
- * `channels.recommendations` gets fully overwritten on every regeneration,
- * so a title that rolls off someone else's list stops being excluded here.
- * That volatility is exactly why claimed-case exclusion (below) exists as
- * the permanent record.
- */
 async function fetchExcludedTitles(
   supabase: SupabaseClient,
   currentChannelId: string
@@ -139,14 +123,6 @@ async function fetchExcludedTitles(
   return excluded;
 }
 
-/**
- * The permanent record: every `cases` row a channel has actually CLAIMED
- * (channel_id set — see getOrCreateCase.ts) survives forever, unlike a
- * channel's live `recommendations` list. This is what makes the "never
- * suggest the same case to a 3rd channel, never suggest it twice within
- * the same subniche" rule durable rather than something that quietly
- * decays as recommendation batches get regenerated.
- */
 async function fetchClaimedAssignments(
   supabase: SupabaseClient,
   currentChannelId: string
@@ -172,13 +148,6 @@ async function fetchClaimedAssignments(
   return map;
 }
 
-/**
- * A claimed case is off-limits to this channel when either:
- *  - it's already claimed by 2+ OTHER channels (never let a case reach a
- *    3rd claimant), or
- *  - it's already claimed by any channel sharing this channel's subniche
- *    (zero-tolerance for same-subniche overlap, even a single one).
- */
 function isBlockedByAssignment(
   title: string,
   assignments: Map<string, ClaimedAssignment>,
@@ -246,6 +215,8 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Only propose real, distinct cases that are NOT already in the creator's covered list: ${topics.join(", ")}. Score every field honestly and distinctly — do not give every candidate the same scores.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
+const ABOUT_TO_TREND_WINDOW_DAYS = 20;
+
 function buildTrendPrompt(
   searchContext: string,
   label: "currently-trending" | "about-to-trend",
@@ -255,7 +226,7 @@ function buildTrendPrompt(
   const framing =
     label === "currently-trending"
       ? "cases that are ACTIVELY viral or breaking right now — major news coverage, high search volume this week, widely discussed"
-      : "cases showing EARLY signs of rising interest — recent developments, renewed attention, or growing search/discussion volume, but not yet mainstream/saturated";
+      : `cases showing EARLY signs of rising interest, where the underlying development (arrest, new evidence, renewed coverage, family statement, court filing, etc.) happened within the last ${ABOUT_TO_TREND_WINDOW_DAYS} days — check each result's "published" date; if you cannot confirm the development falls inside that window, DO NOT include the case no matter how compelling it looks`;
 
   return `You are a trend analyst for a true crime YouTube intelligence platform. Based on the search results below, identify up to 5 ${framing}.
 
@@ -321,8 +292,6 @@ function scoreAndFilter(
   assignments: Map<string, ClaimedAssignment>,
   currentSubniche: string
 ): Recommendation[] {
-  // Safety net: drop anything matching an excluded/claimed title even if
-  // the model ignored the instruction not to suggest it.
   const filtered = candidates.filter(
     (c) =>
       !excludedTitles.has(normalizeTitle(c.title)) &&
@@ -367,31 +336,26 @@ function normalizeUrl(url: string): string {
   return url.trim().toLowerCase().replace(/\/$/, "");
 }
 
-// Tavily's search_depth:"advanced" returns full extracted page content per
-// result — often 1,000-5,000+ characters, uncapped. Merging up to 20 of
-// those into one prompt (see fetchMultiQuery below) was blowing past
-// Groq's request size limit ("413 Payload Too Large"). A snippet this
-// long adds no real value for candidate identification anyway — cap it.
 const MAX_SNIPPET_CHARS = 500;
 
-function formatSearchContext(results: { title: string; snippet: string }[]): string {
+function formatSearchContext(results: { title: string; snippet: string; publishedDate?: string }[]): string {
   return results
     .map((r, i) => {
       const snippet =
         r.snippet.length > MAX_SNIPPET_CHARS ? `${r.snippet.slice(0, MAX_SNIPPET_CHARS)}…` : r.snippet;
-      return `${i + 1}. [${r.title}]\n${snippet}`;
+      return `${i + 1}. [${r.title}] (published: ${r.publishedDate ?? "unknown"})\n${snippet}`;
     })
     .join("\n\n");
 }
 
-/**
- * Runs several Tavily queries in parallel and merges the results, deduped
- * by URL. A single generic query only surfaces whatever happens to rank
- * well for that phrase — running several queries themed around distinct
- * virality factors (mystery, betrayal, new developments, etc.) means the
- * candidate POOL itself is shaped by the rubric, not just the scoring
- * that happens after the fact.
- */
+function isWithinRecencyWindow(publishedDate: string | undefined, days: number): boolean {
+  if (!publishedDate) return false;
+  const parsed = Date.parse(publishedDate);
+  if (Number.isNaN(parsed)) return false;
+  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  return parsed >= cutoffMs;
+}
+
 async function fetchMultiQuery(
   queries: string[],
   maxResultsEach: number,
@@ -414,9 +378,6 @@ async function fetchMultiQuery(
   return merged.slice(0, cap);
 }
 
-// Each query targets a distinct virality factor from the rubric, so the
-// search step actively hunts for mystery/betrayal/twist-shaped stories
-// rather than just whatever a single generic phrase happens to return.
 const CURRENTLY_TRENDING_QUERIES = [
   "breaking true crime case news",
   "missing person case investigation update",
@@ -441,10 +402,6 @@ async function fetchPersonalizedRecommendations(
   currentSubniche: string
 ): Promise<Recommendation[]> {
   const topicsJoined = topics.slice(0, 5).join(", ");
-  // Base query anchored on the channel's own covered topics, plus two
-  // virality-angle queries over the same topics so mystery/betrayal-shaped
-  // stories in this creator's wheelhouse actually surface, not just
-  // whatever ranks for the topic names alone.
   const queries = [
     `trending true crime cases: ${topicsJoined}`,
     `${topicsJoined} unsolved mystery missing person`,
@@ -472,18 +429,19 @@ async function fetchTrendRecommendations(
 ): Promise<Recommendation[]> {
   const queries = label === "currently-trending" ? CURRENTLY_TRENDING_QUERIES : ABOUT_TO_TREND_QUERIES;
 
-  // "currently-trending" needs Tavily's news mode + a hard recency window,
-  // or it silently falls back to generic web search and surfaces old,
-  // well-ranked evergreen pages instead of what's actually current.
-  // "about-to-trend" gets a wider window since it's meant to catch early
-  // signals, not just this week's headlines.
   const searchResults = await fetchMultiQuery(queries, 5, {
     topic: "news",
-    days: label === "currently-trending" ? 7 : 30,
+    days: label === "currently-trending" ? 7 : ABOUT_TO_TREND_WINDOW_DAYS,
   });
   if (searchResults.length === 0) return [];
 
-  const searchContext = formatSearchContext(searchResults);
+  const usableResults =
+    label === "about-to-trend"
+      ? searchResults.filter((r) => isWithinRecencyWindow(r.publishedDate, ABOUT_TO_TREND_WINDOW_DAYS))
+      : searchResults;
+  if (usableResults.length === 0) return [];
+
+  const searchContext = formatSearchContext(usableResults);
 
   const raw = await groqProvider.generateText(
     buildTrendPrompt(searchContext, label, dna, excludedTitles),
@@ -493,21 +451,6 @@ async function fetchTrendRecommendations(
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
 }
 
-/**
- * Computes personalized case recommendations based on the channel's
- * top-performing videos, PLUS two independent trend-signal batches not
- * gated by the channel's history. Every candidate is scored against the
- * channel's Creator DNA using VerityPulse's 9-factor weighted formula
- * (see recommendationScoring.ts) and filtered to >= threshold before being
- * shown. Cross-channel exclusion prevents two different channels from
- * both being told to cover the same case.
- *
- * Takes an injected Supabase client (rather than creating its own)
- * because this runs in two different contexts: a cookie/session-based
- * client when a user manually clicks Refresh, and a service-role client
- * when the nightly cron job runs it for every channel with no user
- * session present.
- */
 export async function generateRecommendations(
   supabase: SupabaseClient,
   channelId: string,

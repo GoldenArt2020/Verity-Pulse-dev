@@ -4,11 +4,16 @@ import { cleanSourceText } from "@/lib/textCleanup";
 
 const TAVILY_API_URL = "https://api.tavily.com/search";
 
+interface TavilySearchOptions {
+  topic?: "general" | "news";
+  days?: number;
+}
+
 export const tavilyProvider: SearchProvider = {
   name: "tavily",
   isConfigured: () => hasAnyKey("TAVILY"),
 
-  async search(query, maxResults = 8): Promise<SearchResult[]> {
+  async search(query, maxResults = 8, options?: TavilySearchOptions): Promise<SearchResult[]> {
     const data = await withRotatingKey("TAVILY", async (apiKey) => {
       const res = await fetch(TAVILY_API_URL, {
         method: "POST",
@@ -18,6 +23,8 @@ export const tavilyProvider: SearchProvider = {
           query,
           max_results: maxResults,
           search_depth: "advanced",
+          ...(options?.topic ? { topic: options.topic } : {}),
+          ...(options?.topic === "news" && options?.days ? { days: options.days } : {}),
         }),
       });
 
