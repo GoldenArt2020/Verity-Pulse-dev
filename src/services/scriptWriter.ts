@@ -20,6 +20,8 @@ interface CaseForScript {
 
 interface ResearchBrief {
   caseFacts: string[];
+  keyQuotes: string[];
+  timeline: string[];
   retentionPrinciples: string[];
   ctaGuidance: string;
 }
@@ -60,7 +62,9 @@ ${craftSourcesText || "No additional craft sources found."}
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
-  "caseFacts": string[] (5-10 concrete, specific facts about this case relevant to the angle's core question and research focus — dates, roles, locations, documented events; do not invent anything not supported by the sources),
+  "caseFacts": string[] (8-14 concrete, specific, non-overlapping facts — each one a distinct piece of information, never a restatement of another fact in different words. Include names, exact dates/times, locations, and roles. Do not invent anything not supported by the sources),
+  "keyQuotes": string[] (3-8 short direct quotes or paraphrased statements attributed to a specific named person — family member, official, witness, or a documented text/social media message — that could be spoken or referenced on camera. Each entry should be formatted as 'Speaker/Source: quote or paraphrase'. Only include these if the sources actually support them; return an empty array if none exist),
+  "timeline": string[] (a chronological list of the specific dated/timed beats of this case, each as one short line, e.g. 'Feb 25, 2024, 7:46am — texts location to her mother.' Only include events explicitly supported by the sources),
   "retentionPrinciples": string[] (5-8 specific, actionable YouTube script-retention techniques relevant to true crime storytelling — pacing, hook placement, information reveal order, tension structure),
   "ctaGuidance": string (2-3 sentences on natural points in a true crime narrative where a subscribe/follow prompt can be woven in without breaking immersion, described as principles, not literal script lines)
 }
@@ -120,7 +124,10 @@ CORE QUESTION THE SCRIPT MUST ANSWER: ${angle.coreQuestion}
 CASE FACTS AVAILABLE:
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
-Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what that section of the narration should cover, in strict order, building toward fully answering the core question by the final section. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
+TIMELINE AVAILABLE:
+${brief.timeline.map((t) => `- ${t}`).join("\n")}
+
+Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what SPECIFIC scene, event, or beat that section of the narration should cover — name the actual moment (e.g. "The confrontation at Pope's apartment and the decision to strip him"), not a vague topic like "background" or "the investigation continues". Sections must move the story forward in strict chronological/dramatic order with zero overlap — each fact and beat appears in exactly one section, never revisited in a later one. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
 }
 
 interface SectionPlan {
@@ -153,9 +160,6 @@ function buildSectionPrompt(
   plan: SectionPlan,
   previousTail: string | null
 ): string {
-  // channel_dna rows saved before audienceDNA (or channelStyle sub-fields)
-  // existed in the schema won't have these keys — fall back per-field
-  // instead of crashing, same as lensHistoricalScore below.
   const style = dna?.channelStyle;
   const audience = dna?.audienceDNA;
 
@@ -183,8 +187,9 @@ function buildSectionPrompt(
   const dnaBlock = dnaLines.length > 0
     ? `CHANNEL VOICE TO WRITE IN:\n${dnaLines.join("\n")}`
     : `No Channel DNA profile is available — write in a clear, engaging, emotionally grounded true crime documentary voice.`;
+
   const continuityBlock = previousTail
-    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense.`
+    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense. Do not re-explain anything already covered above.`
     : `THIS IS THE OPENING of the full script. Open with this hook direction, in your own words: ${angle.openingHook}`;
 
   const ctaBlock = plan.includeCTA
@@ -198,6 +203,14 @@ function buildSectionPrompt(
       ? `SEO REQUIREMENT FOR THIS FINAL SECTION: close on a sentence that naturally reinforces the case name/subject and core topic in plain spoken language, so the ending of the transcript stays topically relevant for search and suggested placement.`
       : `SEO REQUIREMENT: naturally reuse the case name/subject and closely related search phrases at least once in this section, at a natural spoken cadence — never forced, never listy.`;
 
+  const quotesBlock = brief.keyQuotes.length > 0
+    ? `AVAILABLE QUOTES / DOCUMENTED STATEMENTS (use any that fit this section naturally — attribute them to the speaker, do not invent new ones):\n${brief.keyQuotes.map((q) => `- ${q}`).join("\n")}`
+    : "";
+
+  const timelineBlock = brief.timeline.length > 0
+    ? `FULL CASE TIMELINE (for reference — only cover the beats assigned to THIS section, per the outline):\n${brief.timeline.map((t) => `- ${t}`).join("\n")}`
+    : "";
+
   return `You are a professional true crime YouTube scriptwriter, mid-way through writing a full narration script about "${caseData.name}".
 
 ANGLE: ${angle.title}
@@ -209,8 +222,12 @@ ${dnaBlock}
 FULL SCRIPT OUTLINE (for your awareness of the whole arc — you are only writing ONE section of it now):
 ${outline.map((o, i) => `${i + 1}. ${o}${i === plan.index ? "   <-- YOU ARE WRITING THIS SECTION NOW" : ""}`).join("\n")}
 
-CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them):
+CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them; do not repeat a fact used in an earlier section):
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
+
+${timelineBlock}
+
+${quotesBlock}
 
 RETENTION TECHNIQUES TO APPLY (structurally, not by naming them):
 ${brief.retentionPrinciples.map((r) => `- ${r}`).join("\n")}
@@ -221,8 +238,18 @@ ${ctaBlock}
 
 ${seoBlock}
 
-WRITE ONLY SECTION ${plan.index + 1} OF ${outline.length} NOW, focused on: "${plan.focus}"
+WRITE ONLY SECTION ${plan.index + 1} OF ${outline.length} NOW, focused specifically on: "${plan.focus}"
 Target length: approximately ${plan.targetWords} words for this section.
+
+WRITING STYLE — THIS IS THE MOST IMPORTANT PART, FOLLOW IT EXACTLY:
+- Write this as a SCENE, not a summary. Put the viewer at the specific place and moment named in the focus above — who was there, what they said, what happened, in the order it happened.
+- Use short, punchy sentences mixed with occasional longer ones for rhythm. Avoid long compound sentences that stack multiple clauses together.
+- Weave in any relevant quote from the AVAILABLE QUOTES list above, attributed naturally ("Her mother would later say..." / "Officers wrote in the report...") — do not just summarize what someone said when an actual quote is available.
+- NEVER restate a fact, event, or idea that has already been covered — either earlier in this section or in a previous section. Each sentence must add NEW information. If you find yourself explaining the same event a second way, cut it.
+- BANNED PHRASES — do not use any of these or close variants: "As the investigation continued", "It's clear that", "In the days that followed", "As the case continues to unfold", "The community was left in shock", "This tragic case", "A tragic and disturbing", "will explore", "we will be examining", "it's important to", "the story of [name]'s murder is", "stay tuned", "as we delve deeper", "this case serves as a reminder". These are generic filler — replace them with a specific, concrete sentence about what actually happened.
+- Do NOT summarize what's coming later, do NOT tell the viewer what "we will explore" or "we will examine" — just tell the story as it happens, scene by scene.
+- Prefer showing over telling: instead of "the investigation was thorough," describe the specific thing investigators did.
+- Vary sentence openings — do not start consecutive sentences with "As", "The", or the case name.
 
 Requirements:
 - Plain narration text only — no scene headers, no bracketed directions, no "[CUT TO]", no timestamps, no speaker labels, no markdown, no section title.
@@ -247,8 +274,8 @@ Return ONLY the JSON object.`;
 
 /**
  * Multi-stage script generation for a given angle:
- *   1. Research  — Tavily-backed brief (case facts, retention principles, CTA guidance).
- *   2. Outline   — Groq breaks the target word count into N sequential sections.
+ *   1. Research  — Tavily-backed brief (case facts, quotes, timeline, retention principles, CTA guidance).
+ *   2. Outline   — Groq breaks the target word count into N sequential, non-overlapping scene-based sections.
  *   3. Sections  — Groq writes each section in order, carrying the tail of the
  *      previous section forward for continuity, with SEO and CTA guidance
  *      applied per-section so long scripts stay coherent and never hit any
@@ -314,7 +341,7 @@ export async function generateScriptForAngle(
   const brief = await withRetry(async () => {
     const raw = await groqProvider.generateText(
       buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText),
-      { temperature: 0.3, maxTokens: 1600 }
+      { temperature: 0.3, maxTokens: 2000 }
     );
     return parseJsonObject<ResearchBrief>(raw);
   });
@@ -323,7 +350,7 @@ export async function generateScriptForAngle(
   const outlineRaw = await withRetry(() =>
     groqProvider.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
       temperature: 0.4,
-      maxTokens: 700,
+      maxTokens: 800,
     })
   );
   let outline = parseJsonArray(outlineRaw);
