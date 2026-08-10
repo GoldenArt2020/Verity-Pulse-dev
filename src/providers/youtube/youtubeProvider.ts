@@ -201,6 +201,8 @@ export const youtubeProvider = {
           commentCount: parseInt(item.statistics?.commentCount ?? "0", 10),
           durationSeconds: parseDuration(item.contentDetails.duration),
           tags: item.snippet.tags ?? [],
+          channelId: item.snippet.channelId ?? "",
+          channelTitle: item.snippet.channelTitle ?? "Unknown channel",
         });
       }
     }
@@ -210,7 +212,7 @@ export const youtubeProvider = {
 
   /**
    * Searches YouTube for videos matching a case/topic (case research, not channel analysis).
-   * Cost: 100 units per call — expensive. Callers MUST cache results in DynamoDB and never
+   * Cost: 100 units per call — expensive. Callers MUST cache results and never
    * re-search the same case. Capped at 50 results per call.
    */
   async searchCaseVideos(query: string, maxResults = 50): Promise<YouTubeVideoDetail[]> {
@@ -240,6 +242,8 @@ export const youtubeProvider = {
       commentCount: parseInt(item.statistics?.commentCount ?? "0", 10),
       durationSeconds: parseDuration(item.contentDetails.duration),
       tags: item.snippet.tags ?? [],
+      channelId: item.snippet.channelId ?? "",
+      channelTitle: item.snippet.channelTitle ?? "Unknown channel",
     }));
   },
 };

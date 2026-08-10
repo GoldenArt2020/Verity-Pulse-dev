@@ -36,4 +36,6 @@ export interface YouTubeVideoDetail {
   commentCount: number;
   durationSeconds: number;
   tags: string[];
+  channelId: string;
+  channelTitle: string;
 }

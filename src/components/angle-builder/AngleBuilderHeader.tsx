@@ -7,10 +7,11 @@ import type { CaseRow } from "@/hooks/useCase";
 import { useChannelDNA } from "@/hooks/useChannelDNA";
 import { useChannelId } from "@/hooks/useChannelId";
 import { personalizeCaseScore } from "@/lib/personalizeCaseScore";
+import { formatViewCount } from "@/lib/youtubeCoverageAnalysis";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-function InfoTooltip({ text }: { text: string }) {
+function InfoTooltip({ text, content }: { text?: string; content?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,8 +32,8 @@ function InfoTooltip({ text }: { text: string }) {
         <Info className="h-3 w-3" />
       </button>
       {open && (
-        <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
-          {text}
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
+          {content ?? text}
           <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
         </span>
       )}
@@ -58,11 +59,14 @@ export function AngleBuilderHeader({
   const { channelHandle } = useChannelId();
   const { dna, loading: dnaLoading } = useChannelDNA();
 
+  const realCoverageScore = caseData.youtube_coverage_score;
+  const channelBreakdown = caseData.youtube_channel_breakdown ?? [];
+
   const scores = personalizeCaseScore(
     {
       opportunityScore: caseData.opportunity_score,
       competitionScore: caseData.competition_score,
-      coverageScore: caseData.coverage_score,
+      coverageScore: realCoverageScore ?? caseData.coverage_score,
       caseTypeTags: caseData.tags ?? [],
       country: caseData.country,
     },
@@ -208,10 +212,42 @@ export function AngleBuilderHeader({
           <div className="text-center">
             <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
               YouTube Coverage
-              <InfoTooltip text="A 0–10 estimate of how much true-crime documentary coverage this case already has on YouTube overall. This is a market-wide fact, so it doesn't change per channel — lower means the story is fresher." />
+              <InfoTooltip
+                content={
+                  channelBreakdown.length > 0 ? (
+                    <>
+                      <p className="mb-1.5 font-medium text-slate-200">
+                        {channelBreakdown.filter((c) => c.totalViews >= 30_000).length} channel
+                        {channelBreakdown.filter((c) => c.totalViews >= 30_000).length === 1 ? "" : "s"} with 30K+
+                        views on this case:
+                      </p>
+                      <ul className="space-y-0.5">
+                        {channelBreakdown.slice(0, 6).map((c) => (
+                          <li key={c.channelId || c.channelTitle} className="flex justify-between gap-3">
+                            <span className="truncate text-slate-400">{c.channelTitle}</span>
+                            <span className="shrink-0 font-medium text-slate-200">
+                              {formatViewCount(c.totalViews)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      {channelBreakdown.length > 6 && (
+                        <p className="mt-1 text-slate-500">+{channelBreakdown.length - 6} more channels</p>
+                      )}
+                      <p className="mt-1.5 text-slate-500">This is a market-wide fact — same for every channel.</p>
+                    </>
+                  ) : (
+                    "No existing YouTube coverage found for this case yet — real channel-by-channel data will appear here once research runs."
+                  )
+                }
+              />
             </p>
             <p className="mt-1 text-xl font-semibold text-white">
-              {scores.coverageScore != null ? `${scores.coverageScore}/10` : "—"}
+              {realCoverageScore != null
+                ? `${realCoverageScore}/10`
+                : scores.coverageScore != null
+                  ? `${scores.coverageScore}/10`
+                  : "—"}
             </p>
           </div>
 

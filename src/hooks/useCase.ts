@@ -14,6 +14,13 @@ export interface BackgroundProfile {
   sourceNote: string | null;
 }
 
+export interface ChannelCoverageEntry {
+  channelId: string;
+  channelTitle: string;
+  totalViews: number;
+  videoCount: number;
+}
+
 export interface CaseRow {
   id: string;
   name: string;
@@ -25,6 +32,8 @@ export interface CaseRow {
   opportunity_score: number | null;
   competition_score: number | null;
   coverage_score: number | null;
+  youtube_coverage_score: number | null;
+  youtube_channel_breakdown: ChannelCoverageEntry[] | null;
   coverage_intelligence: Record<string, unknown> | null;
   background_profiles: BackgroundProfile[] | null;
   last_updated: string | null;

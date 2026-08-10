@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
+import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 import { deriveChannelSubniche } from "@/lib/channelSubniche";
+import { analyzeChannelCoverage } from "@/lib/youtubeCoverageAnalysis";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
@@ -451,6 +453,36 @@ async function fetchTrendRecommendations(
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
 }
 
+/**
+ * Hard exclusion, run on the final shortlisted candidates (after
+ * scoreAndFilter has already cut the list down, so this stays bounded —
+ * one YouTube search per surviving candidate, ~100 quota units each).
+ * Cases where 3+ channels have each individually crossed 200k views are
+ * considered fully saturated and are never suggested, regardless of how
+ * well they otherwise scored — no amount of creator-fit or virality
+ * potential makes an oversaturated case worth pursuing.
+ */
+async function filterOversaturated(recommendations: Recommendation[]): Promise<Recommendation[]> {
+  if (!youtubeProvider.isConfigured() || recommendations.length === 0) return recommendations;
+
+  const checks = await Promise.all(
+    recommendations.map(async (r) => {
+      try {
+        const videos = await youtubeProvider.searchCaseVideos(r.title, 30);
+        const analysis = analyzeChannelCoverage(videos);
+        return { rec: r, oversaturated: analysis.isOversaturated };
+      } catch {
+        // If the check itself fails, don't punish the candidate for it —
+        // let it through rather than silently dropping good suggestions
+        // because of a transient API error.
+        return { rec: r, oversaturated: false };
+      }
+    })
+  );
+
+  return checks.filter((c) => !c.oversaturated).map((c) => c.rec);
+}
+
 export async function generateRecommendations(
   supabase: SupabaseClient,
   channelId: string,
@@ -502,7 +534,8 @@ export async function generateRecommendations(
     fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
   ]);
 
-  const recommendations = [...personalized, ...currentlyTrending, ...aboutToTrend];
+  const merged = [...personalized, ...currentlyTrending, ...aboutToTrend];
+  const recommendations = await filterOversaturated(merged);
 
   const { error } = await supabase
     .from("channels")
