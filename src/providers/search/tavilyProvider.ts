@@ -1,5 +1,6 @@
-import type { SearchProvider, SearchResult, SearchOptions } from "./types";
+import type { SearchProvider, SearchResult } from "./types";
 import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
+import { cleanSourceText } from "@/lib/textCleanup";
 
 const TAVILY_API_URL = "https://api.tavily.com/search";
 
@@ -7,7 +8,7 @@ export const tavilyProvider: SearchProvider = {
   name: "tavily",
   isConfigured: () => hasAnyKey("TAVILY"),
 
-  async search(query, maxResults = 8, options?: SearchOptions): Promise<SearchResult[]> {
+  async search(query, maxResults = 8): Promise<SearchResult[]> {
     const data = await withRotatingKey("TAVILY", async (apiKey) => {
       const res = await fetch(TAVILY_API_URL, {
         method: "POST",
@@ -17,8 +18,6 @@ export const tavilyProvider: SearchProvider = {
           query,
           max_results: maxResults,
           search_depth: "advanced",
-          topic: options?.topic ?? "general",
-          ...(options?.topic === "news" && options?.days ? { days: options.days } : {}),
         }),
       });
 
@@ -34,7 +33,7 @@ export const tavilyProvider: SearchProvider = {
     return (data.results ?? []).map((r: { title: string; url: string; content: string; published_date?: string }) => ({
       title: r.title,
       url: r.url,
-      snippet: r.content,
+      snippet: cleanSourceText(r.content),
       publishedDate: r.published_date,
       source: "tavily",
     }));

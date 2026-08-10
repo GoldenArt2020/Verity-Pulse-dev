@@ -1,11 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
-import { geminiProvider } from "@/providers/ai/geminiProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
-import { TRUE_CRIME_RETENTION_PRINCIPLES, LONG_SCRIPT_WORD_THRESHOLD } from "@/constants/retentionTechniques";
-import { formatSourcesWithReliability } from "@/lib/sourceReliability";
 
 interface AngleForScript {
   id: string;
@@ -19,11 +16,11 @@ interface AngleForScript {
 interface CaseForScript {
   name: string;
   summary: string | null;
-  caseFacts: unknown | null;
 }
 
 interface ResearchBrief {
   caseFacts: string[];
+  retentionPrinciples: string[];
   ctaGuidance: string;
 }
 
@@ -41,13 +38,10 @@ export interface GeneratedScriptResult {
 function buildResearchPrompt(
   caseData: CaseForScript,
   angle: AngleForScript,
-  caseSourcesText: string
+  caseSourcesText: string,
+  craftSourcesText: string
 ): string {
-  const dossierBlock = caseData.caseFacts
-    ? `CASE FACTS DOSSIER (the authoritative record for this case — named people, dates, charges, figures, quotes, already verified during research. Treat this as ground truth and draw the majority of your caseFacts output from it):\n${JSON.stringify(caseData.caseFacts, null, 2)}`
-    : `No detailed facts dossier is available for this case yet — build caseFacts primarily from the additional sources below.`;
-
-  return `You are a research analyst preparing a briefing for a true crime YouTube scriptwriter. Source material is provided below.
+  return `You are a research analyst preparing a briefing for a true crime YouTube scriptwriter. Two source sets are provided below.
 
 CASE: ${caseData.name}
 ANGLE: ${angle.title}
@@ -58,14 +52,16 @@ ${angle.researchFocus.map((r) => `- ${r}`).join("\n")}
 EXISTING CASE SUMMARY:
 ${caseData.summary ?? "No summary available."}
 
-${dossierBlock}
-
-ADDITIONAL CASE SOURCES (tagged by reliability — use to fill gaps or catch anything more recent than the dossier above; prefer HIGH/MEDIUM sources for anything stated as fact):
+ADDITIONAL CASE SOURCES:
 ${caseSourcesText || "No additional sources found."}
+
+YOUTUBE RETENTION / SCRIPTWRITING CRAFT SOURCES:
+${craftSourcesText || "No additional craft sources found."}
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
-  "caseFacts": string[] (8-15 concrete, specific facts about this case relevant to the angle's core question and research focus — named people with roles/ages, exact dates, charges, figures, locations, documented events. Pull these primarily from the facts dossier above; use the additional sources only to add anything the dossier is missing or to update anything more recent. Do not invent anything not supported by the dossier or sources),
+  "caseFacts": string[] (5-10 concrete, specific facts about this case relevant to the angle's core question and research focus — dates, roles, locations, documented events; do not invent anything not supported by the sources),
+  "retentionPrinciples": string[] (5-8 specific, actionable YouTube script-retention techniques relevant to true crime storytelling — pacing, hook placement, information reveal order, tension structure),
   "ctaGuidance": string (2-3 sentences on natural points in a true crime narrative where a subscribe/follow prompt can be woven in without breaking immersion, described as principles, not literal script lines)
 }
 
@@ -104,22 +100,6 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/**
- * The actual narration prose (outline + section writing) is noticeably
- * better on Gemini 2.5 Pro than on Groq's llama-3.3-70b — llama has a
- * known weakness on long-form creative generation where it starts
- * re-covering ground it already wrote a few sections back instead of
- * advancing the story, which is exactly the repetition problem this was
- * built to fix. Research/SEO extraction stays on Groq (fast, structured
- * JSON, quality-insensitive) since Gemini's latency isn't worth paying for
- * calls that aren't actually prose. Falls back to Groq automatically if no
- * Gemini key is configured, so nothing breaks for environments that
- * haven't added one yet.
- */
-function proseProvider() {
-  return geminiProvider.isConfigured() ? geminiProvider : groqProvider;
-}
-
 /** ~2,600 words/section — fewer, larger sections means fewer sequential
  * Groq round-trips, which matters a lot on Vercel Hobby's 60s hard cap. */
 function sectionCountFor(wordCount: ScriptWordCount): number {
@@ -130,14 +110,8 @@ function buildOutlinePrompt(
   caseData: CaseForScript,
   angle: AngleForScript,
   brief: ResearchBrief,
-  sectionCount: number,
-  wordCount: number
+  sectionCount: number
 ): string {
-  const longScriptNote =
-    wordCount >= LONG_SCRIPT_WORD_THRESHOLD
-      ? `\n\nThis is a long-form script (${wordCount.toLocaleString()} words). Mid-script sections carry the highest drop-off risk — make sure the middle sections each contain a genuine new development or reveal, not just connective/background material, so pacing doesn't sag.`
-      : "";
-
   return `You are structuring a ${sectionCount}-part narration script outline for a true crime YouTube video about "${caseData.name}".
 
 ANGLE: ${angle.title}
@@ -146,9 +120,7 @@ CORE QUESTION THE SCRIPT MUST ANSWER: ${angle.coreQuestion}
 CASE FACTS AVAILABLE:
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
-Structure this as a withholding/reveal arc: tease the resolution or key answer to the core question early, but hold the full answer back until the final section. Each section should end on an open thread rather than a fully resolved beat, so the outline itself builds toward a late payoff instead of resolving evenly across sections.${longScriptNote}
-
-Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what that section of the narration should cover, in strict order, building toward fully answering the core question only by the final section. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
+Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what that section of the narration should cover, in strict order, building toward fully answering the core question by the final section. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
 }
 
 interface SectionPlan {
@@ -179,8 +151,7 @@ function buildSectionPrompt(
   dna: ChannelDNA | null,
   outline: string[],
   plan: SectionPlan,
-  previousTail: string | null,
-  wordCount: number
+  previousTail: string | null
 ): string {
   // channel_dna rows saved before audienceDNA (or channelStyle sub-fields)
   // existed in the schema won't have these keys — fall back per-field
@@ -212,32 +183,20 @@ function buildSectionPrompt(
   const dnaBlock = dnaLines.length > 0
     ? `CHANNEL VOICE TO WRITE IN:\n${dnaLines.join("\n")}`
     : `No Channel DNA profile is available — write in a clear, engaging, emotionally grounded true crime documentary voice.`;
-
-  const isFirst = plan.index === 0;
-  const isLast = plan.index === outline.length - 1;
-
   const continuityBlock = previousTail
     ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense.`
-    : `THIS IS THE OPENING of the full script. Open cold — hook the viewer within the first 15-30 seconds of narration, before any scene-setting or preamble. Open with this hook direction, in your own words: ${angle.openingHook}\n\nSomewhere in this opening, plant a specific, concrete detail, object, or question and explicitly tell the viewer to hold onto it (e.g. "keep that in mind" / "remember that name" — your own phrasing, not this exact line). That planted detail must genuinely pay off later in the script — do not plant something and abandon it.`;
+    : `THIS IS THE OPENING of the full script. Open with this hook direction, in your own words: ${angle.openingHook}`;
 
   const ctaBlock = plan.includeCTA
     ? `Include exactly ONE natural, spoken subscribe/follow moment in this section, phrased as a line the narrator would actually say — not labeled, not bracketed. Use this guidance for where/how it fits naturally:\n${brief.ctaGuidance}`
     : `Do not include any subscribe/follow prompt in this section.`;
 
-  const seoBlock = isFirst
-    ? `SEO REQUIREMENT FOR THIS OPENING SECTION: within the first two sentences, naturally speak the full case name/subject ("${caseData.name}") and its core searchable category (e.g. missing person case, unsolved murder, cold case — whichever fits) so the transcript matches what viewers actually search for. Never say the words "SEO" or "keywords" out loud.`
-    : isLast
-    ? `SEO REQUIREMENT FOR THIS FINAL SECTION: close on a sentence that naturally reinforces the case name/subject and core topic in plain spoken language, so the ending of the transcript stays topically relevant for search and suggested placement.`
-    : `SEO REQUIREMENT: naturally reuse the case name/subject and closely related search phrases at least once in this section, at a natural spoken cadence — never forced, never listy.`;
-
-  const cliffhangerBlock = !isLast
-    ? `This is NOT the final section — end it on an open question, unresolved detail, or rising tension. Do not let this section land on a settled, resolved beat; leave a thread that pulls the viewer into the next section.`
-    : `This IS the final section — this is where the withheld resolution/reveal from earlier in the outline should land and the core question gets fully answered. Do not end on a trailing-off restatement of the core question or a generic "stay tuned" line. Close on a specific, reflective beat that returns to the central figure as a person, not as a case file — one concrete image or detail that humanizes them, landing the emotional weight rather than just closing the procedural facts.`;
-
-  const longScriptBlock =
-    wordCount >= LONG_SCRIPT_WORD_THRESHOLD && !isFirst && !isLast
-      ? `This is a long-form script — treat this middle section as high drop-off risk. Make sure it contains a genuine new development or mini-reveal, not just connective or background material.`
-      : "";
+  const seoBlock =
+    plan.index === 0
+      ? `SEO REQUIREMENT FOR THIS OPENING SECTION: within the first two sentences, naturally speak the full case name/subject ("${caseData.name}") and its core searchable category (e.g. missing person case, unsolved murder, cold case — whichever fits) so the transcript matches what viewers actually search for. Never say the words "SEO" or "keywords" out loud.`
+      : plan.index === outline.length - 1
+      ? `SEO REQUIREMENT FOR THIS FINAL SECTION: close on a sentence that naturally reinforces the case name/subject and core topic in plain spoken language, so the ending of the transcript stays topically relevant for search and suggested placement.`
+      : `SEO REQUIREMENT: naturally reuse the case name/subject and closely related search phrases at least once in this section, at a natural spoken cadence — never forced, never listy.`;
 
   return `You are a professional true crime YouTube scriptwriter, mid-way through writing a full narration script about "${caseData.name}".
 
@@ -250,17 +209,13 @@ ${dnaBlock}
 FULL SCRIPT OUTLINE (for your awareness of the whole arc — you are only writing ONE section of it now):
 ${outline.map((o, i) => `${i + 1}. ${o}${i === plan.index ? "   <-- YOU ARE WRITING THIS SECTION NOW" : ""}`).join("\n")}
 
-CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them — and do not front-load them in a block; spread them through the section as the story naturally reaches them):
+CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them):
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
-RETENTION TECHNIQUES TO APPLY (structurally, not by naming them out loud):
-${TRUE_CRIME_RETENTION_PRINCIPLES.map((r) => `- ${r}`).join("\n")}
+RETENTION TECHNIQUES TO APPLY (structurally, not by naming them):
+${brief.retentionPrinciples.map((r) => `- ${r}`).join("\n")}
 
 ${continuityBlock}
-
-${cliffhangerBlock}
-
-${longScriptBlock}
 
 ${ctaBlock}
 
@@ -292,22 +247,12 @@ Return ONLY the JSON object.`;
 
 /**
  * Multi-stage script generation for a given angle:
- *   1. Research  — grounded first in the case's saved facts dossier
- *      (case_facts, from the research pass in caseResearch.ts), with a
- *      Tavily-backed search pass layered on top only to fill gaps or catch
- *      anything more recent than the dossier. Every additional source is
- *      tagged HIGH/MEDIUM/LOW reliability so the model knows which claims
- *      to trust for stated fact vs. context only.
- *   2. Outline   — Gemini (falls back to Groq) breaks the target word
- *      count into N sequential sections, structured as a withhold/reveal
- *      arc (see TRUE_CRIME_RETENTION_PRINCIPLES) rather than resolving
- *      evenly.
- *   3. Sections  — Gemini (falls back to Groq) writes each section in
- *      order, carrying the tail of the previous section forward for
- *      continuity, with SEO, CTA, and the fixed retention techniques (cold
- *      open, pattern interrupts, spread facts, cliffhanger endings, zero
- *      repetition, real quoted material) applied per-section so long
- *      scripts stay coherent and don't sag or loop in the middle.
+ *   1. Research  — Tavily-backed brief (case facts, retention principles, CTA guidance).
+ *   2. Outline   — Groq breaks the target word count into N sequential sections.
+ *   3. Sections  — Groq writes each section in order, carrying the tail of the
+ *      previous section forward for continuity, with SEO and CTA guidance
+ *      applied per-section so long scripts stay coherent and never hit any
+ *      single-call output ceiling.
  *   4. SEO       — a short Groq pass extracts keywords/description from the
  *      finished script for the creator to reuse when publishing.
  *
@@ -328,7 +273,7 @@ export async function generateScriptForAngle(
     throw new Error("Tavily is not configured — cannot research this script");
   }
   if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot research this script");
+    throw new Error("Groq is not configured — cannot write this script");
   }
 
   const supabase = await createClient();
@@ -339,7 +284,7 @@ export async function generateScriptForAngle(
       .select("id, title, core_question, why_it_works, research_focus, opening_hook")
       .eq("id", angleId)
       .single(),
-    supabase.from("cases").select("name, summary, case_facts").eq("id", caseId).single(),
+    supabase.from("cases").select("name, summary").eq("id", caseId).single(),
   ]);
 
   if (angleError || !angleRow) {
@@ -358,29 +303,25 @@ export async function generateScriptForAngle(
     openingHook: angleRow.opening_hook,
   };
 
-  const caseData: CaseForScript = {
-    name: caseRow.name,
-    summary: caseRow.summary,
-    caseFacts: caseRow.case_facts,
-  };
+  const [caseSearchResults, craftSearchResults] = await Promise.all([
+    tavilyProvider.search(`${caseRow.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6),
+    tavilyProvider.search("true crime youtube script retention techniques engaging storytelling", 6),
+  ]);
 
-  const caseSearchResults = await tavilyProvider.search(
-    `${caseRow.name} ${angle.researchFocus.slice(0, 3).join(" ")}`,
-    6
-  );
-  const caseSourcesText = formatSourcesWithReliability(caseSearchResults, 500);
+  const caseSourcesText = caseSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
+  const craftSourcesText = craftSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
 
-  const researchRaw = await withRetry(() =>
-    groqProvider.generateText(buildResearchPrompt(caseData, angle, caseSourcesText), {
-      temperature: 0.3,
-      maxTokens: 1800,
-    })
-  );
-  const brief = parseJsonObject<ResearchBrief>(researchRaw);
+  const brief = await withRetry(async () => {
+    const raw = await groqProvider.generateText(
+      buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText),
+      { temperature: 0.3, maxTokens: 1600 }
+    );
+    return parseJsonObject<ResearchBrief>(raw);
+  });
 
   const sectionCount = sectionCountFor(wordCount);
   const outlineRaw = await withRetry(() =>
-    proseProvider().generateText(buildOutlinePrompt(caseData, angle, brief, sectionCount, wordCount), {
+    groqProvider.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
       temperature: 0.4,
       maxTokens: 700,
     })
@@ -400,10 +341,10 @@ export async function generateScriptForAngle(
   for (const plan of plans) {
     const maxTokens = Math.min(4096, Math.max(600, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      proseProvider().generateText(
-        buildSectionPrompt(caseData, angle, brief, channelDNA, outline, plan, previousTail, wordCount),
-        { temperature: 0.65, maxTokens }
-      )
+      groqProvider.generateText(buildSectionPrompt(caseRow, angle, brief, channelDNA, outline, plan, previousTail), {
+        temperature: 0.65,
+        maxTokens,
+      })
     );
     const sectionText = sectionRaw.trim();
     sections.push(sectionText);
@@ -415,7 +356,7 @@ export async function generateScriptForAngle(
 
   let seo: ScriptSeoSummary | null = null;
   try {
-    const seoRaw = await groqProvider.generateText(buildSeoSummaryPrompt(caseData, angle, cleanScript), {
+    const seoRaw = await groqProvider.generateText(buildSeoSummaryPrompt(caseRow, angle, cleanScript), {
       temperature: 0.3,
       maxTokens: 400,
     });
