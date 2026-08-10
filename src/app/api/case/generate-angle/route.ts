@@ -38,6 +38,7 @@ export interface GeneratedAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
+  mouthWateringSurprises: string[];
   caseWriteup: string;
   latestFindings: FindingItem[];
   titleIdeas: TitleIdea[];
@@ -53,6 +54,7 @@ interface RawAngle {
   channelFit: string;
   whyWorkOnIt: string;
   curiosityGaps: string[];
+  mouthWateringSurprises: string[];
 }
 
 interface ParsedResponse {
@@ -66,6 +68,7 @@ function buildPrompt(
   category: string | null,
   summary: string,
   caseFacts: unknown,
+  backgroundProfiles: unknown,
   youtubeVideos: YouTubeVideoDetail[],
   genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
@@ -93,6 +96,11 @@ function buildPrompt(
     ? `CASE FACTS DOSSIER (every concrete fact gathered on this case — names, ages, dates, charges, figures, quotes. Use these liberally and specifically in caseWriteup, whyWorkOnIt, and curiosityGaps rather than staying generic):\n${JSON.stringify(caseFacts, null, 2)}`
     : `No detailed facts dossier available yet — work from the case summary and findings below only.`;
 
+  const backgroundBlock =
+    Array.isArray(backgroundProfiles) && backgroundProfiles.length > 0
+      ? `VICTIM/SUSPECT BACKGROUND PROFILES (daily life, personality, relationships — use these to ground curiosityGaps, whyItWorks, and mouthWateringSurprises in real human detail rather than case-file description):\n${JSON.stringify(backgroundProfiles, null, 2)}`
+      : `No background profiles available yet for this case.`;
+
   const channelBlock = channelDNA
     ? `CHANNEL DNA (this creator's established style/tone/audience — use to judge genuine channel fit):\n${JSON.stringify(channelDNA).slice(0, 1500)}`
     : `No channel DNA available — score channel fit generically for a true crime documentary audience.`;
@@ -103,6 +111,8 @@ CASE SUMMARY:
 ${summary}
 
 ${factsBlock}
+
+${backgroundBlock}
 
 ${findingsBlock}
 
@@ -133,6 +143,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
       "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above — be concrete, not generic),
       "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap, citing specific dated developments from the facts dossier),
       "curiosityGaps": string[] (3-4 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
+      "mouthWateringSurprises": string[] (2-3 genuinely surprising, hard-to-believe true facts from this case's dossier or background profiles that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
       "scores": {
         "searchDemand": number (0-25),
         "competition": number (0-20, higher = LESS saturated),
@@ -144,7 +155,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, and findings provided — never invent facts.
+Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, background profiles, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, background profiles, and findings provided — never invent facts.
 
 CRITICAL — do not fabricate connections between this case and unrelated real events, people, or cases (including other true crime cases, mass-casualty events, or public tragedies) unless a findings source explicitly and directly states that connection as documented fact. A search result merely mentioning another event, or this case sharing a superficial theme with another event (e.g. both involving violence, both involving a school, similar names), is NOT a documented connection — do not propose an angle implying one exists. If the provided findings are thin, noisy, or not clearly about "${caseName}" specifically, do not stretch them into a narrative — prefer fewer, well-grounded angles over inventing an angle to fill the count. Return ONLY the JSON object.`;
 }
@@ -263,13 +274,14 @@ async function generateAngleBatch(
   category: string | null,
   summary: string,
   caseFacts: unknown,
+  backgroundProfiles: unknown,
   youtubeVideos: YouTubeVideoDetail[],
   genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
   channelDNA: ChannelDNA | null
 ): Promise<ParsedResponse> {
   const raw = await groqProvider.generateText(
-    buildPrompt(caseName, category, summary, caseFacts, youtubeVideos, genreVideos, findings, channelDNA),
+    buildPrompt(caseName, category, summary, caseFacts, backgroundProfiles, youtubeVideos, genreVideos, findings, channelDNA),
     { temperature: 0.7, maxTokens: 5500 }
   );
   return parseResponse(raw);
@@ -290,7 +302,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: caseRow, error: caseError } = await supabase
     .from("cases")
-    .select("name, summary, case_facts, category")
+    .select("name, summary, case_facts, background_profiles, category")
     .eq("id", caseId)
     .single();
 
@@ -345,6 +357,7 @@ export async function POST(req: NextRequest) {
       caseRow.category ?? null,
       caseRow.summary,
       caseRow.case_facts,
+      caseRow.background_profiles,
       youtubeVideos,
       genreVideos,
       findings,
@@ -357,6 +370,7 @@ export async function POST(req: NextRequest) {
         caseRow.category ?? null,
         caseRow.summary,
         caseRow.case_facts,
+        caseRow.background_profiles,
         youtubeVideos,
         genreVideos,
         findings,
@@ -412,6 +426,7 @@ export async function POST(req: NextRequest) {
       channel_fit: a.channelFit,
       why_work_on_it: a.whyWorkOnIt,
       curiosity_gaps: a.curiosityGaps,
+      mouth_watering_surprises: a.mouthWateringSurprises,
       latest_findings: latestFindings,
       title_ideas: parsed.titleIdeas,
     }));
@@ -420,7 +435,7 @@ export async function POST(req: NextRequest) {
       .from("angles")
       .insert(rowsToInsert)
       .select(
-        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
+        "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, mouth_watering_surprises, latest_findings, title_ideas"
       );
 
     if (insertError || !inserted) {
@@ -444,6 +459,7 @@ export async function POST(req: NextRequest) {
       channelFit: row.channel_fit ?? "",
       whyWorkOnIt: row.why_work_on_it ?? "",
       curiosityGaps: row.curiosity_gaps ?? [],
+      mouthWateringSurprises: row.mouth_watering_surprises ?? [],
       latestFindings: row.latest_findings ?? [],
       titleIdeas: normalizeTitleIdeas(row.title_ideas),
     }));

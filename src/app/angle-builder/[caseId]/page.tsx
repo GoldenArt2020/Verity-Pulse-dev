@@ -235,6 +235,7 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
               onClear={() => setSelectedIndex(null)}
               caseId={caseData.id}
               onScriptGenerated={handleScriptGenerated}
+              backgroundProfiles={caseData.background_profiles ?? []}
             />
             <div className="space-y-4">
               <AudienceProfileMatch angle={selectedAngle} />

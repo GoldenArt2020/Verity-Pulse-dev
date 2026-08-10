@@ -3,6 +3,7 @@ import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
+import { runBackgroundResearch } from "@/services/backgroundResearch";
 
 interface VictimDemographics {
   ethnicity: string | null;
@@ -128,9 +129,11 @@ function parseAnalysis(raw: string): ResearchAnalysis {
  * is tagged HIGH/MEDIUM/LOW reliability (see src/lib/sourceReliability.ts)
  * so the model — and later prompts reusing these sources — knows which
  * claims to trust for stated fact vs. context only. Saves the result to
- * the `cases` row. SERVER-ONLY — uses Tavily/Groq secret keys which must
- * never be read in the browser. Only ever imported from
- * /api/case/research/route.ts.
+ * the `cases` row, then runs a second-pass background-research step (see
+ * src/services/backgroundResearch.ts) off the named people just extracted,
+ * to build humanizing daily-life profiles for named victims/suspects.
+ * SERVER-ONLY — uses Tavily/Groq secret keys which must never be read in
+ * the browser. Only ever imported from /api/case/research/route.ts.
  *
  * `victimDemographics`/`caseTypeTags`/`solvedStatus` are extracted
  * cautiously — the prompt explicitly instructs the model to leave
@@ -196,5 +199,15 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
   const { error: sourcesError } = await supabase.from("sources").insert(sourceRows);
   if (sourcesError) {
     console.error("Failed to save sources:", sourcesError.message);
+  }
+
+  // Second pass: named victim/suspect background profiles, run
+  // automatically off the people just extracted above. Non-fatal — if this
+  // fails, the primary research above has already succeeded and saved, so
+  // we log and move on rather than failing the whole research step.
+  try {
+    await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
+  } catch (err) {
+    console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
   }
 }

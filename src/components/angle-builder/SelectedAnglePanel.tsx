@@ -8,6 +8,7 @@ import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
 import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 import type { ScriptSeoSummary } from "@/services/scriptWriter";
+import type { BackgroundProfile } from "@/hooks/useCase";
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
@@ -19,6 +20,7 @@ export function SelectedAnglePanel({
   onClear,
   caseId,
   onScriptGenerated,
+  backgroundProfiles,
 }: {
   angle: GeneratedAngle | null;
   onClear: () => void;
@@ -29,6 +31,7 @@ export function SelectedAnglePanel({
     wordCount: number,
     seo: { description: string; keywords: string[] } | null
   ) => void;
+  backgroundProfiles: BackgroundProfile[];
 }) {
   const router = useRouter();
   const [writing, setWriting] = useState(false);
@@ -169,6 +172,58 @@ export function SelectedAnglePanel({
                   </li>
                 ))}
               </ul>
+            </>
+          )}
+
+          {angle.mouthWateringSurprises?.length > 0 && (
+            <>
+              <p className="mt-5 text-xs font-semibold text-slate-300">Mouth-Watering Surprises</p>
+              <ul className="mt-2 space-y-1.5">
+                {angle.mouthWateringSurprises.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs leading-snug text-slate-400">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-pink-400" />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {backgroundProfiles.length > 0 && (
+            <>
+              <p className="mt-5 text-xs font-semibold text-slate-300">Background &amp; Daily Life</p>
+              <div className="mt-2 space-y-3">
+                {backgroundProfiles.map((p, i) => (
+                  <div key={i} className="rounded-xl border border-slate-800/60 bg-slate-900/30 p-3">
+                    <p className="text-[11px] font-semibold text-slate-200">
+                      {p.name} <span className="font-normal text-slate-500">— {p.role}</span>
+                    </p>
+                    <div className="mt-1.5 space-y-1.5 text-xs leading-relaxed text-slate-400">
+                      <p>
+                        <span className="text-slate-300">Background: </span>
+                        {p.background}
+                      </p>
+                      <p>
+                        <span className="text-slate-300">Daily life: </span>
+                        {p.dailyLife}
+                      </p>
+                      <p>
+                        <span className="text-slate-300">Personality: </span>
+                        {p.personality}
+                      </p>
+                      <p>
+                        <span className="text-slate-300">Relationships: </span>
+                        {p.relationships}
+                      </p>
+                      <p>
+                        <span className="text-slate-300">Last known activities: </span>
+                        {p.lastKnownActivities}
+                      </p>
+                    </div>
+                    {p.sourceNote && <p className="mt-1.5 text-[10px] italic text-slate-600">{p.sourceNote}</p>}
+                  </div>
+                ))}
+              </div>
             </>
           )}
 

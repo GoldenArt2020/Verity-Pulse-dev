@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+export interface BackgroundProfile {
+  name: string;
+  role: string;
+  background: string;
+  dailyLife: string;
+  personality: string;
+  relationships: string;
+  lastKnownActivities: string;
+  sourceNote: string | null;
+}
+
 export interface CaseRow {
   id: string;
   name: string;
@@ -15,6 +26,7 @@ export interface CaseRow {
   competition_score: number | null;
   coverage_score: number | null;
   coverage_intelligence: Record<string, unknown> | null;
+  background_profiles: BackgroundProfile[] | null;
   last_updated: string | null;
 }
 
