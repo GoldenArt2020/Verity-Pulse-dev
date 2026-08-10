@@ -1,15 +1,25 @@
 import type { AIProvider, AIGenerateOptions } from "./types";
 import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
-// Free tier, no credit card required — get a key at aistudio.google.com.
-// ~1,500 requests/day on Flash as of mid-2026, more than enough for
-// script generation's per-request pattern.
-const GEMINI_MODEL = "gemini-2.5-pro";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// Gemini 2.5 Pro is the primary model for quality. Its free tier is tight
+// (~5 RPM, ~25-100 RPD depending on account) — key rotation across
+// GEMINI_API_KEY_1/_2/_3... multiplies that ceiling, but a long
+// multi-section script can still exhaust every rotating Pro key in one
+// run. Rather than hard-failing when that happens, every call falls back
+// to 2.5 Flash (same API keys, much higher quota) ONLY once the full Pro
+// rotation is exhausted — so Pro is still used for everything by default,
+// Flash only ever fires as a safety net, and the user sees a completed
+// result instead of a 429 error.
+const PRIMARY_MODEL = "gemini-2.5-pro";
+const FALLBACK_MODEL = "gemini-2.5-flash";
 
-async function callGemini(prompt: string, options?: AIGenerateOptions): Promise<string> {
+function urlFor(model: string) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
+
+async function callGeminiModel(model: string, prompt: string, options?: AIGenerateOptions): Promise<string> {
   return withRotatingKey("GEMINI", async (apiKey) => {
-    const res = await fetch(GEMINI_API_URL, {
+    const res = await fetch(urlFor(model), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -31,11 +41,23 @@ async function callGemini(prompt: string, options?: AIGenerateOptions): Promise<
     }
 
     const data = await res.json();
-    // Gemini nests text under candidates[0].content.parts[].text — join
-    // every part in case the response is split across multiple.
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     return parts.map((p: { text?: string }) => p.text ?? "").join("");
   });
+}
+
+async function callGemini(prompt: string, options?: AIGenerateOptions): Promise<string> {
+  try {
+    return await callGeminiModel(PRIMARY_MODEL, prompt, options);
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    const isQuotaOrServerIssue = status === 429 || status === 401 || (typeof status === "number" && status >= 500);
+    if (!isQuotaOrServerIssue) {
+      throw err;
+    }
+    console.warn(`[gemini] ${PRIMARY_MODEL} exhausted across all rotating keys (status ${status}) — falling back to ${FALLBACK_MODEL} for this request.`);
+    return await callGeminiModel(FALLBACK_MODEL, prompt, options);
+  }
 }
 
 export const geminiProvider: AIProvider = {
