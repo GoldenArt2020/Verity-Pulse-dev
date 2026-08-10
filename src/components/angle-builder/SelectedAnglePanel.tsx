@@ -53,7 +53,6 @@ export function SelectedAnglePanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
       onScriptGenerated(angle.id, data.script, data.wordCount ?? wordCount, data.seo ?? null);
-      // Show the script for review before doing anything else with it.
       setPreview({ script: data.script, wordCount: data.wordCount ?? wordCount, seo: data.seo ?? null });
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
@@ -62,9 +61,6 @@ export function SelectedAnglePanel({
     }
   }
 
-  // Reopen the preview modal for a script that was already generated
-  // (either earlier this session or loaded back from the saved angle),
-  // instead of forcing a regeneration just to look at it again.
   function handleReopenScript() {
     if (!angle?.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
@@ -75,10 +71,6 @@ export function SelectedAnglePanel({
     });
   }
 
-  // Get-or-create the project row for this case (see POST /api/projects),
-  // then navigate to its real project id. Projects default to a non-finished
-  // status, so this lands automatically in the "Ongoing" bucket on
-  // /projects, opened straight to this angle's Analyze & Refine work.
   async function handleOpenInProject() {
     if (!angle) return;
     setOpeningProject(true);
@@ -150,6 +142,59 @@ export function SelectedAnglePanel({
               <p className="text-[11px] font-semibold text-blue-400">Opening Hook</p>
               <p className="mt-1 text-xs italic leading-relaxed text-slate-300">{angle.openingHook}</p>
             </div>
+          )}
+
+          {angle.channelFit && (
+            <div className="mt-5">
+              <p className="text-xs font-semibold text-slate-300">Channel Fit</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{angle.channelFit}</p>
+            </div>
+          )}
+
+          {angle.whyWorkOnIt && (
+            <div className="mt-5">
+              <p className="text-xs font-semibold text-slate-300">Why Work On This Now</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{angle.whyWorkOnIt}</p>
+            </div>
+          )}
+
+          {angle.curiosityGaps?.length > 0 && (
+            <>
+              <p className="mt-5 text-xs font-semibold text-slate-300">Curiosity Gaps</p>
+              <ul className="mt-2 space-y-1.5">
+                {angle.curiosityGaps.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs leading-snug text-slate-400">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-400" />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {angle.latestFindings?.length > 0 && (
+            <>
+              <p className="mt-5 text-xs font-semibold text-slate-300">Latest Findings</p>
+              <ul className="mt-2 space-y-2">
+                {angle.latestFindings.map((f, i) => (
+                  <li key={i} className="text-xs leading-snug text-slate-400">
+                    {f.url ? (
+                      <a
+                        href={f.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-blue-400 hover:text-blue-300"
+                      >
+                        {f.title} <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : (
+                      <span className="font-medium text-slate-300">{f.title}</span>
+                    )}
+                    {f.snippet && <p className="mt-0.5 text-slate-500">{f.snippet}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           <div className="mt-5">
