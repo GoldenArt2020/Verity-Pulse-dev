@@ -1,17 +1,16 @@
 import type { AIProvider, AIGenerateOptions } from "./types";
 import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
-// Gemini 2.5 Pro is the primary model for quality. Its free tier is tight
-// (~5 RPM, ~25-100 RPD depending on account) — key rotation across
-// GEMINI_API_KEY_1/_2/_3... multiplies that ceiling, but a long
-// multi-section script can still exhaust every rotating Pro key in one
-// run. Rather than hard-failing when that happens, every call falls back
-// to 2.5 Flash (same API keys, much higher quota) ONLY once the full Pro
-// rotation is exhausted — so Pro is still used for everything by default,
-// Flash only ever fires as a safety net, and the user sees a completed
-// result instead of a 429 error.
-const PRIMARY_MODEL = "gemini-2.5-pro";
-const FALLBACK_MODEL = "gemini-2.5-flash";
+// gemini-2.5-pro started returning 404 "no longer available to new users"
+// as Google winds it down ahead of its Oct 16, 2026 hard shutdown — even
+// though the model technically still works for established keys. Moved
+// primary down a tier to gemini-2.5-flash to keep working on the free-tier
+// key rotation this provider depends on. NOTE: the whole 2.5 generation
+// (flash + flash-lite included) shuts down Oct 16, 2026 regardless — by
+// then this needs to move to the Gemini 3.x line, which as of now is
+// paid-only (no free tier), so budget for that before then.
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-2.5-flash-lite";
 
 function urlFor(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
