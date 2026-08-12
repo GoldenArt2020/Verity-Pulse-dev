@@ -5,6 +5,7 @@ import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
+import { computeAlertTrendSignal } from "@/services/newsAlertTrends";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 import { deriveChannelSubniche } from "@/lib/channelSubniche";
 import { analyzeChannelCoverage } from "@/lib/youtubeCoverageAnalysis";
@@ -246,6 +247,36 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Only include real, distinct, currently real-world cases — do not invent anything. Score creatorDnaMatch and audienceInterest honestly against the profile above, even for trending cases outside the creator's usual coverage.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
+/**
+ * For cases sourced from live news-alert monitoring (case_alerts), rather
+ * than search-result snippets. These are confirmed real, currently-reported
+ * cases already detected by the polling pipeline — Groq scores their
+ * qualitative fit (creator DNA, virality, angle, etc.) using the known facts
+ * provided; searchOpportunity and newsMomentum are overridden afterward with
+ * the deterministically computed trend signal rather than left to guesswork.
+ */
+function buildNewsAlertPrompt(
+  alerts: { title: string; context: string }[],
+  dna?: ChannelDNA | null,
+  excludedTitles?: Set<string>
+): string {
+  const alertBlock = alerts.map((a, i) => `${i + 1}. CASE: ${a.title}\n${a.context}`).join("\n\n");
+
+  return `You are an editorial analyst for a true crime YouTube intelligence platform. The cases below were just detected from live news monitoring — they are confirmed real, currently-reported cases, not proposals you're generating.
+
+${buildAudienceDnaBlock(dna)}
+
+${VIRALITY_RUBRIC}
+
+DETECTED CASES:
+${alertBlock}
+
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{ "candidates": [${CANDIDATE_SHAPE}] }
+
+Include every case listed above exactly once, using its exact CASE name as "title" — do not skip any, do not merge them together, do not invent additional cases beyond this list. Score every field honestly and distinctly.${buildExclusionBlock(excludedTitles ?? new Set())}`;
+}
+
 function parseJSON<T>(raw: string): T {
   const cleaned = raw
     .trim()
@@ -419,8 +450,64 @@ async function fetchPersonalizedRecommendations(
     buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
     { temperature: 0.4, maxTokens: 2600 }
   );
+  
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
+}
+/**
+ * case_alerts rows are pre-screened breaking murder cases — apitube/
+ * newsdata polls feed classifyArticle() in newsAlerts.ts, which already
+ * confirmed via Groq that each one is a real, specific murder case before
+ * it was saved. This pulls those straight into the SAME scoring pipeline
+ * every other candidate goes through (creator DNA match, virality rubric,
+ * region lock, demographic match) rather than leaving them stranded on
+ * the separate /news-alerts manual-review page. Previously the only way
+ * a news_alert became a case was a human manually clicking "Promote" —
+ * which skipped every one of those checks entirely.
+ */
+async function fetchNewsAlertCandidates(
+  supabase: SupabaseClient,
+  dna: ChannelDNA | null | undefined,
+  excludedTitles: Set<string>,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
+): Promise<Recommendation[]> {
+  const { data: alerts, error } = await supabase
+    .from("case_alerts")
+    .select("headline, case_name, location, summary, source_name, published_at, url")
+    .eq("status", "pending")
+    .order("published_at", { ascending: false })
+    .limit(15);
+
+  if (error || !alerts || alerts.length === 0) return [];
+
+  const searchContext = formatSearchContext(
+    alerts.map((a) => ({
+      title: a.case_name || a.headline,
+      snippet: [a.summary, a.location ? `Location: ${a.location}` : null, a.source_name ? `Source: ${a.source_name}` : null]
+        .filter(Boolean)
+        .join(" — "),
+      publishedDate: a.published_at ?? undefined,
+    }))
+  );
+
+  const prompt = `You are a trend analyst for a true crime YouTube intelligence platform. The cases below have ALREADY been confirmed as real, specific, named murder/homicide cases by an initial screening pass — they are not generic search results, treat every one as a verified breaking case candidate.
+
+${buildAudienceDnaBlock(dna)}
+
+${VIRALITY_RUBRIC}
+
+VERIFIED BREAKING CASES:
+${searchContext}
+
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{ "candidates": [${CANDIDATE_SHAPE}] }
+
+Score every case honestly and distinctly against the profile above. Include every case that's a genuine, distinct real case — do not skip one just because it's less exciting than another.${buildExclusionBlock(excludedTitles)}`;
+
+  const raw = await groqProvider.generateText(prompt, { temperature: 0.4, maxTokens: 2600 });
+  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  return scoreAndFilter(candidates ?? [], dna, "currently-trending", excludedTitles, assignments, currentSubniche);
 }
 
 async function fetchTrendRecommendations(
@@ -452,6 +539,112 @@ async function fetchTrendRecommendations(
   );
   const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
+}
+
+interface CaseAlertRow {
+  id: string;
+  headline: string;
+  case_name: string | null;
+  location: string | null;
+  summary: string | null;
+  source_name: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+const ALERT_LOOKBACK_DAYS = 14;
+const MAX_ALERTS_PER_RUN = 25;
+
+async function fetchRecentAlerts(supabase: SupabaseClient): Promise<CaseAlertRow[]> {
+  const cutoff = new Date(Date.now() - ALERT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("case_alerts")
+    .select("id, headline, case_name, location, summary, source_name, published_at, created_at")
+    .in("status", ["pending", "promoted"])
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(MAX_ALERTS_PER_RUN);
+
+  if (error || !data) return [];
+
+  // Dedupe by case_name (fallback to headline) so multiple outlets
+  // reporting the same case don't produce duplicate candidates.
+  const seen = new Set<string>();
+  const deduped: CaseAlertRow[] = [];
+  for (const row of data as CaseAlertRow[]) {
+    const key = normalizeTitle(row.case_name || row.headline);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
+}
+
+/**
+ * Funnels live news-alert detections (from the case_alerts polling
+ * pipeline) into recommendations. A case only surfaces here once its
+ * combined Google + YouTube search signal clears the "about-to-trend"
+ * floor — weaker signal cases stay in the /news-alerts review queue
+ * without cluttering recommendations. The trend section a case lands in
+ * (and its searchOpportunity score) is decided by that computed signal,
+ * not by Groq's guess.
+ */
+async function fetchNewsAlertRecommendations(
+  supabase: SupabaseClient,
+  dna: ChannelDNA | null | undefined,
+  excludedTitles: Set<string>,
+  assignments: Map<string, ClaimedAssignment>,
+  currentSubniche: string
+): Promise<Recommendation[]> {
+  const alertRows = await fetchRecentAlerts(supabase);
+  if (alertRows.length === 0) return [];
+
+  const withSignal = await Promise.all(
+    alertRows.map(async (row) => {
+      const title = row.case_name || row.headline;
+      const signal = await computeAlertTrendSignal(title);
+      return { row, title, signal };
+    })
+  );
+
+  const qualifying = withSignal.filter((w) => w.signal.trendStatus !== null);
+  if (qualifying.length === 0) return [];
+
+  const alertContext = qualifying.map((w) => ({
+    title: w.title,
+    context: `Location: ${w.row.location ?? "unknown"}
+Summary: ${w.row.summary ?? w.row.headline}
+Source: ${w.row.source_name ?? "unknown"}
+Detected: ${w.row.published_at ?? w.row.created_at}
+External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube combined)`,
+  }));
+
+  const raw = await groqProvider.generateText(
+    buildNewsAlertPrompt(alertContext, dna, excludedTitles),
+    { temperature: 0.3, maxTokens: 2600 }
+  );
+  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+
+  const signalByTitle = new Map(qualifying.map((w) => [normalizeTitle(w.title), w.signal]));
+
+  const adjusted = (candidates ?? [])
+    .map((c) => {
+      const signal = signalByTitle.get(normalizeTitle(c.title));
+      if (!signal || !signal.trendStatus) return null;
+      return {
+        candidate: { ...c, searchOpportunity: signal.combinedScore, newsMomentum: 90 } as ScoredCandidate,
+        trendStatus: signal.trendStatus as TrendStatus,
+      };
+    })
+    .filter((x): x is { candidate: ScoredCandidate; trendStatus: TrendStatus } => x !== null);
+
+  const results: Recommendation[] = [];
+  for (const { candidate, trendStatus } of adjusted) {
+    results.push(
+      ...scoreAndFilter([candidate], dna, trendStatus, excludedTitles, assignments, currentSubniche)
+    );
+  }
+  return results;
 }
 
 /**
@@ -527,16 +720,29 @@ export async function generateRecommendations(
     ...assignmentExclusionSample(assignments, currentSubniche),
   ]);
 
-  const [personalized, currentlyTrending, aboutToTrend] = await Promise.all([
+  const [personalized, currentlyTrending, aboutToTrend, newsAlerts] = await Promise.all([
     topics.length > 0
       ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles, assignments, currentSubniche)
       : Promise.resolve([]),
     fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles, assignments, currentSubniche),
     fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
+    fetchNewsAlertCandidates(supabase, channelDNA, excludedTitles, assignments, currentSubniche),
   ]);
 
-  const merged = [...personalized, ...currentlyTrending, ...aboutToTrend];
-  const recommendations = await filterOversaturated(merged);
+  const merged = [...personalized, ...currentlyTrending, ...aboutToTrend, ...newsAlerts];
+  // News-alert-sourced and search-sourced recommendations can both surface
+  // the same real-world case independently — dedupe by title, keeping
+  // whichever scored higher.
+  const byTitle = new Map<string, Recommendation>();
+  for (const r of merged) {
+    const key = normalizeTitle(r.title);
+    const existing = byTitle.get(key);
+    if (!existing || r.audienceMatch > existing.audienceMatch) {
+      byTitle.set(key, r);
+    }
+  }
+
+  const recommendations = await filterOversaturated(Array.from(byTitle.values()));
 
   const { error } = await supabase
     .from("channels")

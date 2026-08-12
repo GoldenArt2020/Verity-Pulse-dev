@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
+import { geminiProvider } from "@/providers/ai/geminiProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
@@ -20,8 +21,6 @@ interface CaseForScript {
 
 interface ResearchBrief {
   caseFacts: string[];
-  keyQuotes: string[];
-  timeline: string[];
   retentionPrinciples: string[];
   ctaGuidance: string;
 }
@@ -31,11 +30,30 @@ export interface ScriptSeoSummary {
   description: string;
 }
 
-export interface GeneratedScriptResult {
-  script: string;
-  wordCount: number;
-  seo: ScriptSeoSummary | null;
+interface SectionPlan {
+  index: number;
+  focus: string;
+  targetWords: number;
+  includeCTA: boolean;
 }
+
+export interface ScriptJobRow {
+  id: string;
+  angle_id: string;
+  case_id: string;
+  word_count: number;
+  status: "writing" | "seo" | "complete" | "failed";
+  brief: ResearchBrief;
+  outline: string[];
+  sections: string[];
+  current_section_index: number;
+  total_sections: number;
+  previous_tail: string | null;
+  channel_dna: ChannelDNA | null;
+  error: string | null;
+}
+
+// ---------- prompt builders ----------
 
 function buildResearchPrompt(
   caseData: CaseForScript,
@@ -62,25 +80,99 @@ ${craftSourcesText || "No additional craft sources found."}
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
-  "caseFacts": string[] (8-14 concrete, specific, non-overlapping facts — each one a distinct piece of information, never a restatement of another fact in different words. Include names, exact dates/times, locations, and roles. Do not invent anything not supported by the sources),
-  "keyQuotes": string[] (3-8 short direct quotes or paraphrased statements attributed to a specific named person — family member, official, witness, or a documented text/social media message — that could be spoken or referenced on camera. Each entry should be formatted as 'Speaker/Source: quote or paraphrase'. Only include these if the sources actually support them; return an empty array if none exist),
-  "timeline": string[] (a chronological list of the specific dated/timed beats of this case, each as one short line, e.g. 'Feb 25, 2024, 7:46am — texts location to her mother.' Only include events explicitly supported by the sources),
+  "caseFacts": string[] (5-10 concrete, specific facts about this case relevant to the angle's core question and research focus — dates, roles, locations, documented events; do not invent anything not supported by the sources),
   "retentionPrinciples": string[] (5-8 specific, actionable YouTube script-retention techniques relevant to true crime storytelling — pacing, hook placement, information reveal order, tension structure),
   "ctaGuidance": string (2-3 sentences on natural points in a true crime narrative where a subscribe/follow prompt can be woven in without breaking immersion, described as principles, not literal script lines)
 }
 
-Return ONLY the JSON object.`;
+Keep every array item short and concrete — one sentence each — so the full response fits comfortably within the token budget. Return ONLY the JSON object.`;
 }
 
-function parseJsonObject<T>(raw: string): T {
-  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+function extractStringField(text: string, key: string): string {
+  const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+  const m = text.match(re);
+  if (!m) return "";
+  try {
+    return JSON.parse(`"${m[1]}"`);
+  } catch {
+    return m[1];
+  }
+}
+
+function extractArrayField(text: string, key: string): string[] {
+  const keyIdx = text.indexOf(`"${key}"`);
+  if (keyIdx === -1) return [];
+  const bracketStart = text.indexOf("[", keyIdx);
+  if (bracketStart === -1) return [];
+
+  let depth = 0;
+  let sliceEnd = text.length;
+  for (let i = bracketStart; i < text.length; i++) {
+    if (text[i] === "[") depth++;
+    else if (text[i] === "]") {
+      depth--;
+      if (depth === 0) {
+        sliceEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  const candidate = text.slice(bracketStart, sliceEnd);
+  try {
+    const parsed = JSON.parse(candidate);
+    if (Array.isArray(parsed)) return parsed.map((v) => String(v));
+  } catch {
+    const matches = candidate.match(/"((?:[^"\\]|\\.)*)"/g) ?? [];
+    return matches
+      .map((m) => {
+        try {
+          return JSON.parse(m) as string;
+        } catch {
+          return null;
+        }
+      })
+      .filter((v): v is string => v !== null);
+  }
+  return [];
+}
+
+function parseResearchBrief(raw: string): ResearchBrief {
+  const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1) {
+  if (firstBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
   }
-  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-  return JSON.parse(cleaned);
+  const fromFirstBrace = cleaned.slice(firstBrace);
+  const lastBrace = fromFirstBrace.lastIndexOf("}");
+
+  if (lastBrace !== -1) {
+    try {
+      const parsed = JSON.parse(fromFirstBrace.slice(0, lastBrace + 1));
+      if (Array.isArray(parsed.caseFacts) && parsed.caseFacts.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // fall through to salvage
+    }
+  }
+
+  const caseFacts = extractArrayField(fromFirstBrace, "caseFacts");
+  const retentionPrinciples = extractArrayField(fromFirstBrace, "retentionPrinciples");
+  const ctaGuidance = extractStringField(fromFirstBrace, "ctaGuidance");
+
+  if (caseFacts.length === 0) {
+    throw new Error(`Could not salvage research brief from truncated AI response: ${raw.slice(0, 200)}`);
+  }
+
+  return {
+    caseFacts,
+    retentionPrinciples:
+      retentionPrinciples.length > 0
+        ? retentionPrinciples
+        : ["Maintain a steady, controlled pace and reveal information incrementally."],
+    ctaGuidance: ctaGuidance || "Weave a natural subscribe prompt in after a tension peak, before a scene transition.",
+  };
 }
 
 function parseJsonArray(raw: string): string[] {
@@ -96,6 +188,17 @@ function parseJsonArray(raw: string): string[] {
   return parsed.map((v) => String(v));
 }
 
+function parseJsonObject<T>(raw: string): T {
+  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
+  }
+  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  return JSON.parse(cleaned);
+}
+
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -105,7 +208,7 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** ~2,600 words/section — fewer, larger sections means fewer sequential
- * Groq round-trips, which matters a lot on Vercel Hobby's 60s hard cap. */
+ * round-trips overall, even though each is now its own request. */
 function sectionCountFor(wordCount: ScriptWordCount): number {
   return Math.max(2, Math.ceil(wordCount / 2600));
 }
@@ -124,17 +227,7 @@ CORE QUESTION THE SCRIPT MUST ANSWER: ${angle.coreQuestion}
 CASE FACTS AVAILABLE:
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
-TIMELINE AVAILABLE:
-${brief.timeline.map((t) => `- ${t}`).join("\n")}
-
-Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what SPECIFIC scene, event, or beat that section of the narration should cover — name the actual moment (e.g. "The confrontation at Pope's apartment and the decision to strip him"), not a vague topic like "background" or "the investigation continues". Sections must move the story forward in strict chronological/dramatic order with zero overlap — each fact and beat appears in exactly one section, never revisited in a later one. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
-}
-
-interface SectionPlan {
-  index: number;
-  focus: string;
-  targetWords: number;
-  includeCTA: boolean;
+Return ONLY a valid JSON array of exactly ${sectionCount} short strings. Each string is a one-line description of what that section of the narration should cover, in strict order, building toward fully answering the core question by the final section. Do not number them yourself. Return ONLY the JSON array, nothing else.`;
 }
 
 function buildSectionPlan(wordCount: number, outline: string[]): SectionPlan[] {
@@ -160,36 +253,19 @@ function buildSectionPrompt(
   plan: SectionPlan,
   previousTail: string | null
 ): string {
-  const style = dna?.channelStyle;
-  const audience = dna?.audienceDNA;
-
-  const styleLines = style
-    ? [
-        `- Storytelling style: ${style.storytellingStyle}`,
-        `- Pacing: ${style.averagePacing}`,
-        `- Emotional tone: ${style.emotionalTone}`,
-        style.typicalHooks?.length ? `- Typical hooks this channel uses: ${style.typicalHooks.join(", ")}` : null,
-      ].filter(Boolean)
-    : [];
-
-  const audienceLines = audience
-    ? [
-        `- Narrative style (audience-preferred): ${audience.narrativeStyle}`,
-        audience.evidenceWeight?.length
-          ? `- Evidence emphasis audience responds to: ${audience.evidenceWeight.join(", ")}`
-          : null,
-        audience.contentFreshness ? `- Content freshness framing: ${audience.contentFreshness}` : null,
-      ].filter(Boolean)
-    : [];
-
-  const dnaLines = [...styleLines, ...audienceLines];
-
-  const dnaBlock = dnaLines.length > 0
-    ? `CHANNEL VOICE TO WRITE IN:\n${dnaLines.join("\n")}`
+  const dnaBlock = dna
+    ? `CHANNEL VOICE TO WRITE IN:
+- Storytelling style: ${dna.channelStyle.storytellingStyle}
+- Pacing: ${dna.channelStyle.averagePacing}
+- Emotional tone: ${dna.channelStyle.emotionalTone}
+- Typical hooks this channel uses: ${dna.channelStyle.typicalHooks.join(", ")}
+- Narrative style (audience-preferred): ${dna.audienceDNA.narrativeStyle}
+- Evidence emphasis audience responds to: ${dna.audienceDNA.evidenceWeight.join(", ")}
+- Content freshness framing: ${dna.audienceDNA.contentFreshness}`
     : `No Channel DNA profile is available — write in a clear, engaging, emotionally grounded true crime documentary voice.`;
 
   const continuityBlock = previousTail
-    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense. Do not re-explain anything already covered above.`
+    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point — do not repeat, recap, or restart. Pick up exactly where it left off, same voice, same tense.`
     : `THIS IS THE OPENING of the full script. Open with this hook direction, in your own words: ${angle.openingHook}`;
 
   const ctaBlock = plan.includeCTA
@@ -203,14 +279,6 @@ function buildSectionPrompt(
       ? `SEO REQUIREMENT FOR THIS FINAL SECTION: close on a sentence that naturally reinforces the case name/subject and core topic in plain spoken language, so the ending of the transcript stays topically relevant for search and suggested placement.`
       : `SEO REQUIREMENT: naturally reuse the case name/subject and closely related search phrases at least once in this section, at a natural spoken cadence — never forced, never listy.`;
 
-  const quotesBlock = brief.keyQuotes.length > 0
-    ? `AVAILABLE QUOTES / DOCUMENTED STATEMENTS (use any that fit this section naturally — attribute them to the speaker, do not invent new ones):\n${brief.keyQuotes.map((q) => `- ${q}`).join("\n")}`
-    : "";
-
-  const timelineBlock = brief.timeline.length > 0
-    ? `FULL CASE TIMELINE (for reference — only cover the beats assigned to THIS section, per the outline):\n${brief.timeline.map((t) => `- ${t}`).join("\n")}`
-    : "";
-
   return `You are a professional true crime YouTube scriptwriter, mid-way through writing a full narration script about "${caseData.name}".
 
 ANGLE: ${angle.title}
@@ -222,12 +290,8 @@ ${dnaBlock}
 FULL SCRIPT OUTLINE (for your awareness of the whole arc — you are only writing ONE section of it now):
 ${outline.map((o, i) => `${i + 1}. ${o}${i === plan.index ? "   <-- YOU ARE WRITING THIS SECTION NOW" : ""}`).join("\n")}
 
-CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them; do not repeat a fact used in an earlier section):
+CASE FACTS TO DRAW FROM (use these, do not invent facts beyond them):
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
-
-${timelineBlock}
-
-${quotesBlock}
 
 RETENTION TECHNIQUES TO APPLY (structurally, not by naming them):
 ${brief.retentionPrinciples.map((r) => `- ${r}`).join("\n")}
@@ -238,24 +302,27 @@ ${ctaBlock}
 
 ${seoBlock}
 
-WRITE ONLY SECTION ${plan.index + 1} OF ${outline.length} NOW, focused specifically on: "${plan.focus}"
+WRITE ONLY SECTION ${plan.index + 1} OF ${outline.length} NOW, focused on: "${plan.focus}"
 Target length: approximately ${plan.targetWords} words for this section.
-
-WRITING STYLE — THIS IS THE MOST IMPORTANT PART, FOLLOW IT EXACTLY:
-- Write this as a SCENE, not a summary. Put the viewer at the specific place and moment named in the focus above — who was there, what they said, what happened, in the order it happened.
-- Use short, punchy sentences mixed with occasional longer ones for rhythm. Avoid long compound sentences that stack multiple clauses together.
-- Weave in any relevant quote from the AVAILABLE QUOTES list above, attributed naturally ("Her mother would later say..." / "Officers wrote in the report...") — do not just summarize what someone said when an actual quote is available.
-- NEVER restate a fact, event, or idea that has already been covered — either earlier in this section or in a previous section. Each sentence must add NEW information. If you find yourself explaining the same event a second way, cut it.
-- BANNED PHRASES — do not use any of these or close variants: "As the investigation continued", "It's clear that", "In the days that followed", "As the case continues to unfold", "The community was left in shock", "This tragic case", "A tragic and disturbing", "will explore", "we will be examining", "it's important to", "the story of [name]'s murder is", "stay tuned", "as we delve deeper", "this case serves as a reminder". These are generic filler — replace them with a specific, concrete sentence about what actually happened.
-- Do NOT summarize what's coming later, do NOT tell the viewer what "we will explore" or "we will examine" — just tell the story as it happens, scene by scene.
-- Prefer showing over telling: instead of "the investigation was thorough," describe the specific thing investigators did.
-- Vary sentence openings — do not start consecutive sentences with "As", "The", or the case name.
 
 Requirements:
 - Plain narration text only — no scene headers, no bracketed directions, no "[CUT TO]", no timestamps, no speaker labels, no markdown, no section title.
 - Read exactly as a narrator would say it aloud.
 - Do not write "in this section" or reference the outline — just write the narration itself.
-- Do not include a preamble like "Here is the script" — output narration text only.`;
+- Do not include a preamble like "Here is the script" — output narration text only.
+- Finish on a complete sentence. Do not cut off mid-thought.`;
+}
+
+function buildContinuationPrompt(caseData: CaseForScript, cutOffTail: string): string {
+  return `You are continuing a true crime YouTube narration script about "${caseData.name}" that was cut off mid-sentence. Here is exactly how it ends:
+
+"...${cutOffTail}"
+
+Write ONLY the rest of that final unfinished sentence, plus one more sentence to close the thought naturally. Do not repeat any of the text above. Do not add a new idea or transition — just finish what was already being said. Plain narration text only, no preamble.`;
+}
+
+function endsCleanly(text: string): boolean {
+  return /[.!?][")\u201d\u2019]?\s*$/.test(text.trim());
 }
 
 function buildSeoSummaryPrompt(caseData: CaseForScript, angle: AngleForScript, script: string): string {
@@ -272,27 +339,19 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Return ONLY the JSON object.`;
 }
 
+// ---------- job steps ----------
+
 /**
- * Multi-stage script generation for a given angle:
- *   1. Research  — Tavily-backed brief (case facts, quotes, timeline, retention principles, CTA guidance).
- *   2. Outline   — Groq breaks the target word count into N sequential, non-overlapping scene-based sections.
- *   3. Sections  — Groq writes each section in order, carrying the tail of the
- *      previous section forward for continuity, with SEO and CTA guidance
- *      applied per-section so long scripts stay coherent and never hit any
- *      single-call output ceiling.
- *   4. SEO       — a short Groq pass extracts keywords/description from the
- *      finished script for the creator to reuse when publishing.
- *
- * SERVER-ONLY. Saves the assembled script — plus its word count and SEO
- * summary — to the angles row, so it survives a reload instead of only
- * living in the response payload of this one request.
+ * STEP 1 of 3. Runs research (Groq, truncation-tolerant) + outline (Groq) —
+ * both quick, single calls — then creates a script_jobs row that the
+ * remaining steps advance one section at a time. Kept fast enough to
+ * comfortably finish in one request even on Vercel Hobby's 60s cap.
  */
-export async function generateScriptForAngle(
+export async function createScriptJob(
   angleId: string,
   caseId: string,
-  channelDNA: ChannelDNA | null,
   wordCount: ScriptWordCount
-): Promise<GeneratedScriptResult> {
+): Promise<{ jobId: string; totalSections: number }> {
   if (!(SCRIPT_WORD_COUNT_OPTIONS as readonly number[]).includes(wordCount)) {
     throw new Error(`Invalid word count: ${wordCount}`);
   }
@@ -300,7 +359,10 @@ export async function generateScriptForAngle(
     throw new Error("Tavily is not configured — cannot research this script");
   }
   if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot write this script");
+    throw new Error("Groq is not configured — cannot research this script");
+  }
+  if (!geminiProvider.isConfigured()) {
+    throw new Error("Gemini is not configured — cannot write this script");
   }
 
   const supabase = await createClient();
@@ -330,6 +392,30 @@ export async function generateScriptForAngle(
     openingHook: angleRow.opening_hook,
   };
 
+  let channelDNA: ChannelDNA | null = null;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: activeRow } = await supabase
+        .from("active_channel")
+        .select("channel_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (activeRow?.channel_id) {
+        const { data: channelRow } = await supabase
+          .from("channels")
+          .select("channel_dna")
+          .eq("id", activeRow.channel_id)
+          .maybeSingle();
+        channelDNA = (channelRow?.channel_dna as unknown as ChannelDNA) ?? null;
+      }
+    }
+  } catch {
+    channelDNA = null;
+  }
+
   const [caseSearchResults, craftSearchResults] = await Promise.all([
     tavilyProvider.search(`${caseRow.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6),
     tavilyProvider.search("true crime youtube script retention techniques engaging storytelling", 6),
@@ -338,19 +424,19 @@ export async function generateScriptForAngle(
   const caseSourcesText = caseSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
   const craftSourcesText = craftSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
 
-  const brief = await withRetry(async () => {
-    const raw = await groqProvider.generateText(
-      buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText),
-      { temperature: 0.3, maxTokens: 2000 }
-    );
-    return parseJsonObject<ResearchBrief>(raw);
-  });
+  const researchRaw = await withRetry(() =>
+    groqProvider.generateText(buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText), {
+      temperature: 0.3,
+      maxTokens: 2200,
+    })
+  );
+  const brief = parseResearchBrief(researchRaw);
 
   const sectionCount = sectionCountFor(wordCount);
   const outlineRaw = await withRetry(() =>
     groqProvider.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
       temperature: 0.4,
-      maxTokens: 800,
+      maxTokens: 700,
     })
   );
   let outline = parseJsonArray(outlineRaw);
@@ -361,24 +447,191 @@ export async function generateScriptForAngle(
     }
   }
 
-  const plans = buildSectionPlan(wordCount, outline);
-  const sections: string[] = [];
-  let previousTail: string | null = null;
+  const { data: jobRow, error: insertError } = await supabase
+    .from("script_jobs")
+    .insert({
+      angle_id: angleId,
+      case_id: caseId,
+      word_count: wordCount,
+      status: "writing",
+      brief,
+      outline,
+      sections: [],
+      current_section_index: 0,
+      total_sections: sectionCount,
+      previous_tail: null,
+      channel_dna: channelDNA,
+    })
+    .select("id")
+    .single();
 
-  for (const plan of plans) {
-    const maxTokens = Math.min(4096, Math.max(600, Math.ceil(plan.targetWords * 1.8)));
-    const sectionRaw = await withRetry(() =>
-      groqProvider.generateText(buildSectionPrompt(caseRow, angle, brief, channelDNA, outline, plan, previousTail), {
-        temperature: 0.65,
-        maxTokens,
-      })
-    );
-    const sectionText = sectionRaw.trim();
-    sections.push(sectionText);
-    previousTail = sectionText.split(/\s+/).slice(-120).join(" ");
+  if (insertError || !jobRow) {
+    throw new Error(`Failed to create script job: ${insertError?.message ?? "unknown error"}`);
   }
 
-  const cleanScript = sections.join("\n\n").trim();
+  return { jobId: jobRow.id, totalSections: sectionCount };
+}
+
+/**
+ * STEP 2 of 3, called once per section. Writes exactly ONE section via
+ * Gemini (with a follow-up continuation call if it gets cut off
+ * mid-sentence), appends it to the job row, and reports whether more
+ * sections remain. Each call does at most two AI requests, so it stays
+ * far under any serverless timeout regardless of total script length.
+ */
+export async function advanceScriptJob(
+  jobId: string
+): Promise<{ status: ScriptJobRow["status"]; sectionsCompleted: number; totalSections: number }> {
+  const supabase = await createClient();
+
+  const { data: job, error: jobError } = await supabase
+    .from("script_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .single<ScriptJobRow>();
+
+  if (jobError || !job) {
+    throw new Error(`Script job not found: ${jobError?.message ?? "unknown error"}`);
+  }
+  if (job.status !== "writing") {
+    return { status: job.status, sectionsCompleted: job.sections.length, totalSections: job.total_sections };
+  }
+
+  const { data: angleRow, error: angleError } = await supabase
+    .from("angles")
+    .select("id, title, core_question, why_it_works, research_focus, opening_hook")
+    .eq("id", job.angle_id)
+    .single();
+  const { data: caseRow, error: caseError } = await supabase
+    .from("cases")
+    .select("name, summary")
+    .eq("id", job.case_id)
+    .single();
+
+  if (angleError || !angleRow) throw new Error(`Angle not found: ${angleError?.message ?? "unknown error"}`);
+  if (caseError || !caseRow) throw new Error(`Case not found: ${caseError?.message ?? "unknown error"}`);
+
+  const angle: AngleForScript = {
+    id: angleRow.id,
+    title: angleRow.title,
+    coreQuestion: angleRow.core_question,
+    whyItWorks: angleRow.why_it_works,
+    researchFocus: angleRow.research_focus,
+    openingHook: angleRow.opening_hook,
+  };
+
+  const plans = buildSectionPlan(job.word_count, job.outline);
+  const plan = plans[job.current_section_index];
+
+  try {
+    const maxTokens = Math.min(6000, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
+    const sectionRaw = await withRetry(() =>
+      geminiProvider.generateText(
+        buildSectionPrompt(caseRow, angle, job.brief, job.channel_dna, job.outline, plan, job.previous_tail),
+        { temperature: 0.65, maxTokens }
+      )
+    );
+    let sectionText = sectionRaw.trim();
+
+    if (!endsCleanly(sectionText)) {
+      try {
+        const tail = sectionText.split(/\s+/).slice(-60).join(" ");
+        const continuation = await geminiProvider.generateText(buildContinuationPrompt(caseRow, tail), {
+          temperature: 0.65,
+          maxTokens: 200,
+        });
+        sectionText = `${sectionText} ${continuation.trim()}`.trim();
+      } catch {
+        // Non-fatal — ship the section as-is.
+      }
+    }
+
+    const updatedSections = [...job.sections, sectionText];
+    const nextIndex = job.current_section_index + 1;
+    const isDone = nextIndex >= job.total_sections;
+    const previousTail = sectionText.split(/\s+/).slice(-120).join(" ");
+
+    const { error: updateError } = await supabase
+      .from("script_jobs")
+      .update({
+        sections: updatedSections,
+        current_section_index: nextIndex,
+        previous_tail: previousTail,
+        status: isDone ? "seo" : "writing",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId);
+
+    if (updateError) throw new Error(`Failed to save section progress: ${updateError.message}`);
+
+    return {
+      status: isDone ? "seo" : "writing",
+      sectionsCompleted: nextIndex,
+      totalSections: job.total_sections,
+    };
+  } catch (err) {
+    await supabase
+      .from("script_jobs")
+      .update({ status: "failed", error: err instanceof Error ? err.message : "Unknown error" })
+      .eq("id", jobId);
+    throw err;
+  }
+}
+
+/**
+ * STEP 3 of 3. Joins the completed sections, runs a short Groq SEO pass,
+ * saves the finished script to angles.script, and marks the job complete.
+ */
+export async function finalizeScriptJob(
+  jobId: string
+): Promise<{ script: string; wordCount: number; seo: ScriptSeoSummary | null }> {
+  const supabase = await createClient();
+
+  const { data: job, error: jobError } = await supabase
+    .from("script_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .single<ScriptJobRow>();
+
+  if (jobError || !job) {
+    throw new Error(`Script job not found: ${jobError?.message ?? "unknown error"}`);
+  }
+  if (job.status === "complete") {
+    const { data: angleRow } = await supabase.from("angles").select("script").eq("id", job.angle_id).single();
+    return {
+      script: angleRow?.script ?? job.sections.join("\n\n"),
+      wordCount: job.sections.join(" ").split(/\s+/).filter(Boolean).length,
+      seo: null,
+    };
+  }
+  if (job.status !== "seo") {
+    throw new Error(`Script job is not ready to finalize (status: ${job.status})`);
+  }
+
+  const { data: angleRow, error: angleError } = await supabase
+    .from("angles")
+    .select("id, title, core_question, why_it_works, research_focus, opening_hook")
+    .eq("id", job.angle_id)
+    .single();
+  const { data: caseRow, error: caseError } = await supabase
+    .from("cases")
+    .select("name, summary")
+    .eq("id", job.case_id)
+    .single();
+
+  if (angleError || !angleRow) throw new Error(`Angle not found: ${angleError?.message ?? "unknown error"}`);
+  if (caseError || !caseRow) throw new Error(`Case not found: ${caseError?.message ?? "unknown error"}`);
+
+  const angle: AngleForScript = {
+    id: angleRow.id,
+    title: angleRow.title,
+    coreQuestion: angleRow.core_question,
+    whyItWorks: angleRow.why_it_works,
+    researchFocus: angleRow.research_focus,
+    openingHook: angleRow.opening_hook,
+  };
+
+  const cleanScript = job.sections.join("\n\n").trim();
   const actualWordCount = cleanScript.split(/\s+/).filter(Boolean).length;
 
   let seo: ScriptSeoSummary | null = null;
@@ -394,18 +647,46 @@ export async function generateScriptForAngle(
 
   const { error: saveError } = await supabase
     .from("angles")
-    .update({
-      script: cleanScript,
-      script_generated_at: new Date().toISOString(),
-      script_word_count: actualWordCount,
-      seo_description: seo?.description ?? null,
-      seo_tags: seo?.keywords ?? null,
-    })
-    .eq("id", angleId);
+    .update({ script: cleanScript, script_generated_at: new Date().toISOString() })
+    .eq("id", job.angle_id);
 
   if (saveError) {
     throw new Error(`Failed to save script: ${saveError.message}`);
   }
 
+  await supabase.from("script_jobs").update({ status: "complete", updated_at: new Date().toISOString() }).eq("id", jobId);
+
   return { script: cleanScript, wordCount: actualWordCount, seo };
+}
+
+/**
+ * Looks up an in-progress job for this angle (status "writing" or "seo") so
+ * the frontend can silently resume generation on page load — e.g. after a
+ * tab was closed or a request dropped mid-script — instead of requiring a
+ * manual "resume" action. A "failed" job is intentionally NOT returned
+ * here: it's left alone so "Write Script" starts a clean new job rather
+ * than retrying whatever caused the failure in a loop.
+ */
+export async function findActiveScriptJob(
+  angleId: string
+): Promise<{ jobId: string; status: "writing" | "seo"; sectionsCompleted: number; totalSections: number } | null> {
+  const supabase = await createClient();
+
+  const { data: job } = await supabase
+    .from("script_jobs")
+    .select("id, status, current_section_index, total_sections")
+    .eq("angle_id", angleId)
+    .in("status", ["writing", "seo"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!job) return null;
+
+  return {
+    jobId: job.id,
+    status: job.status as "writing" | "seo",
+    sectionsCompleted: job.current_section_index,
+    totalSections: job.total_sections,
+  };
 }

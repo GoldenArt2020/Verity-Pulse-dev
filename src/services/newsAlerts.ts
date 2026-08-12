@@ -6,6 +6,32 @@ import type { NormalizedArticle } from "@/providers/news/types";
 const KEYWORD_PATTERN =
   /\b(murder(?:ed)?|homicide|killed|manslaughter|found dead|shot dead|stabbed to death|fatally (shot|stabbed|beaten))\b/i;
 
+const DEDUP_WINDOW_DAYS = 21;
+const STRIP_WORDS = /\b(trial|case|murder|killing|homicide|investigation|update|day \d+)\b/gi;
+
+/**
+ * Reduces a case name to its core identifying words so alerts about the
+ * same case from different outlets/articles (which rarely use identical
+ * phrasing — "Lindsay Clancy Trial" vs "Lindsay Clancy Murder Case" vs
+ * "Clancy Case Day 10") still match each other. Not perfect NLP, but
+ * catches the overwhelming majority of same-case duplicates cheaply.
+ */
+function normalizeCaseName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(STRIP_WORDS, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelySameCase(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // One containing the other catches "lindsay clancy" vs "lindsay clancy duxbury"
+  return a.includes(b) || b.includes(a);
+}
+
 interface ClassifyResult {
   isMurderCase: boolean;
   caseName: string | null;
@@ -81,6 +107,26 @@ export async function processIncomingArticles(provider: string, articles: Normal
     if (!classification?.isMurderCase) {
       skipped++;
       continue;
+    }
+
+    if (classification.caseName) {
+      const normalizedNew = normalizeCaseName(classification.caseName);
+      const cutoff = new Date(Date.now() - DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: recentAlerts } = await supabase
+        .from("case_alerts")
+        .select("case_name")
+        .gte("created_at", cutoff)
+        .not("case_name", "is", null);
+
+      const alreadyCovered = (recentAlerts ?? []).some((r) =>
+        r.case_name ? isLikelySameCase(normalizedNew, normalizeCaseName(r.case_name)) : false
+      );
+
+      if (alreadyCovered) {
+        skipped++;
+        continue;
+      }
     }
 
     const { error } = await supabase.from("case_alerts").insert({
