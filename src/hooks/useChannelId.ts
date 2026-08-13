@@ -10,10 +10,20 @@ export interface ConnectedChannel {
   channelName: string;
 }
 
+// How long a user must wait between switching their active channel — this
+// exists to prevent channel-hopping to game per-channel systems that key
+// off "the active channel" (region lock, case claiming/subniche exclusion,
+// recommendation history). Does NOT apply to saveChannel — that's used
+// right after connecting a brand-new channel (onboarding), not switching
+// between already-connected ones, so it stays unrestricted.
+const CHANNEL_SWITCH_COOLDOWN_DAYS = 15;
+const CHANNEL_SWITCH_COOLDOWN_MS = CHANNEL_SWITCH_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
 export function useChannelId() {
   const { user, isLoading: authLoading } = useAuthUser();
   const [channels, setChannels] = useState<ConnectedChannel[]>([]);
   const [activeChannelRowId, setActiveChannelRowId] = useState<string | undefined>(undefined);
+  const [activeChannelUpdatedAt, setActiveChannelUpdatedAt] = useState<string | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
@@ -26,6 +36,7 @@ export function useChannelId() {
     if (!user) {
       setChannels([]);
       setActiveChannelRowId(undefined);
+      setActiveChannelUpdatedAt(undefined);
       setLoaded(true);
       return;
     }
@@ -40,7 +51,7 @@ export function useChannelId() {
         .order("created_at", { ascending: true }),
       supabase
         .from("active_channel")
-        .select("channel_id")
+        .select("channel_id, updated_at")
         .eq("user_id", user.id)
         .maybeSingle(),
     ]);
@@ -48,6 +59,7 @@ export function useChannelId() {
     if (channelsError) {
       setChannels([]);
       setActiveChannelRowId(undefined);
+      setActiveChannelUpdatedAt(undefined);
       setLoaded(true);
       return;
     }
@@ -64,6 +76,7 @@ export function useChannelId() {
     // first one rather than showing nothing.
     const resolvedActiveId = activeRow?.channel_id ?? mapped[0]?.id;
     setActiveChannelRowId(resolvedActiveId);
+    setActiveChannelUpdatedAt(activeRow?.updated_at ?? undefined);
     setLoaded(true);
   }, [user, authLoading]);
 
@@ -73,10 +86,19 @@ export function useChannelId() {
 
   const activeChannel = channels.find((c) => c.id === activeChannelRowId);
 
+  // No prior switch on record (e.g. first channel ever, or the default-
+  // to-first-channel fallback above with no real active_channel row yet)
+  // means there's nothing to cool down from — switching is allowed.
+  const nextSwitchAvailableAt = activeChannelUpdatedAt
+    ? new Date(new Date(activeChannelUpdatedAt).getTime() + CHANNEL_SWITCH_COOLDOWN_MS)
+    : null;
+  const canSwitchChannel = !nextSwitchAvailableAt || Date.now() >= nextSwitchAvailableAt.getTime();
+
   /**
    * Registers a newly connected channel (already inserted into `channels`
    * by the connect API) as the active one. Does NOT remove other channels —
-   * connecting is additive.
+   * connecting is additive. Not subject to the switch cooldown — this is
+   * onboarding a new channel, not hopping between existing ones.
    */
   const saveChannel = useCallback(
     async (channelRowId: string) => {
@@ -90,17 +112,28 @@ export function useChannelId() {
     [user, load]
   );
 
-  /** Switches the active channel among ones already connected. */
+  /**
+   * Switches the active channel among ones already connected. Enforced
+   * here (not just disabled in the UI) so it can't be bypassed by calling
+   * this directly — throws if still within the cooldown window rather
+   * than silently no-op-ing, so the caller can show why it was blocked.
+   */
   const switchChannel = useCallback(
     async (channelRowId: string) => {
       if (!user) return;
+      if (!canSwitchChannel && nextSwitchAvailableAt) {
+        throw new Error(
+          `You can switch channels again on ${nextSwitchAvailableAt.toLocaleDateString()}.`
+        );
+      }
       const supabase = createClient();
       await supabase
         .from("active_channel")
         .upsert({ user_id: user.id, channel_id: channelRowId, updated_at: new Date().toISOString() });
       setActiveChannelRowId(channelRowId);
+      setActiveChannelUpdatedAt(new Date().toISOString());
     },
-    [user]
+    [user, canSwitchChannel, nextSwitchAvailableAt]
   );
 
   /**
@@ -135,6 +168,7 @@ export function useChannelId() {
     const supabase = createClient();
     await supabase.from("active_channel").delete().eq("user_id", user.id);
     setActiveChannelRowId(undefined);
+    setActiveChannelUpdatedAt(undefined);
   }, [user]);
 
   return {
@@ -150,5 +184,8 @@ export function useChannelId() {
     switchChannel,
     removeChannel,
     clearActiveChannel,
+    // Switch cooldown surface:
+    canSwitchChannel,
+    nextSwitchAvailableAt,
   };
 }
