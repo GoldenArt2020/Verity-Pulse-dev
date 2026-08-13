@@ -1,139 +1,68 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { useAuthUser } from "@/hooks/useAuthUser";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Check, Radio } from "lucide-react";
+import { useChannelId } from "@/hooks/useChannelId";
 
-export interface ConnectedChannel {
-  id: string; // channels.id (uuid) — the row's primary key, not the YouTube ID
-  youtubeChannelId: string;
-  channelName: string;
-}
-
-export function useChannelId() {
-  const { user, isLoading: authLoading } = useAuthUser();
-  const [channels, setChannels] = useState<ConnectedChannel[]>([]);
-  const [activeChannelRowId, setActiveChannelRowId] = useState<string | undefined>(undefined);
-  const [loaded, setLoaded] = useState(false);
-
-  const load = useCallback(async () => {
-    if (authLoading) {
-      // Auth hasn't resolved yet — don't decide "no channels" prematurely,
-      // or the onboarding form flashes before real auth/channel data loads.
-      return;
-    }
-
-    if (!user) {
-      setChannels([]);
-      setActiveChannelRowId(undefined);
-      setLoaded(true);
-      return;
-    }
-
-    const supabase = createClient();
-
-    const [{ data: channelRows, error: channelsError }, { data: activeRow }] = await Promise.all([
-      supabase
-        .from("channels")
-        .select("id, youtube_channel_id, channel_name")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("active_channel")
-        .select("channel_id")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-    ]);
-
-    if (channelsError) {
-      setChannels([]);
-      setActiveChannelRowId(undefined);
-      setLoaded(true);
-      return;
-    }
-
-    const mapped: ConnectedChannel[] = (channelRows ?? []).map((c) => ({
-      id: c.id,
-      youtubeChannelId: c.youtube_channel_id,
-      channelName: c.channel_name,
-    }));
-    setChannels(mapped);
-
-    // If there's no active-channel row yet but at least one channel exists
-    // (e.g. right after connecting the first channel ever), default to the
-    // first one rather than showing nothing.
-    const resolvedActiveId = activeRow?.channel_id ?? mapped[0]?.id;
-    setActiveChannelRowId(resolvedActiveId);
-    setLoaded(true);
-  }, [user, authLoading]);
+export function ChannelSwitcher() {
+  const { channels, activeChannelRowId, loaded, switchChannel } = useChannelId();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  if (!loaded || channels.length === 0) {
+    return null;
+  }
 
   const activeChannel = channels.find((c) => c.id === activeChannelRowId);
 
-  /**
-   * Registers a newly connected channel (already inserted into `channels`
-   * by the connect API) as the active one. Does NOT remove other channels —
-   * connecting is additive.
-   */
-  const saveChannel = useCallback(
-    async (channelRowId: string) => {
-      if (!user) return;
-      const supabase = createClient();
-      await supabase
-        .from("active_channel")
-        .upsert({ user_id: user.id, channel_id: channelRowId, updated_at: new Date().toISOString() });
-      await load();
-    },
-    [user, load]
+  // Nothing to switch between — just show the name, no dropdown affordance.
+  if (channels.length === 1) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2 text-xs font-medium text-slate-300">
+        <Radio className="h-3.5 w-3.5 text-emerald-400" />
+        {activeChannel?.channelName ?? "Channel"}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-900/40 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-slate-700 hover:bg-slate-800/50"
+      >
+        <Radio className="h-3.5 w-3.5 text-emerald-400" />
+        {activeChannel?.channelName ?? "Select channel"}
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-800/60 bg-[rgb(10,15,30)] p-1.5 shadow-xl">
+          {channels.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                switchChannel(c.id);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-300 hover:bg-slate-800/60"
+            >
+              <span className="truncate">{c.channelName}</span>
+              {c.id === activeChannelRowId && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
-
-  /** Switches the active channel among ones already connected. */
-  const switchChannel = useCallback(
-    async (channelRowId: string) => {
-      if (!user) return;
-      const supabase = createClient();
-      await supabase
-        .from("active_channel")
-        .upsert({ user_id: user.id, channel_id: channelRowId, updated_at: new Date().toISOString() });
-      setActiveChannelRowId(channelRowId);
-    },
-    [user]
-  );
-
-  /** Disconnects a channel entirely (removes the row, not just deactivates it). */
-  const removeChannel = useCallback(
-    async (channelRowId: string) => {
-      if (!user) return;
-      const supabase = createClient();
-      await supabase.from("channels").delete().eq("id", channelRowId).eq("user_id", user.id);
-      await load();
-    },
-    [user, load]
-  );
-
-  /** Clears the active channel selection without deleting any channel. */
-  const clearActiveChannel = useCallback(async () => {
-    if (!user) return;
-    const supabase = createClient();
-    await supabase.from("active_channel").delete().eq("user_id", user.id);
-    setActiveChannelRowId(undefined);
-  }, [user]);
-
-  return {
-    // Back-compat shape for existing code that reads `channelId`/`channelHandle`
-    // as "the current channel":
-    channelId: activeChannel?.youtubeChannelId,
-    channelHandle: activeChannel?.channelName,
-    // New multi-channel surface:
-    channels,
-    activeChannelRowId,
-    loaded,
-    saveChannel,
-    switchChannel,
-    removeChannel,
-    clearActiveChannel,
-  };
 }
