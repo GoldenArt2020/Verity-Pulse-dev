@@ -54,6 +54,7 @@ export function ChannelOnboarding({ onConnected }: { onConnected?: () => void })
         videoCount: data.videoCount ?? 0,
         viewCount: data.viewCount ?? 0,
         uploadsPlaylistId: data.uploadsPlaylistId ?? "",
+        country: data.country ?? null,
       };
 
       setStepIndex(2);
