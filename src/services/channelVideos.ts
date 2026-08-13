@@ -3,19 +3,24 @@ import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail, YouTubeChannelSummary } from "@/providers/youtube/types";
 
 const FRESHNESS_DAYS = 15;
+/** Descriptions are often where a creator states location explicitly
+ * ("a small town in Yorkshire...") even when the title doesn't — kept
+ * short since only the opening lines usually matter for this. */
+const DESCRIPTION_CACHE_CHARS = 300;
 
 export interface CachedVideo {
   videoId: string;
   title: string;
+  description: string;
   viewCount: number;
   lens: string | null;
 }
 
 /**
- * Returns cached raw video list (title, views, lens tag) if fetched within
- * the last 15 days. Otherwise fetches fresh from YouTube, stores it, and
- * returns it with `lens: null` for all rows (lens tagging happens
- * separately in creatorDNA.ts, which owns the single Groq call).
+ * Returns cached raw video list (title, description, views, lens tag) if
+ * fetched within the last 15 days. Otherwise fetches fresh from YouTube,
+ * stores it, and returns it with `lens: null` for all rows (lens tagging
+ * happens separately in creatorDNA.ts, which owns the single Groq call).
  */
 export async function getOrFetchChannelVideos(
   channelDbId: string,
@@ -37,12 +42,13 @@ export async function getOrFetchChannelVideos(
     if (ageDays < FRESHNESS_DAYS) {
       const { data: allCached } = await supabase
         .from("channel_videos")
-        .select("video_id, title, view_count, lens")
+        .select("video_id, title, description, view_count, lens")
         .eq("channel_id", channelDbId);
 
       return (allCached ?? []).map((v) => ({
         videoId: v.video_id,
         title: v.title,
+        description: v.description ?? "",
         viewCount: v.view_count,
         lens: v.lens,
       }));
@@ -60,6 +66,7 @@ export async function getOrFetchChannelVideos(
     channel_id: channelDbId,
     video_id: v.videoId,
     title: v.title,
+    description: (v.description ?? "").slice(0, DESCRIPTION_CACHE_CHARS),
     view_count: v.viewCount,
     lens: null,
   }));
@@ -69,7 +76,13 @@ export async function getOrFetchChannelVideos(
     if (insertError) console.error("Failed to cache channel videos:", insertError.message);
   }
 
-  return videos.map((v) => ({ videoId: v.videoId, title: v.title, viewCount: v.viewCount, lens: null }));
+  return videos.map((v) => ({
+    videoId: v.videoId,
+    title: v.title,
+    description: (v.description ?? "").slice(0, DESCRIPTION_CACHE_CHARS),
+    viewCount: v.viewCount,
+    lens: null,
+  }));
 }
 
 /** Persists lens tags for already-cached videos, keyed by videoId. */

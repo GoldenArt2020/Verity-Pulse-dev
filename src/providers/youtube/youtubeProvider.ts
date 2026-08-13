@@ -42,6 +42,7 @@ function mapChannelSummary(item: any): YouTubeChannelSummary {
     videoCount: parseInt(item.statistics?.videoCount ?? "0", 10),
     viewCount: parseInt(item.statistics?.viewCount ?? "0", 10),
     uploadsPlaylistId: item.contentDetails?.relatedPlaylists?.uploads ?? "",
+    country: item.snippet.country ?? null,
   };
 }
 

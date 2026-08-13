@@ -16,6 +16,24 @@ const LENS_IDS = [
   "courtroom",
 ] as const;
 
+/** ISO 3166-1 alpha-2 -> readable region name, for the handful of
+ * countries true-crime channels on this platform are realistically based
+ * in. Falls back to the raw code if not in this list rather than guessing. */
+const COUNTRY_CODE_NAMES: Record<string, string> = {
+  GB: "United Kingdom",
+  US: "United States",
+  CA: "Canada",
+  AU: "Australia",
+  IE: "Ireland",
+  NZ: "New Zealand",
+  ZA: "South Africa",
+};
+
+function resolveCountryName(code: string | null): string | null {
+  if (!code) return null;
+  return COUNTRY_CODE_NAMES[code] ?? code;
+}
+
 export interface LensPerformance {
   lens: (typeof LENS_IDS)[number];
   avgViewsRelativeToChannel: "above average" | "average" | "below average";
@@ -24,8 +42,9 @@ export interface LensPerformance {
 
 export interface RegionDistribution {
   distribution: Record<string, number>; // e.g. { "United Kingdom": 92, "United States": 5 }
-  primaryRegion: string | null; // set only if one region crosses PRIMARY_REGION_THRESHOLD
-  isMultiRegion: boolean; // true if no single region dominates — "Global English True Crime" per spec
+  primaryRegion: string | null; // set only if one region crosses PRIMARY_REGION_THRESHOLD (or the channel's declared YouTube country was used as a fallback anchor)
+  isMultiRegion: boolean; // true if no single region dominates and no declared country anchor was available — "Global English True Crime" per spec
+  source: "content-evidence" | "channel-declared-country" | "none"; // where primaryRegion came from, for debugging/transparency
 }
 
 export interface AudienceDNA {
@@ -63,11 +82,22 @@ export interface ChannelDNA {
   generatedAt: string;
 }
 
-function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; viewCount: number }[]): string {
+function buildPrompt(
+  channel: YouTubeChannelSummary,
+  declaredCountryName: string | null,
+  videos: { title: string; description: string; viewCount: number }[]
+): string {
   const videoList = videos
     .slice(0, 50)
-    .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount} views`)
+    .map((v, i) => {
+      const desc = v.description?.trim();
+      return `${i + 1}. "${v.title}" — ${v.viewCount} views${desc ? `\n   Description: ${desc}` : ""}`;
+    })
     .join("\n");
+
+  const countryBlock = declaredCountryName
+    ? `This channel's YouTube profile declares its country as: ${declaredCountryName}. Treat this as a strong prior for regionDistribution — it should usually be the dominant or sole region UNLESS the video titles/descriptions show clear, repeated, contradicting evidence (e.g. a channel set to "United States" whose videos consistently reference UK police forces, UK court terminology, UK locations). A single ambiguous or generic video title is NOT contradicting evidence.`
+    : `This channel has not declared a country in its YouTube settings — infer regionDistribution purely from video titles/descriptions below. Do not default to "United States" as a fallback guess; if evidence is genuinely thin or absent across most videos, it is fine for the distribution to be uncertain/split rather than forced to one country.`;
 
   return `You are an editorial analyst for a true crime YouTube intelligence platform. Analyze this creator's channel and return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
@@ -90,7 +120,7 @@ function buildPrompt(channel: YouTubeChannelSummary, videos: { title: string; vi
   "strengths": string[],
   "weaknesses": string[],
   "videoLensTags": [{ "index": number, "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" }],
-  "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/subject matter — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region can't be determined, exclude it from the distribution rather than guessing.,
+  "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/descriptions/subject matter — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region genuinely can't be determined, exclude it from consideration rather than guessing.,
   "audienceDNA": {
     "caseTypePreferences": string[] (3-6 case types this audience engages with most, ranked most-preferred first — choose ONLY from this exact list so it can be matched against future case candidates: ${CASE_TYPE_TAG_LIST_TEXT}),
     "victimDemographicPreferences": {
@@ -108,14 +138,16 @@ DESCRIPTION: ${channel.description.slice(0, 500)}
 SUBSCRIBERS: ${channel.subscriberCount}
 TOTAL VIDEOS: ${channel.videoCount}
 
-RECENT VIDEOS (numbered, title — views):
+${countryBlock}
+
+RECENT VIDEOS (numbered, title — views, with description excerpt where available):
 ${videoList}
 
 Base "strengths" and "weaknesses" on inferred true-crime subgenres this channel's titles and topics suggest the audience responds to well vs. poorly.
 
 For "videoLensTags": classify EVERY numbered video above into exactly one of the 5 lens categories (victim-centered, investigative, systemic-failure, family-impact, courtroom), based on its title. Every video must get exactly one tag, using its list number as "index" (1-based, matching the numbers above).
 
-For "regionDistribution" and "audienceDNA": be conservative and evidence-based. Only infer demographic or regional patterns that are clearly and consistently supported by multiple video titles — do not infer from a single data point, and leave fields null/empty rather than guessing when evidence is thin.
+For "regionDistribution" and "audienceDNA": be conservative and evidence-based. Only infer demographic or regional patterns that are clearly and consistently supported by multiple video titles/descriptions — do not infer from a single data point, and leave fields null/empty rather than guessing when evidence is thin.
 
 Return ONLY the JSON object, nothing else.`;
 }
@@ -167,24 +199,52 @@ function computeLensPerformance(
 }
 
 /**
- * Determines the single dominant region deterministically from the
- * Groq-provided distribution — the >=80% threshold rule is applied here
- * in code, not left to the model, so it's consistent every time rather
+ * Determines the single dominant region deterministically:
+ *   1. If content evidence alone shows one region at/above the 80%
+ *      threshold, trust it (this is the strongest possible signal — the
+ *      content itself is consistently and clearly about one region).
+ *   2. Otherwise, if the channel declared a country on YouTube, anchor to
+ *      that instead of leaving the channel unclassified/multi-region —
+ *      this is what fixes the "every ambiguous channel defaults to
+ *      US-flavored guessing" problem, since most true-crime titles don't
+ *      contain an explicit place name and previously had nothing else to
+ *      anchor to.
+ *   3. Only if NEITHER a clear content majority NOR a declared country
+ *      exists does the channel fall back to true "multi-region" status.
+ *
+ * The >=80% threshold and the anchor logic are applied here in code, not
+ * left to the model, so classification is consistent every time rather
  * than depending on how the LLM chooses to phrase its own conclusion.
  */
-function resolveRegionDistribution(distribution: Record<string, number>): RegionDistribution {
+function resolveRegionDistribution(
+  distribution: Record<string, number>,
+  declaredCountryName: string | null
+): RegionDistribution {
   const entries = Object.entries(distribution ?? {});
+
+  if (entries.length > 0) {
+    const [topRegion, topPct] = entries.reduce((max, entry) => (entry[1] > max[1] ? entry : max));
+    if (topPct >= PRIMARY_REGION_THRESHOLD) {
+      return { distribution, primaryRegion: topRegion, isMultiRegion: false, source: "content-evidence" };
+    }
+  }
+
+  if (declaredCountryName) {
+    const mergedDistribution =
+      entries.length > 0 ? distribution : { [declaredCountryName]: 100 };
+    return {
+      distribution: mergedDistribution,
+      primaryRegion: declaredCountryName,
+      isMultiRegion: false,
+      source: "channel-declared-country",
+    };
+  }
+
   if (entries.length === 0) {
-    return { distribution: {}, primaryRegion: null, isMultiRegion: false };
+    return { distribution: {}, primaryRegion: null, isMultiRegion: false, source: "none" };
   }
 
-  const [topRegion, topPct] = entries.reduce((max, entry) => (entry[1] > max[1] ? entry : max));
-
-  if (topPct >= PRIMARY_REGION_THRESHOLD) {
-    return { distribution, primaryRegion: topRegion, isMultiRegion: false };
-  }
-
-  return { distribution, primaryRegion: null, isMultiRegion: true };
+  return { distribution, primaryRegion: null, isMultiRegion: true, source: "content-evidence" };
 }
 
 /**
@@ -192,12 +252,16 @@ function resolveRegionDistribution(distribution: Record<string, number>): Region
  * Only calls Groq (ONE batched call, not one per video) when:
  *   - no channels row exists yet for this youtube_channel_id + user, OR
  *   - the cached DNA is older than REANALYSIS_INTERVAL_DAYS
- * Raw per-video data (title/views, for lens-performance correlation) is
- * cached separately for 15 days via channelVideos.ts.
+ * Raw per-video data (title/description/views, for lens-performance
+ * correlation and region evidence) is cached separately for 15 days via
+ * channelVideos.ts.
  *
  * This same call now also infers geographic distribution and Audience
  * DNA (case-type/demographic preferences, narrative style) — both feed
- * the recommendation engine's Geography and Audience DNA filters.
+ * the recommendation engine's Geography and Audience DNA filters. Region
+ * detection is anchored to the channel's own declared YouTube country
+ * (channelSummary.country) whenever content evidence alone is
+ * inconclusive — see resolveRegionDistribution for why.
  * channels.country is repurposed to store the resolved primaryRegion.
  */
 export async function getOrBuildChannelDNA(
@@ -252,15 +316,16 @@ export async function getOrBuildChannelDNA(
   }
 
   const cachedVideos = await getOrFetchChannelVideos(channelDbId, channelSummary);
+  const declaredCountryName = resolveCountryName(channelSummary.country);
 
-  const raw = await groqProvider.generateText(buildPrompt(channelSummary, cachedVideos), {
+  const raw = await groqProvider.generateText(buildPrompt(channelSummary, declaredCountryName, cachedVideos), {
     temperature: 0.3,
-    maxTokens: 2200,
+    maxTokens: 2600,
   });
 
   const parsed = parseDNAResponse(raw);
   const lensPerformance = computeLensPerformance(cachedVideos, parsed.videoLensTags ?? []);
-  const regionDistribution = resolveRegionDistribution(parsed.regionDistribution ?? {});
+  const regionDistribution = resolveRegionDistribution(parsed.regionDistribution ?? {}, declaredCountryName);
 
   const tagsToSave = (parsed.videoLensTags ?? [])
     .map((t) => {

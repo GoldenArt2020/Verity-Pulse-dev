@@ -23,6 +23,9 @@ export interface YouTubeChannelSummary {
   videoCount: number;
   viewCount: number;
   uploadsPlaylistId: string;
+  /** ISO 3166-1 alpha-2 (e.g. "GB", "US"), set by the creator in their
+   * YouTube channel settings if they've configured it. Not always present. */
+  country: string | null;
 }
 
 export interface YouTubeVideoDetail {
