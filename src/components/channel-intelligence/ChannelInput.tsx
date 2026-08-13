@@ -39,6 +39,7 @@ export function ChannelInput() {
         videoCount: data.videoCount ?? 0,
         viewCount: data.viewCount ?? 0,
         uploadsPlaylistId: data.uploadsPlaylistId ?? "",
+        country: data.country ?? null,
       };
 
       const connectRes = await fetch("/api/channel/connect", {
