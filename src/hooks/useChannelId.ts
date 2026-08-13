@@ -103,15 +103,30 @@ export function useChannelId() {
     [user]
   );
 
-  /** Disconnects a channel entirely (removes the row, not just deactivates it). */
+  /**
+   * Disconnects a channel entirely — removes the channels row AND every
+   * row that references it. The previous version only deleted `channels`,
+   * leaving `active_channel` pointing at a now-nonexistent row (breaking
+   * any code that resolves "the active channel" afterward) and
+   * `channel_videos` cache data orphaned. `cases.channel_id` doesn't need
+   * cleanup here — it's ON DELETE SET NULL at the DB level, so those
+   * cases just become unclaimed again rather than broken.
+   */
   const removeChannel = useCallback(
     async (channelRowId: string) => {
       if (!user) return;
       const supabase = createClient();
+
+      await supabase.from("channel_videos").delete().eq("channel_id", channelRowId);
+
+      if (activeChannelRowId === channelRowId) {
+        await supabase.from("active_channel").delete().eq("user_id", user.id);
+      }
+
       await supabase.from("channels").delete().eq("id", channelRowId).eq("user_id", user.id);
       await load();
     },
-    [user, load]
+    [user, activeChannelRowId, load]
   );
 
   /** Clears the active channel selection without deleting any channel. */

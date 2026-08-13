@@ -127,6 +127,14 @@ export function isBlockedByRegion(candidateRegion: string | null, dna: ChannelDN
   return candidateRegion.toLowerCase() !== primaryRegion.toLowerCase();
 }
 
+/**
+ * NOTE: by the time this runs, every candidate has already passed the
+ * hard geographic eligibility gate in src/lib/geography.ts — an
+ * out-of-country case never reaches this function at all. This score's
+ * only remaining job is to rank eligible countries against each other
+ * for a multi-country channel (e.g. prioritize the primary country over
+ * a secondary one), NOT to gate eligibility.
+ */
 function regionalMatchScore(candidateRegion: string | null, dna: ChannelDNA): number {
   const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
   const isMultiRegion = dna.regionDistribution?.isMultiRegion ?? false;
