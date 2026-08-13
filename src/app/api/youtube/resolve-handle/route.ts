@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       videoCount: item.videoCount,
       viewCount: item.viewCount,
       uploadsPlaylistId: item.uploadsPlaylistId,
+      country: item.country ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to resolve handle";
