@@ -10,6 +10,15 @@ import type { ChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { SearchResult } from "@/providers/search/types";
 
+// Same reasoning as /api/case/research: this route runs several sequential
+// Tavily/YouTube lookups plus a Groq generation call that retries once on
+// failure (see the try/catch around generateAngleBatch below) — without an
+// explicit maxDuration it's subject to a shorter platform default that a
+// single slow pass, let alone two, can realistically exceed. That produces
+// a mid-response connection kill instead of a clean JSON error.
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export interface AngleScores {
   searchDemand: number;
   competition: number;

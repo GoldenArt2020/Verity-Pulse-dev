@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runCaseResearch } from "@/services/caseResearch";
 
+// Without this, Vercel falls back to a short default timeout for this
+// route. This page's initial load chain (research -> generate-angle) can
+// easily run past that default, and Vercel kills the connection mid-response
+// rather than returning a clean error — which shows up in the browser as
+// a full "This page couldn't load" navigation failure, not a normal error UI.
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();

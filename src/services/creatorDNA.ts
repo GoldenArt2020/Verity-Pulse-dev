@@ -44,7 +44,7 @@ export interface RegionDistribution {
   distribution: Record<string, number>; // e.g. { "United Kingdom": 92, "United States": 5 }
   primaryRegion: string | null; // set only if one region crosses PRIMARY_REGION_THRESHOLD (or the channel's declared YouTube country was used as a fallback anchor)
   isMultiRegion: boolean; // true if no single region dominates and no declared country anchor was available — "Global English True Crime" per spec
-  source: "content-evidence" | "channel-declared-country" | "none"; // where primaryRegion came from, for debugging/transparency
+  source: "content-evidence" | "channel-declared-country" | "user-declared" | "none"; // where primaryRegion came from, for debugging/transparency
 }
 
 export interface AudienceDNA {
@@ -95,9 +95,23 @@ function buildPrompt(
     })
     .join("\n");
 
+  // A channel's biggest hits are the strongest signal of what it's
+  // actually known for — much stronger than an average or most-recent
+  // upload, which can easily be an off-brand experiment. This is a
+  // supplementary, view-sorted summary alongside the main numbered list
+  // above, not a replacement — videoLensTags below maps back to the main
+  // list's indices, so that list's order can't change.
+  const topByViews = [...videos].sort((a, b) => b.viewCount - a.viewCount).slice(0, 10);
+  const topPerformersBlock =
+    topByViews.length > 0
+      ? `\nTHIS CHANNEL'S TOP-PERFORMING VIDEOS BY VIEWS (weight these MOST heavily when determining regionDistribution — a channel's biggest cases are the strongest signal of what it's actually known for):\n${topByViews
+          .map((v, i) => `${i + 1}. "${v.title}" — ${v.viewCount.toLocaleString()} views`)
+          .join("\n")}\n`
+      : "";
+
   const countryBlock = declaredCountryName
     ? `This channel's YouTube profile declares its country as: ${declaredCountryName}. Treat this as a strong prior for regionDistribution — it should usually be the dominant or sole region UNLESS the video titles/descriptions show clear, repeated, contradicting evidence (e.g. a channel set to "United States" whose videos consistently reference UK police forces, UK court terminology, UK locations). A single ambiguous or generic video title is NOT contradicting evidence.`
-    : `This channel has not declared a country in its YouTube settings — infer regionDistribution purely from video titles/descriptions below. Do not default to "United States" as a fallback guess; if evidence is genuinely thin or absent across most videos, it is fine for the distribution to be uncertain/split rather than forced to one country.`;
+    : `This channel has not declared a country in its YouTube settings — infer regionDistribution purely from video titles/descriptions below, weighted heavily toward the top-performing videos listed. Do not default to "United States" as a fallback guess; if evidence is genuinely thin or absent across most videos, it is fine for the distribution to be uncertain/split rather than forced to one country.`;
 
   return `You are an editorial analyst for a true crime YouTube intelligence platform. Analyze this creator's channel and return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
@@ -120,7 +134,7 @@ function buildPrompt(
   "strengths": string[],
   "weaknesses": string[],
   "videoLensTags": [{ "index": number, "lens": "victim-centered" | "investigative" | "systemic-failure" | "family-impact" | "courtroom" }],
-  "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/descriptions/subject matter — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region genuinely can't be determined, exclude it from consideration rather than guessing.,
+  "regionDistribution": object mapping country/region name to estimated percentage of this channel's content (percentages should sum to roughly 100), inferred from video titles/descriptions/subject matter — weight the TOP-PERFORMING videos listed separately below far more heavily than lower-view videos, since a channel's biggest cases are the strongest signal of what it's actually known for — e.g. { "United Kingdom": 92, "United States": 5, "Canada": 3 }. If a video's region genuinely can't be determined, exclude it from consideration rather than guessing.,
   "audienceDNA": {
     "caseTypePreferences": string[] (3-6 case types this audience engages with most, ranked most-preferred first — choose ONLY from this exact list so it can be matched against future case candidates: ${CASE_TYPE_TAG_LIST_TEXT}),
     "victimDemographicPreferences": {
@@ -139,7 +153,7 @@ SUBSCRIBERS: ${channel.subscriberCount}
 TOTAL VIDEOS: ${channel.videoCount}
 
 ${countryBlock}
-
+${topPerformersBlock}
 RECENT VIDEOS (numbered, title — views, with description excerpt where available):
 ${videoList}
 
@@ -325,7 +339,17 @@ export async function getOrBuildChannelDNA(
 
   const parsed = parseDNAResponse(raw);
   const lensPerformance = computeLensPerformance(cachedVideos, parsed.videoLensTags ?? []);
-  const regionDistribution = resolveRegionDistribution(parsed.regionDistribution ?? {}, declaredCountryName);
+
+  // A user who explicitly set their channel's region (see
+  // /api/channel/region) has final say — scheduled DNA regeneration
+  // must never silently overwrite that with a fresh AI guess. Only
+  // resolve from AI/declared-country when there's no active lock.
+  const lockedRegion = (existingChannel?.channel_dna as { regionDistribution?: RegionDistribution } | null)
+    ?.regionDistribution;
+  const regionDistribution: RegionDistribution =
+    existingChannel?.region_locked && lockedRegion
+      ? lockedRegion
+      : resolveRegionDistribution(parsed.regionDistribution ?? {}, declaredCountryName);
 
   const tagsToSave = (parsed.videoLensTags ?? [])
     .map((t) => {
