@@ -1,95 +1,106 @@
 import type { ChannelDNA } from "@/services/creatorDNA";
-import { normalizeCaseTypeTag } from "@/lib/caseTypeTaxonomy";
 
-export interface PersonalizedCaseScore {
-  opportunityScore: number; // blended, channel-aware
-  baseOpportunityScore: number; // original case-level editorial score, unchanged
-  competitionScore: number; // adjusted for this channel's niche fit
-  coverageScore: number | null; // stays global — existing YouTube coverage is a market fact, not channel-specific
-  caseTypeMatch: number; // 0-100, how well this case's type fits the channel's proven audience
-  regionalMatch: number; // 0-100
-  isPersonalized: boolean; // false if no Creator DNA yet — falls back to base scores
+export interface PersonalizeCaseScoreInput {
+  opportunityScore: number | null;
+  competitionScore: number | null;
+  coverageScore: number | null;
+  caseTypeTags: string[];
+  country: string | null;
 }
 
-function caseTypeOverlapScore(caseTags: string[], preferences: string[]): number {
-  if (caseTags.length === 0 || preferences.length === 0) return 50;
-  const prefSet = new Set(preferences.map(normalizeCaseTypeTag));
-  const matched = caseTags.map(normalizeCaseTypeTag).filter((t) => prefSet.has(t));
-  if (matched.length === 0) return 30;
-  const ratio = matched.length / caseTags.length;
-  return Math.round(40 + ratio * 60);
-}
-
-function regionalMatchScore(caseCountry: string | null, dna: ChannelDNA): number {
-  const { primaryRegion, isMultiRegion, distribution } = dna.regionDistribution;
-  if (!caseCountry) return 50;
-  if (primaryRegion) {
-    return caseCountry.toLowerCase() === primaryRegion.toLowerCase() ? 100 : 20;
-  }
-  if (isMultiRegion) {
-    const pct = distribution[caseCountry] ?? 0;
-    return Math.min(100, 40 + pct);
-  }
-  return 50;
+export interface PersonalizedCaseScores {
+  opportunityScore: number;
+  competitionScore: number;
+  coverageScore: number | null;
+  isPersonalized: boolean;
 }
 
 /**
- * Adjusts a case's base (channel-agnostic) scores using the connected
- * channel's Creator DNA, so "Opportunity Score" and "Competition Score"
- * reflect how good a fit THIS case is for the channel that's actually
- * connected — not just a flat, global editorial estimate every channel
- * sees identically. Falls back to the unmodified base scores when no
- * Creator DNA is available yet (e.g. channel just connected, still
- * analyzing its history).
+ * Blends a case's raw, market-wide scores with how well it fits the
+ * currently connected channel specifically.
+ *
+ * - Opportunity Score: the case's own strength, weighted with how well its
+ *   case-type tags match the channel's ranked case-type preferences and how
+ *   well its country matches the channel's region distribution. The raw
+ *   score still anchors the result so a globally weak case can't be
+ *   inflated purely by a good channel match.
+ * - YouTube Coverage: market-wide fact, passed through unchanged — it
+ *   doesn't vary per channel.
+ * - Competition Score: softened slightly when the case type sits outside
+ *   the channel's proven strengths, since existing coverage there matters
+ *   less to this specific channel's audience.
+ *
+ * Falls back to the raw scores, unmodified, when no Channel DNA is
+ * available yet (no channel connected, or DNA still building).
  */
 export function personalizeCaseScore(
-  caseInput: {
-    opportunityScore: number | null;
-    competitionScore: number | null;
-    coverageScore: number | null;
-    caseTypeTags: string[];
-    country: string | null;
-  },
+  input: PersonalizeCaseScoreInput,
   dna: ChannelDNA | null
-): PersonalizedCaseScore {
-  const baseOpportunity = caseInput.opportunityScore ?? 50;
-  const baseCompetition = caseInput.competitionScore ?? 50;
+): PersonalizedCaseScores {
+  const rawOpportunity = input.opportunityScore ?? 0;
+  const rawCompetition = input.competitionScore ?? 0;
 
   if (!dna) {
     return {
-      opportunityScore: baseOpportunity,
-      baseOpportunityScore: baseOpportunity,
-      competitionScore: baseCompetition,
-      coverageScore: caseInput.coverageScore,
-      caseTypeMatch: 50,
-      regionalMatch: 50,
+      opportunityScore: Math.round(rawOpportunity),
+      competitionScore: Math.round(rawCompetition),
+      coverageScore: input.coverageScore,
       isPersonalized: false,
     };
   }
 
-  const caseTypeMatch = caseTypeOverlapScore(caseInput.caseTypeTags, dna.audienceDNA?.caseTypePreferences ?? []);
-  const regionalMatch = regionalMatchScore(caseInput.country, dna);
+  // Case-type fit: where this case's tags land in the channel's ranked
+  // case-type preferences. Top preference -> strong fit, no overlap -> weak fit.
+  const prefs = dna.audienceDNA.caseTypePreferences ?? [];
+  let caseTypeFit = 50; // neutral default when there isn't enough signal either way
+  if (prefs.length > 0 && input.caseTypeTags.length > 0) {
+    const matchedRanks = input.caseTypeTags
+      .map((tag) => prefs.findIndex((p) => p.toLowerCase() === tag.toLowerCase()))
+      .filter((idx) => idx !== -1);
+    if (matchedRanks.length > 0) {
+      const bestRank = Math.min(...matchedRanks);
+      const spread = Math.max(prefs.length - 1, 1);
+      caseTypeFit = Math.round(Math.max(20, 100 - (bestRank / spread) * 80));
+    } else {
+      caseTypeFit = 30; // both have tags, but none overlap — likely a weaker fit
+    }
+  }
 
-  // Opportunity blends the case's global editorial strength (60%) with how
-  // well it fits THIS channel's proven audience — case-type overlap (25%)
-  // and regional fit (15%). A case that scores well editorially but is a
-  // poor fit for this specific audience shows a lower number here than a
-  // generic, channel-agnostic view would give it.
-  const opportunityScore = Math.round(baseOpportunity * 0.6 + caseTypeMatch * 0.25 + regionalMatch * 0.15);
+  // Regional fit, mirroring the same logic used for recommendation scoring.
+  // dna is guaranteed non-null here, but regionDistribution itself can still
+  // be missing on channel_dna rows saved before this field existed in the
+  // schema — destructuring it directly throws an uncaught TypeError that
+  // crashes the whole page outside any React error boundary (this is what
+  // was producing the "This page couldn't load" browser-level crash on
+  // Angle Builder). Fall back to neutral/empty values instead of throwing.
+  let regionFit = 50;
+  if (input.country) {
+    const { primaryRegion, isMultiRegion, distribution } = dna.regionDistribution ?? {
+      primaryRegion: null,
+      isMultiRegion: false,
+      distribution: {},
+    };
+    if (primaryRegion) {
+      regionFit = input.country.toLowerCase() === primaryRegion.toLowerCase() ? 100 : 20;
+    } else if (isMultiRegion) {
+      const pct = distribution[input.country] ?? 0;
+      regionFit = Math.min(100, Math.max(30, pct * 2));
+    }
+  }
 
-  // Competition also shifts slightly: a case with heavy general coverage
-  // but almost none in this channel's specific case-type niche is a better
-  // real opportunity for this channel than the raw global number suggests.
-  const nicheAdjustment = Math.round((caseTypeMatch - 50) * 0.2);
-  const competitionScore = Math.max(0, Math.min(100, baseCompetition - nicheAdjustment));
+  const personalizationFactor = caseTypeFit * 0.65 + regionFit * 0.35;
+
+  const opportunityScore = Math.round(rawOpportunity * 0.6 + personalizationFactor * 0.4);
+
+  // If this case type sits outside the channel's strong suits, soften the
+  // effective competition slightly — a crowded niche elsewhere matters less.
+  const competitionAdjustment = caseTypeFit < 40 ? 0.85 : 1;
+  const competitionScore = Math.round(rawCompetition * competitionAdjustment);
 
   return {
-    opportunityScore,
-    baseOpportunityScore: baseOpportunity,
-    competitionScore,
-    coverageScore: caseInput.coverageScore,
-    caseTypeMatch,
-    regionalMatch,
+    opportunityScore: Math.max(0, Math.min(100, opportunityScore)),
+    competitionScore: Math.max(0, Math.min(100, competitionScore)),
+    coverageScore: input.coverageScore,
     isPersonalized: true,
   };
 }

@@ -154,12 +154,12 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
       "title": string (a compelling angle title),
       "coreQuestion": string (the single question this angle answers),
       "whyItWorks": string (2 concise sentences: why this is underexplored, why it's a fresh entry point),
-      "researchFocus": string[] (3-4 specific research directions, referencing named people/events from the facts dossier where relevant),
+      "researchFocus": string[] (4-5 specific research directions, referencing named people/events from the facts dossier where relevant),
       "openingHook": string (one narrator sentence to open the episode, using a real concrete detail from the facts dossier, not generic scene-setting),
       "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above — be concrete, not generic),
       "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap, citing specific dated developments from the facts dossier),
-      "curiosityGaps": string[] (2-3 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
-      "mouthWateringSurprises": string[] (2 genuinely surprising, hard-to-believe true facts from this case's dossier or background profiles that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
+      "curiosityGaps": string[] (3-4 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
+      "mouthWateringSurprises": string[] (2-3 genuinely surprising, hard-to-believe true facts from this case's dossier or background profiles that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
       "scores": {
         "searchDemand": number (0-25),
         "competition": number (0-20, higher = LESS saturated),
@@ -381,9 +381,6 @@ export async function POST(req: NextRequest) {
 
   let parsed: ParsedResponse;
   try {
-    // First attempt: normal-sized batch. 6-8 angles was pushing generation
-    // time close to the 60s Hobby ceiling — 5-6 keeps it comfortably under
-    // while still giving a solid spread to choose from.
     parsed = await generateAngleBatch(
       caseRow.name,
       caseRow.category ?? null,
@@ -394,7 +391,7 @@ export async function POST(req: NextRequest) {
       genreVideos,
       findings,
       channelDNA,
-      { angleRange: "between 5 and 6", titleIdeaRange: "6-8", maxTokens: 4200 }
+      { angleRange: "between 6 and 8", titleIdeaRange: "8-10", maxTokens: 5500 }
     );
   } catch (firstErr) {
     try {
