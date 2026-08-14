@@ -10,12 +10,9 @@ import type { ChannelDNA } from "@/services/creatorDNA";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { SearchResult } from "@/providers/search/types";
 
-// Same reasoning as /api/case/research: this route runs several sequential
-// Tavily/YouTube lookups plus a Groq generation call that retries once on
-// failure (see the try/catch around generateAngleBatch below) — without an
-// explicit maxDuration it's subject to a shorter platform default that a
-// single slow pass, let alone two, can realistically exceed. That produces
-// a mid-response connection kill instead of a clean JSON error.
+// Even with this set, Hobby hard-caps at 60s regardless — this route's
+// generation call(s) must actually finish inside that window, which is
+// what the reduced angle count / cheaper retry below are for.
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
@@ -72,6 +69,14 @@ interface ParsedResponse {
   titleIdeas: TitleIdea[];
 }
 
+/**
+ * `angleRange`/`titleIdeaRange`/`maxTokens` are parameterized so the retry
+ * path (see generateAngleBatch below) can request a smaller, faster batch
+ * instead of an identical-cost regeneration — the first attempt's failure
+ * is itself a signal that the full-size request is running close to (or
+ * over) the 60s Hobby ceiling, so retrying at the same size risks failing
+ * the exact same way twice.
+ */
 function buildPrompt(
   caseName: string,
   category: string | null,
@@ -81,7 +86,9 @@ function buildPrompt(
   youtubeVideos: YouTubeVideoDetail[],
   genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
-  channelDNA: ChannelDNA | null
+  channelDNA: ChannelDNA | null,
+  angleRange: string,
+  titleIdeaRange: string
 ): string {
   const caseVelocity = topByVelocity(youtubeVideos, { limit: 8, minViews: 500 });
   const genreVelocity = topByVelocity(genreVideos, { limit: 8, minViews: 5000 });
@@ -98,7 +105,7 @@ function buildPrompt(
 
   const findingsBlock =
     findings.length > 0
-      ? `LATEST DEVELOPMENTS (recent web search results, tagged by reliability — use these for real, current case status; prefer HIGH/MEDIUM sources for anything stated as fact; do not invent anything beyond what's here):\n${formatSourcesWithReliability(findings.slice(0, 8), 600)}`
+      ? `LATEST DEVELOPMENTS (recent web search results, tagged by reliability — use these for real, current case status; prefer HIGH/MEDIUM sources for anything stated as fact; do not invent anything beyond what's here):\n${formatSourcesWithReliability(findings.slice(0, 6), 500)}`
       : `No recent web coverage found beyond the case summary.`;
 
   const factsBlock = caseFacts
@@ -141,18 +148,18 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
       "formula": string (name the specific title mechanic used — e.g. "Colon-split shock reveal", "Question hook", "Numbered/countdown structure", "The Truth About X", "Name + shocking detail" — be specific about the mechanic, not just "clickbait"),
       "inspiredBy": string (the exact reference title, copied verbatim from either the case coverage or genre benchmark list above, whose formula this was modeled on — must be one of the titles actually listed above, never invented)
     }
-  ] (8-10 items, covering at least 4 distinct formulas across the set — do not repeat the same formula more than 3 times. If both reference lists above are empty, ground "formula" in well-known true crime YouTube title patterns and leave "inspiredBy" as an empty string),
+  ] (${titleIdeaRange} items, covering at least 3 distinct formulas across the set — do not repeat the same formula more than 3 times. If both reference lists above are empty, ground "formula" in well-known true crime YouTube title patterns and leave "inspiredBy" as an empty string),
   "angles": [
     {
       "title": string (a compelling angle title),
       "coreQuestion": string (the single question this angle answers),
       "whyItWorks": string (2 concise sentences: why this is underexplored, why it's a fresh entry point),
-      "researchFocus": string[] (4-5 specific research directions, referencing named people/events from the facts dossier where relevant),
+      "researchFocus": string[] (3-4 specific research directions, referencing named people/events from the facts dossier where relevant),
       "openingHook": string (one narrator sentence to open the episode, using a real concrete detail from the facts dossier, not generic scene-setting),
       "channelFit": string (2 sentences: specifically why this angle suits THIS channel's established style/audience per the Channel DNA above — be concrete, not generic),
       "whyWorkOnIt": string (2 sentences: the concrete case for prioritizing this angle now — freshness, timeliness given latest developments, competitive gap, citing specific dated developments from the facts dossier),
-      "curiosityGaps": string[] (3-4 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
-      "mouthWateringSurprises": string[] (2-3 genuinely surprising, hard-to-believe true facts from this case's dossier or background profiles that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
+      "curiosityGaps": string[] (2-3 specific unresolved questions drawn from the dossier's unresolvedQuestions and timeline — real gaps, not invented ones),
+      "mouthWateringSurprises": string[] (2 genuinely surprising, hard-to-believe true facts from this case's dossier or background profiles that would make a viewer say "wait, WHAT?" — the kind of detail worth teasing in the thumbnail or first 15 seconds),
       "scores": {
         "searchDemand": number (0-25),
         "competition": number (0-20, higher = LESS saturated),
@@ -164,7 +171,7 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
   ]
 }
 
-Generate between 6 and 8 angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, background profiles, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, background profiles, and findings provided — never invent facts.
+Generate ${angleRange} angles. Keep every field concise but SPECIFIC — use real names, dates, and figures from the facts dossier rather than vague description. Never invent a fact not present in the summary, dossier, background profiles, or findings above. Score each angle honestly and distinctly. Order angles by total score descending. Ground everything strictly in the case summary, facts dossier, background profiles, and findings provided — never invent facts.
 
 CRITICAL — do not fabricate connections between this case and unrelated real events, people, or cases (including other true crime cases, mass-casualty events, or public tragedies) unless a findings source explicitly and directly states that connection as documented fact. A search result merely mentioning another event, or this case sharing a superficial theme with another event (e.g. both involving violence, both involving a school, similar names), is NOT a documented connection — do not propose an angle implying one exists. If the provided findings are thin, noisy, or not clearly about "${caseName}" specifically, do not stretch them into a narrative — prefer fewer, well-grounded angles over inventing an angle to fill the count. Return ONLY the JSON object.`;
 }
@@ -287,11 +294,24 @@ async function generateAngleBatch(
   youtubeVideos: YouTubeVideoDetail[],
   genreVideos: YouTubeVideoDetail[],
   findings: SearchResult[],
-  channelDNA: ChannelDNA | null
+  channelDNA: ChannelDNA | null,
+  opts: { angleRange: string; titleIdeaRange: string; maxTokens: number }
 ): Promise<ParsedResponse> {
   const raw = await groqProvider.generateText(
-    buildPrompt(caseName, category, summary, caseFacts, backgroundProfiles, youtubeVideos, genreVideos, findings, channelDNA),
-    { temperature: 0.7, maxTokens: 5500 }
+    buildPrompt(
+      caseName,
+      category,
+      summary,
+      caseFacts,
+      backgroundProfiles,
+      youtubeVideos,
+      genreVideos,
+      findings,
+      channelDNA,
+      opts.angleRange,
+      opts.titleIdeaRange
+    ),
+    { temperature: 0.7, maxTokens: opts.maxTokens }
   );
   return parseResponse(raw);
 }
@@ -332,7 +352,7 @@ export async function POST(req: NextRequest) {
   ]);
 
   const findings = tavilyProvider.isConfigured()
-    ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 8).catch(() => [])
+    ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 6).catch(() => [])
     : [];
 
   let channelDNA: ChannelDNA | null = null;
@@ -361,6 +381,9 @@ export async function POST(req: NextRequest) {
 
   let parsed: ParsedResponse;
   try {
+    // First attempt: normal-sized batch. 6-8 angles was pushing generation
+    // time close to the 60s Hobby ceiling — 5-6 keeps it comfortably under
+    // while still giving a solid spread to choose from.
     parsed = await generateAngleBatch(
       caseRow.name,
       caseRow.category ?? null,
@@ -370,10 +393,15 @@ export async function POST(req: NextRequest) {
       youtubeVideos,
       genreVideos,
       findings,
-      channelDNA
+      channelDNA,
+      { angleRange: "between 5 and 6", titleIdeaRange: "6-8", maxTokens: 4200 }
     );
   } catch (firstErr) {
     try {
+      // Retry deliberately smaller and cheaper than the first attempt, not
+      // identical — if the first attempt was slow enough to fail, retrying
+      // at the same size risks failing the exact same way again and
+      // blowing the 60s budget twice over.
       parsed = await generateAngleBatch(
         caseRow.name,
         caseRow.category ?? null,
@@ -383,7 +411,8 @@ export async function POST(req: NextRequest) {
         youtubeVideos,
         genreVideos,
         findings,
-        channelDNA
+        channelDNA,
+        { angleRange: "exactly 4", titleIdeaRange: "4-5", maxTokens: 2600 }
       );
     } catch (secondErr) {
       console.error("generate-angle: both attempts failed", firstErr, secondErr);
