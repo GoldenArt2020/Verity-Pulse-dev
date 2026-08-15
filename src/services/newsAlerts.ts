@@ -1,5 +1,5 @@
 // src/services/newsAlerts.ts
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import type { NormalizedArticle } from "@/providers/news/types";
 
@@ -72,10 +72,38 @@ Return ONLY the JSON object.`;
   return tryParseJson(raw);
 }
 
-export async function processIncomingArticles(provider: string, articles: NormalizedArticle[]) {
-  const supabase = await createClient();
+interface SkipReasons {
+  duplicateUrl: number;
+  notMurderCase: number;
+  classificationFailed: number;
+  dedupedSameCase: number;
+  insertFailed: number;
+}
+
+export interface ProcessArticlesSummary {
+  candidates: number;
+  inserted: number;
+  skipped: number;
+  skipReasons: SkipReasons;
+}
+
+export async function processIncomingArticles(
+  provider: string,
+  articles: NormalizedArticle[]
+): Promise<ProcessArticlesSummary> {
+  // Service-role client: this function only ever runs from the
+  // CRON_SECRET-gated poll route, which has no browser session/cookies
+  // to authenticate a normal user-scoped client. See service.ts for why.
+  const supabase = createServiceClient();
+
   let inserted = 0;
-  let skipped = 0;
+  const skipReasons: SkipReasons = {
+    duplicateUrl: 0,
+    notMurderCase: 0,
+    classificationFailed: 0,
+    dedupedSameCase: 0,
+    insertFailed: 0,
+  };
 
   // Cheap keyword pass first so we don't burn Groq calls on obviously
   // unrelated articles. Some false positives will still slip through
@@ -92,7 +120,7 @@ export async function processIncomingArticles(provider: string, articles: Normal
       .eq("url", article.url)
       .maybeSingle();
     if (existing) {
-      skipped++;
+      skipReasons.duplicateUrl++;
       continue;
     }
 
@@ -101,11 +129,17 @@ export async function processIncomingArticles(provider: string, articles: Normal
       classification = await classifyArticle(article);
     } catch (err) {
       console.error("newsAlerts: classification failed", err);
+      skipReasons.classificationFailed++;
       continue;
     }
 
-    if (!classification?.isMurderCase) {
-      skipped++;
+    if (!classification) {
+      skipReasons.classificationFailed++;
+      continue;
+    }
+
+    if (!classification.isMurderCase) {
+      skipReasons.notMurderCase++;
       continue;
     }
 
@@ -124,7 +158,7 @@ export async function processIncomingArticles(provider: string, articles: Normal
       );
 
       if (alreadyCovered) {
-        skipped++;
+        skipReasons.dedupedSameCase++;
         continue;
       }
     }
@@ -144,15 +178,19 @@ export async function processIncomingArticles(provider: string, articles: Normal
 
     if (error) {
       // Duplicate-key races are expected when polls overlap; anything else
-      // is worth logging.
+      // is worth logging AND counting, so a silent failure mode like the
+      // RLS issue this replaced never disappears from the numbers again.
       if (!error.message.includes("duplicate key")) {
         console.error("newsAlerts: insert failed", error.message);
       }
+      skipReasons.insertFailed++;
       continue;
     }
 
     inserted++;
   }
 
-  return { candidates: candidates.length, inserted, skipped };
+  const skipped = Object.values(skipReasons).reduce((a, b) => a + b, 0);
+
+  return { candidates: candidates.length, inserted, skipped, skipReasons };
 }
