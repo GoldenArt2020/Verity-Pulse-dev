@@ -45,7 +45,7 @@ export const apitubeProvider: NewsProvider = {
       "language.code": "en",
       "sort.by": "published_at",
       "sort.order": "desc",
-      per_page: "50",
+      per_page: "10",
     });
     if (sinceISO) {
       params.set("published_at.start", sinceISO);
