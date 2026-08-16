@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generateRecommendations } from "@/services/recommendations";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
+import { applyBaseRegionOverride } from "@/services/creatorDNA";
 
 const RETENTION_DAYS = 15;
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const { data: channels, error: channelsError } = await supabase
     .from("channels")
-    .select("id, youtube_channel_id, channel_dna, recommendations, recommendations_generated_at");
+    .select("id, youtube_channel_id, channel_dna, base_region, recommendations, recommendations_generated_at");
 
   if (channelsError) {
     return NextResponse.json({ error: channelsError.message }, { status: 500 });
@@ -48,7 +49,8 @@ export async function GET(req: NextRequest) {
       }
 
       const videos = await youtubeProvider.getChannelVideos(summary.uploadsPlaylistId, 50);
-      const channelDNA = channel.channel_dna as unknown as ChannelDNA | null;
+      const rawDNA = channel.channel_dna as unknown as ChannelDNA | null;
+      const channelDNA = rawDNA ? applyBaseRegionOverride(rawDNA, channel.base_region) : null;
 
       await generateRecommendations(supabase, channel.id, videos, channelDNA);
       results.push({ channelId: channel.id, status: "ok" });

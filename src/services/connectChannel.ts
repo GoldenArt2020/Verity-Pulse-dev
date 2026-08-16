@@ -24,7 +24,8 @@ export interface ConnectChannelResult {
 export async function connectChannel(
   supabase: SupabaseClient,
   channelSummary: YouTubeChannelSummary,
-  userId: string
+  userId: string,
+  baseRegion?: string | null
 ): Promise<ConnectChannelResult> {
   const { count, error: countError } = await supabase
     .from("channels")
@@ -50,7 +51,7 @@ export async function connectChannel(
     throw new Error(`You can connect up to ${MAX_CHANNELS_PER_USER} channels. Remove one before adding another.`);
   }
 
-  const dna = await getOrBuildChannelDNA(channelSummary, userId);
+  const dna = await getOrBuildChannelDNA(channelSummary, userId, baseRegion);
   const videos = await youtubeProvider.getChannelVideos(channelSummary.uploadsPlaylistId, 50);
 
   const { data: channelRow, error: channelError } = await supabase

@@ -18,11 +18,21 @@ const ANALYSIS_STEPS = [
 const CHANNEL_INPUT_HINT =
   "Paste your YouTube channel link (youtube.com/@yourhandle or youtube.com/channel/UC...), your @handle, or your channel ID.";
 
+const REGION_OPTIONS = [
+  "United States",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Ireland",
+  "Multiple / International",
+];
+
 export function ChannelOnboarding({ onConnected }: { onConnected?: () => void }) {
   const { saveChannel } = useChannelId();
   const { user, isAuthenticated } = useAuthUser();
 
   const [handle, setHandle] = useState("");
+  const [baseRegion, setBaseRegion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -61,7 +71,11 @@ export function ChannelOnboarding({ onConnected }: { onConnected?: () => void })
       const dnaRes = await fetch("/api/channel/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channelSummary, userId: user.id }),
+        body: JSON.stringify({
+          channelSummary,
+          userId: user.id,
+          baseRegion: baseRegion === "Multiple / International" ? null : baseRegion || null,
+        }),
       });
       const dnaData = await dnaRes.json();
       if (!dnaRes.ok) throw new Error(dnaData.error ?? "Failed to build Creator DNA");
@@ -114,6 +128,27 @@ export function ChannelOnboarding({ onConnected }: { onConnected?: () => void })
               <p className="mt-2 text-xs text-[#71717A]">
                 Paste your channel link, @handle, or channel ID. You can grant YouTube Analytics access afterward from Channel Intelligence.
               </p>
+
+              <div className="mt-4">
+                <label className="mb-1.5 block text-xs font-medium text-[#A1A1AA]">
+                  Where is your channel&apos;s audience/coverage primarily based?
+                </label>
+                <select
+                  value={baseRegion}
+                  onChange={(e) => setBaseRegion(e.target.value)}
+                  className="h-12 w-full rounded-[14px] border border-white/[0.06] bg-[#18181B] px-4 text-sm text-[#FAFAFA] transition-colors focus:border-blue-500/50 focus:outline-none"
+                >
+                  <option value="">Let VerityPulse detect it from my videos</option>
+                  {REGION_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-[#71717A]">
+                  This locks recommendations to this region — you can leave it blank and we&apos;ll infer it, but setting it yourself is more reliable.
+                </p>
+              </div>
 
               {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 

@@ -278,9 +278,29 @@ function resolveRegionDistribution(
  * inconclusive — see resolveRegionDistribution for why.
  * channels.country is repurposed to store the resolved primaryRegion.
  */
+/**
+ * A creator-selected base region (set during onboarding) always wins over
+ * whatever the DNA inference determined from video titles — inference is
+ * a best-effort guess when a creator hasn't told us directly, not a
+ * source of truth to argue with once they have. Applied every time DNA
+ * is read for use in recommendations, not just at connect time, so it
+ * stays authoritative through re-analysis too.
+ */
+export function applyBaseRegionOverride(dna: ChannelDNA, baseRegion: string | null | undefined): ChannelDNA {
+  if (!baseRegion) return dna;
+  return {
+    ...dna,
+    regionDistribution: {
+      ...dna.regionDistribution,
+      primaryRegion: baseRegion,
+      isMultiRegion: false,
+    },
+  };
+}
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
-  userId: string
+  userId: string,
+  baseRegion?: string | null
 ): Promise<ChannelDNA> {
   const supabase = await createClient();
 
@@ -293,11 +313,13 @@ export async function getOrBuildChannelDNA(
 
   if (fetchError) throw new Error(`Failed to check existing channel: ${fetchError.message}`);
 
+  const effectiveBaseRegion = (existingChannel?.base_region as string | null | undefined) ?? baseRegion ?? null;
+
   if (existingChannel?.channel_dna && existingChannel?.last_analyzed) {
     const ageDays =
       (Date.now() - new Date(existingChannel.last_analyzed).getTime()) / (1000 * 60 * 60 * 24);
     if (ageDays < REANALYSIS_INTERVAL_DAYS) {
-      return existingChannel.channel_dna as unknown as ChannelDNA;
+      return applyBaseRegionOverride(existingChannel.channel_dna as unknown as ChannelDNA, effectiveBaseRegion);
     }
   }
 
@@ -316,6 +338,7 @@ export async function getOrBuildChannelDNA(
         subscriber_count: channelSummary.subscriberCount,
         video_count: channelSummary.videoCount,
         view_count: channelSummary.viewCount,
+        base_region: baseRegion ?? null,
       })
       .select("id")
       .single();
@@ -384,5 +407,5 @@ export async function getOrBuildChannelDNA(
     .eq("id", channelDbId);
   if (updateError) throw new Error(`Failed to update channel: ${updateError.message}`);
 
-  return dna;
+  return applyBaseRegionOverride(dna, effectiveBaseRegion);
 }
