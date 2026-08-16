@@ -1,10 +1,17 @@
-type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE";
+type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE" | "GROUTER";
 
 // In-memory per-instance state. Serverless instances are short-lived,
 // so this resets on cold start — that's fine, it just means rotation
 // restarts at key 1 each time a new instance spins up.
 const cursors: Record<ProviderName, number> = {
+  GROQconst cursors: Record<ProviderName, number> = {
   GROQ: 0,
+  TAVILY: 0,
+  YOUTUBE: 0,
+  GEMINI: 0,
+  CLAUDE: 0,
+  GROUTER: 0,
+};: 0,
   TAVILY: 0,
   YOUTUBE: 0,
   GEMINI: 0,

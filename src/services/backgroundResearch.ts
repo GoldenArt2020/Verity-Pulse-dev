@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
 import type { SearchResult } from "@/providers/search/types";
 import { formatSourcesWithReliability } from "@/lib/sourceReliability";
 

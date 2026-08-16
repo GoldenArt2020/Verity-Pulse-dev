@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
 import { getOrFetchChannelVideos, saveLensTags } from "@/services/channelVideos";
 import type { YouTubeChannelSummary } from "@/providers/youtube/types";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";

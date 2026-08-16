@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
-import { claudeProvider } from "@/providers/ai/claudeProvider";
+import { gorouterFastProvider as groqProvider, gorouterWriteProvider as claudeProvider } from "@/providers/ai/gorouterProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
