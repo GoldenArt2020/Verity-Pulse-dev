@@ -8,6 +8,7 @@ export interface ConnectedChannel {
   id: string; // channels.id (uuid) — the row's primary key, not the YouTube ID
   youtubeChannelId: string;
   channelName: string;
+  baseRegion: string | null;
 }
 
 // How long a user must wait between switching their active channel — this
@@ -28,8 +29,6 @@ export function useChannelId() {
 
   const load = useCallback(async () => {
     if (authLoading) {
-      // Auth hasn't resolved yet — don't decide "no channels" prematurely,
-      // or the onboarding form flashes before real auth/channel data loads.
       return;
     }
 
@@ -46,7 +45,7 @@ export function useChannelId() {
     const [{ data: channelRows, error: channelsError }, { data: activeRow }] = await Promise.all([
       supabase
         .from("channels")
-        .select("id, youtube_channel_id, channel_name")
+        .select("id, youtube_channel_id, channel_name, base_region")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true }),
       supabase
@@ -68,12 +67,10 @@ export function useChannelId() {
       id: c.id,
       youtubeChannelId: c.youtube_channel_id,
       channelName: c.channel_name,
+      baseRegion: c.base_region ?? null,
     }));
     setChannels(mapped);
 
-    // If there's no active-channel row yet but at least one channel exists
-    // (e.g. right after connecting the first channel ever), default to the
-    // first one rather than showing nothing.
     const resolvedActiveId = activeRow?.channel_id ?? mapped[0]?.id;
     setActiveChannelRowId(resolvedActiveId);
     setActiveChannelUpdatedAt(activeRow?.updated_at ?? undefined);
@@ -86,20 +83,11 @@ export function useChannelId() {
 
   const activeChannel = channels.find((c) => c.id === activeChannelRowId);
 
-  // No prior switch on record (e.g. first channel ever, or the default-
-  // to-first-channel fallback above with no real active_channel row yet)
-  // means there's nothing to cool down from — switching is allowed.
   const nextSwitchAvailableAt = activeChannelUpdatedAt
     ? new Date(new Date(activeChannelUpdatedAt).getTime() + CHANNEL_SWITCH_COOLDOWN_MS)
     : null;
   const canSwitchChannel = !nextSwitchAvailableAt || Date.now() >= nextSwitchAvailableAt.getTime();
 
-  /**
-   * Registers a newly connected channel (already inserted into `channels`
-   * by the connect API) as the active one. Does NOT remove other channels —
-   * connecting is additive. Not subject to the switch cooldown — this is
-   * onboarding a new channel, not hopping between existing ones.
-   */
   const saveChannel = useCallback(
     async (channelRowId: string) => {
       if (!user) return;
@@ -112,12 +100,6 @@ export function useChannelId() {
     [user, load]
   );
 
-  /**
-   * Switches the active channel among ones already connected. Enforced
-   * here (not just disabled in the UI) so it can't be bypassed by calling
-   * this directly — throws if still within the cooldown window rather
-   * than silently no-op-ing, so the caller can show why it was blocked.
-   */
   const switchChannel = useCallback(
     async (channelRowId: string) => {
       if (!user) return;
@@ -136,15 +118,6 @@ export function useChannelId() {
     [user, canSwitchChannel, nextSwitchAvailableAt]
   );
 
-  /**
-   * Disconnects a channel entirely — removes the channels row AND every
-   * row that references it. The previous version only deleted `channels`,
-   * leaving `active_channel` pointing at a now-nonexistent row (breaking
-   * any code that resolves "the active channel" afterward) and
-   * `channel_videos` cache data orphaned. `cases.channel_id` doesn't need
-   * cleanup here — it's ON DELETE SET NULL at the DB level, so those
-   * cases just become unclaimed again rather than broken.
-   */
   const removeChannel = useCallback(
     async (channelRowId: string) => {
       if (!user) return;
@@ -162,7 +135,6 @@ export function useChannelId() {
     [user, activeChannelRowId, load]
   );
 
-  /** Clears the active channel selection without deleting any channel. */
   const clearActiveChannel = useCallback(async () => {
     if (!user) return;
     const supabase = createClient();
@@ -172,11 +144,8 @@ export function useChannelId() {
   }, [user]);
 
   return {
-    // Back-compat shape for existing code that reads `channelId`/`channelHandle`
-    // as "the current channel":
     channelId: activeChannel?.youtubeChannelId,
     channelHandle: activeChannel?.channelName,
-    // New multi-channel surface:
     channels,
     activeChannelRowId,
     loaded,
@@ -184,8 +153,8 @@ export function useChannelId() {
     switchChannel,
     removeChannel,
     clearActiveChannel,
-    // Switch cooldown surface:
     canSwitchChannel,
     nextSwitchAvailableAt,
+    refresh: load,
   };
 }
