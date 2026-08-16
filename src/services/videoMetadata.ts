@@ -186,9 +186,6 @@ export async function generateTags(angleId: string): Promise<string[]> {
   }
   const { angle, caseData } = await loadContext(angleId);
 
-  // Ground tags in real search results rather than pure LLM guessing —
-  // same pattern used for case research, so tag choices reflect how
-  // people actually search for/discuss this case right now.
   let searchContext = "";
   if (tavilyProvider.isConfigured()) {
     try {
@@ -209,6 +206,18 @@ export async function generateTags(angleId: string): Promise<string[]> {
   await supabase.from("angles").update({ tags }).eq("id", angleId);
 
   return tags;
+}
+
+export async function saveDescription(angleId: string, description: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("angles").update({ video_description: description }).eq("id", angleId);
+  if (error) throw new Error(`Failed to save description: ${error.message}`);
+}
+
+export async function saveTags(angleId: string, tags: string[]): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("angles").update({ tags }).eq("id", angleId);
+  if (error) throw new Error(`Failed to save tags: ${error.message}`);
 }
 
 export interface AngleMetadata {
