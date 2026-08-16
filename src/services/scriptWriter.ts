@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
-import { geminiProvider } from "@/providers/ai/geminiProvider";
+import { claudeProvider } from "@/providers/ai/claudeProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
@@ -361,8 +361,8 @@ export async function createScriptJob(
   if (!groqProvider.isConfigured()) {
     throw new Error("Groq is not configured — cannot research this script");
   }
-  if (!geminiProvider.isConfigured()) {
-    throw new Error("Gemini is not configured — cannot write this script");
+  if (!claudeProvider.isConfigured()) {
+    throw new Error("Claude is not configured — cannot write this script");
   }
 
   const supabase = await createClient();
@@ -474,7 +474,7 @@ export async function createScriptJob(
 
 /**
  * STEP 2 of 3, called once per section. Writes exactly ONE section via
- * Gemini (with a follow-up continuation call if it gets cut off
+ * Claude (with a follow-up continuation call if it gets cut off
  * mid-sentence), appends it to the job row, and reports whether more
  * sections remain. Each call does at most two AI requests, so it stays
  * far under any serverless timeout regardless of total script length.
@@ -526,7 +526,7 @@ export async function advanceScriptJob(
   try {
     const maxTokens = Math.min(6000, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      geminiProvider.generateText(
+      claudeProvider.generateText(
         buildSectionPrompt(caseRow, angle, job.brief, job.channel_dna, job.outline, plan, job.previous_tail),
         { temperature: 0.65, maxTokens }
       )
@@ -536,7 +536,7 @@ export async function advanceScriptJob(
     if (!endsCleanly(sectionText)) {
       try {
         const tail = sectionText.split(/\s+/).slice(-60).join(" ");
-        const continuation = await geminiProvider.generateText(buildContinuationPrompt(caseRow, tail), {
+        const continuation = await claudeProvider.generateText(buildContinuationPrompt(caseRow, tail), {
           temperature: 0.65,
           maxTokens: 200,
         });

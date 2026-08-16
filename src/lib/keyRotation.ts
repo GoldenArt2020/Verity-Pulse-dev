@@ -1,4 +1,4 @@
-type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI";
+type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE";
 
 // In-memory per-instance state. Serverless instances are short-lived,
 // so this resets on cold start — that's fine, it just means rotation
@@ -8,6 +8,7 @@ const cursors: Record<ProviderName, number> = {
   TAVILY: 0,
   YOUTUBE: 0,
   GEMINI: 0,
+  CLAUDE: 0,
 };
 
 function loadKeys(provider: ProviderName): string[] {
