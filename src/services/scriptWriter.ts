@@ -393,11 +393,13 @@ export async function createScriptJob(
   };
 
   let channelDNA: ChannelDNA | null = null;
+  let userId: string | null = null;
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
+      userId = user.id;
       const { data: activeRow } = await supabase
         .from("active_channel")
         .select("channel_id")
@@ -447,9 +449,14 @@ export async function createScriptJob(
     }
   }
 
+  if (!userId) {
+    throw new Error("You must be signed in to write a script.");
+  }
+
   const { data: jobRow, error: insertError } = await supabase
     .from("script_jobs")
     .insert({
+      user_id: userId,
       angle_id: angleId,
       case_id: caseId,
       word_count: wordCount,
