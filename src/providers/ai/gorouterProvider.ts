@@ -33,9 +33,22 @@ interface GorouterErrorInfo {
   status: number;
   code?: string;
   raw: string;
+  isBlockPage: boolean;
 }
 
-function classifyError({ status, raw }: GorouterErrorInfo): string {
+// Cloudflare (and similar reverse-proxy bot protection) intercepts the
+// request before it ever reaches GoRouter's own auth/API layer and
+// returns its own HTML challenge/block page — often on a 403, which is
+// the exact same status code a real "bad API key" rejection uses. If we
+// don't tell these apart, every Cloudflare block gets misreported as a
+// key problem, sending you down the wrong fix entirely.
+const BLOCK_PAGE_MARKERS =
+  /cloudflare|attention required|cf-error|cf_chl_|checking your browser|just a moment|__cf\$cv\$params|access denied|openresty|<!doctype html|<html/i;
+
+function classifyError({ status, raw, isBlockPage }: GorouterErrorInfo): string {
+  if (isBlockPage) {
+    return `GoRouter's server blocked this request before it reached the API (status ${status}) — this looks like a Cloudflare/proxy bot-protection page, not a real key rejection. The GoRouter instance needs its API routes excluded from bot protection. Raw response start: ${raw.slice(0, 200)}`;
+  }
   if (status === 401 || status === 403) {
     return "GoRouter rejected the API key — check that GROUTER_API_KEY is set correctly in your environment.";
   }
@@ -93,16 +106,28 @@ async function callGorouterModel(model: string, prompt: string, options?: AIGene
     }
 
     if (!res.ok) {
+      // Read the body as text FIRST — a Cloudflare/proxy block page is
+      // HTML, not JSON, so trying res.json() first would throw and we'd
+      // lose the body content that actually proves what happened.
+      const bodyText = await res.text().catch(() => "");
+      const isBlockPage = BLOCK_PAGE_MARKERS.test(bodyText);
+
       let raw = `${res.status} ${res.statusText}`;
       let code: string | undefined;
-      try {
-        const body = await res.json();
-        raw = body?.error?.message || body?.message || raw;
-        code = body?.error?.code || body?.error?.type;
-      } catch {
-        // Non-JSON error body — fall back to status text above.
+      if (!isBlockPage) {
+        try {
+          const body = JSON.parse(bodyText);
+          raw = body?.error?.message || body?.message || raw;
+          code = body?.error?.code || body?.error?.type;
+        } catch {
+          // Non-JSON, non-block-page body — fall back to status text above.
+          if (bodyText) raw = bodyText.slice(0, 300);
+        }
+      } else {
+        raw = bodyText;
       }
-      const error = new Error(classifyError({ status: res.status, code, raw })) as Error & {
+
+      const error = new Error(classifyError({ status: res.status, code, raw, isBlockPage })) as Error & {
         status?: number;
         code?: string;
       };
