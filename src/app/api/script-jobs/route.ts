@@ -38,7 +38,7 @@ export async function GET() {
   }
 
   const { data, error } = await supabase
-    .from("script_jobs")
+    .from("claude_handoff_jobs")
     .select("id, case_id, angle_id, status, word_count, created_at, source_material")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });

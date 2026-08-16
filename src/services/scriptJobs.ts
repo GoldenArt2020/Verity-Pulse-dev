@@ -100,7 +100,7 @@ export async function createScriptJob(
   };
 
   const { data: inserted, error: insertError } = await supabase
-    .from("script_jobs")
+    .from("claude_handoff_jobs")
     .insert({
       user_id: userId,
       case_id: caseId,

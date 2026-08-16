@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { data, error } = await supabase
-    .from("script_jobs")
+    .from("claude_handoff_jobs")
     .select("*")
     .eq("id", id)
     .eq("user_id", user.id)
