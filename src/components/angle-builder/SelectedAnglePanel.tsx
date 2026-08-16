@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, FileText, Loader2, ExternalLink } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
@@ -41,6 +41,84 @@ export function SelectedAnglePanel({
     null
   );
   const [openingProject, setOpeningProject] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const resumeCheckedFor = useRef<string | null>(null);
+
+  /**
+   * Drives a script job through /section calls until it's done writing,
+   * then finalizes it via /finish. Shared by both a fresh start and an
+   * auto-resumed in-progress job, so the polling loop only exists once.
+   */
+  async function runJobToCompletion(jobId: string, totalSections: number, sectionsAlreadyDone: number) {
+    let sectionsCompleted = sectionsAlreadyDone;
+    let status: "writing" | "seo" | "complete" | "failed" =
+      sectionsAlreadyDone >= totalSections ? "seo" : "writing";
+
+    while (status === "writing") {
+      setProgress(`Writing section ${sectionsCompleted + 1} of ${totalSections}...`);
+      const res = await fetch("/api/generate-script/section", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to write next section");
+      status = data.status;
+      sectionsCompleted = data.sectionsCompleted;
+    }
+
+    setProgress("Finalizing script and SEO metadata...");
+    const finishRes = await fetch("/api/generate-script/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    });
+    const finishData = await finishRes.json();
+    if (!finishRes.ok) throw new Error(finishData.error ?? "Failed to finalize script");
+    return finishData as { script: string; wordCount: number; seo: ScriptSeoSummary | null };
+  }
+
+  // Silently resume any in-progress script job for the selected angle —
+  // e.g. a previous attempt's tab closed or a request dropped mid-script —
+  // instead of leaving the "Write Script" button stuck with no way
+  // forward. Runs once per angle per mount.
+  useEffect(() => {
+    if (!angle || angle.script || resumeCheckedFor.current === angle.id) return;
+    resumeCheckedFor.current = angle.id;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/generate-script/active?angleId=${angle.id}`);
+        const data = await res.json();
+        const job = data.job as
+          | { jobId: string; status: "writing" | "seo"; sectionsCompleted: number; totalSections: number }
+          | null;
+        if (!job || cancelled) return;
+
+        setWriting(true);
+        setWriteError(null);
+        const result = await runJobToCompletion(job.jobId, job.totalSections, job.sectionsCompleted);
+        if (cancelled) return;
+
+        onScriptGenerated(angle.id, result.script, result.wordCount, result.seo);
+        setPreview(result);
+      } catch (err) {
+        if (!cancelled) setWriteError(err instanceof Error ? err.message : "Failed to resume script generation");
+      } finally {
+        if (!cancelled) {
+          setWriting(false);
+          setProgress(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [angle?.id, angle?.script]);
 
   async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
@@ -48,19 +126,24 @@ export function SelectedAnglePanel({
     setWriteError(null);
     setDialogOpen(false);
     try {
-      const res = await fetch("/api/generate-script", {
+      setProgress("Researching the case...");
+      const startRes = await fetch("/api/generate-script/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ angleId: angle.id, caseId, wordCount, seo: true }),
+        body: JSON.stringify({ angleId: angle.id, caseId, wordCount }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate script");
-      onScriptGenerated(angle.id, data.script, data.wordCount ?? wordCount, data.seo ?? null);
-      setPreview({ script: data.script, wordCount: data.wordCount ?? wordCount, seo: data.seo ?? null });
+      const startData = await startRes.json();
+      if (!startRes.ok) throw new Error(startData.error ?? "Failed to start script generation");
+
+      const result = await runJobToCompletion(startData.jobId, startData.totalSections, 0);
+
+      onScriptGenerated(angle.id, result.script, result.wordCount, result.seo);
+      setPreview(result);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
     } finally {
       setWriting(false);
+      setProgress(null);
     }
   }
 
@@ -268,7 +351,7 @@ export function SelectedAnglePanel({
                 className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
               >
                 {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {writing ? "Writing..." : "Write Script"}
+                {writing ? (progress ?? "Writing...") : "Write Script"}
               </button>
             )}
           </div>
