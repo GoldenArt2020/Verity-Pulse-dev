@@ -1,6 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
+/**
+ * Deterministic competition score (0-100), derived purely from existing
+ * YouTube coverage of this exact case — NOT general news/media coverage,
+ * which is a different signal entirely. More existing videos means more
+ * entrenched competition for a new creator covering the same story.
+ * Scales to 100 at 20+ existing videos; beyond that, saturation is
+ * effectively total regardless of the exact count.
+ */
+function computeCompetitionScore(videos: YouTubeVideoDetail[]): number {
+  if (videos.length === 0) return 0;
+  return Math.min(100, Math.round((videos.length / 20) * 100));
+}
 
 const GENRE_CACHE_DAYS = 7;
 
@@ -100,6 +112,7 @@ export async function getOrFetchYouTubeCoverage(
   }
 
   const videos = await youtubeProvider.searchCaseVideos(caseName, 50);
+  const competitionScore = computeCompetitionScore(videos);
 
   const { error: updateError } = await supabase
     .from("cases")
@@ -107,6 +120,7 @@ export async function getOrFetchYouTubeCoverage(
       youtube_coverage_videos: videos,
       youtube_titles: videos.map((v) => v.title),
       youtube_coverage_fetched_at: new Date().toISOString(),
+      competition_score: competitionScore,
     })
     .eq("id", caseId);
 

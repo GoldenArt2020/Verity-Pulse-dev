@@ -75,7 +75,7 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   "category": string or null (e.g. "Missing Person", "Murder Investigation", "Cold Case"),
   "tags": string[] (3-6 short tags),
   "opportunityScore": number 0-100,
-  "competitionScore": number 0-100,
+  "competitionScore": number 0-100 (ROUGH PLACEHOLDER ONLY — overwritten moments later with a real number once actual YouTube video data is fetched. Base this purely on how much THIS EXACT CASE has likely already been covered by OTHER TRUE CRIME YOUTUBE CREATORS specifically. This is NOT the same as general news/media attention — a case can be all over the news with zero YouTube coverage, or vice versa. If genuinely unsure, use 30 rather than guessing high),
   "coverageScore": number 0-10 (if unknown, use 5 — this is only a fallback used when real YouTube coverage data can't be fetched),
   "imageQuery": string (2-5 word stock-photo phrase — a place/object/atmosphere, NEVER a person),
   "victimDemographics": { "ethnicity": string or null, "ageRange": string or null, "gender": string or null },
