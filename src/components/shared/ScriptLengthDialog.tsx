@@ -14,25 +14,32 @@ export function ScriptLengthDialog({
   onClose,
   onSelect,
   busy,
+  progressLabel,
 }: {
   open: boolean;
   onClose: () => void;
   onSelect: (wordCount: ScriptWordCount) => void;
   busy?: boolean;
+  progressLabel?: string | null;
 }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={() => !busy && onClose()}
+    >
       <div
         className="w-full max-w-sm rounded-2xl border border-slate-800/60 bg-slate-900 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">Choose script length</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
-            <X className="h-4 w-4" />
-          </button>
+          {!busy && (
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         <p className="mt-1 text-xs text-slate-500">
           The script is researched and written section by section to hit this target, with SEO-friendly phrasing
@@ -54,9 +61,9 @@ export function ScriptLengthDialog({
         </div>
 
         {busy && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Starting...
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2.5 text-xs text-slate-300">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-400" />
+            {progressLabel ?? "Working..."}
           </div>
         )}
       </div>

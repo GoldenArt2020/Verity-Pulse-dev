@@ -5,6 +5,9 @@ import { Loader2, Sparkles, FileText, Check } from "lucide-react";
 import { StepTabs } from "@/components/angle-builder/StepTabs";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
 import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
+import { TitleSuggestionsPanel } from "@/components/projects/TitleSuggestionsPanel";
+import { DescriptionCreatorPanel } from "@/components/projects/DescriptionCreatorPanel";
+import { TagCreationPanel } from "@/components/projects/TagCreationPanel";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 interface AngleScores {
@@ -33,6 +36,17 @@ interface ScriptSeoSummary {
   description: string;
 }
 
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? `Request to ${url} failed`);
+  return data as T;
+}
+
 function totalScore(a: ProjectAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
@@ -54,11 +68,8 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [progress, setProgress] = useState<string | null>(null);
   const [seoByAngle, setSeoByAngle] = useState<Record<string, ScriptSeoSummary>>({});
 
-  // Which step of the workflow is highlighted. Jumps to "Analyze & Refine"
-  // automatically the moment a script finishes generating.
   const [step, setStep] = useState(0);
 
-  // The script that just finished (or was reopened) — drives the preview modal.
   const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
     null
   );
@@ -95,37 +106,26 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
 
   const activeAngle = angles.find((a) => a.id === activeId) ?? null;
 
-  /**
-   * Drives a script job through /section calls until it's done writing,
-   * then finalizes it via /finish. Same job-based flow as SelectedAnglePanel
-   * — there is no synchronous single-call script endpoint.
-   */
-  async function runJobToCompletion(jobId: string, totalSections: number) {
-    let sectionsCompleted = 0;
-    let status: "writing" | "seo" | "complete" | "failed" = "writing";
+  async function runToCompletion(jobId: string, totalSections: number, sectionsAlreadyDone: number) {
+    let sectionsCompleted = sectionsAlreadyDone;
+    let status: "writing" | "seo" | "complete" | "failed" = sectionsAlreadyDone >= totalSections ? "seo" : "writing";
 
     while (status === "writing") {
       setProgress(`Writing section ${sectionsCompleted + 1} of ${totalSections}...`);
-      const res = await fetch("/api/generate-script/section", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to write next section");
-      status = data.status;
-      sectionsCompleted = data.sectionsCompleted;
+      const result = await postJson<{
+        status: "writing" | "seo" | "complete" | "failed";
+        sectionsCompleted: number;
+        totalSections: number;
+      }>("/api/generate-script/section", { jobId });
+      status = result.status;
+      sectionsCompleted = result.sectionsCompleted;
     }
 
     setProgress("Finalizing script and SEO metadata...");
-    const finishRes = await fetch("/api/generate-script/finish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId }),
-    });
-    const finishData = await finishRes.json();
-    if (!finishRes.ok) throw new Error(finishData.error ?? "Failed to finalize script");
-    return finishData as { script: string; wordCount: number; seo: ScriptSeoSummary | null };
+    return postJson<{ script: string; wordCount: number; seo: ScriptSeoSummary | null }>(
+      "/api/generate-script/finish",
+      { jobId }
+    );
   }
 
   async function handleWriteScript(wordCount: ScriptWordCount) {
@@ -134,31 +134,24 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
     setWritingId(activeAngle.id);
     setWriteError(null);
     try {
-      setProgress("Researching the case...");
-      const startRes = await fetch("/api/generate-script/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ angleId: activeAngle.id, caseId, wordCount }),
-      });
-      const startData = await startRes.json();
-      if (!startRes.ok) throw new Error(startData.error ?? "Failed to start script generation");
+      const { jobId, totalSections } = await postJson<{ jobId: string; totalSections: number }>(
+        "/api/generate-script/start",
+        { angleId: activeAngle.id, caseId, wordCount }
+      );
 
-      const result = await runJobToCompletion(startData.jobId, startData.totalSections);
-      const finalWordCount = result.wordCount ?? wordCount;
+      const { script, wordCount: finalWordCount, seo } = await runToCompletion(jobId, totalSections, 0);
 
       setAngles((prev) =>
         prev.map((a) =>
           a.id === activeAngle.id
-            ? { ...a, script: result.script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
+            ? { ...a, script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
             : a
         )
       );
-      if (result.seo) {
-        setSeoByAngle((prev) => ({ ...prev, [activeAngle.id]: result.seo as ScriptSeoSummary }));
+      if (seo) {
+        setSeoByAngle((prev) => ({ ...prev, [activeAngle.id]: seo }));
       }
-      // Script is ready to review — open it, then move the workflow into
-      // Analyze & Refine.
-      setPreview({ script: result.script, wordCount: finalWordCount, seo: result.seo ?? null });
+      setPreview({ script, wordCount: finalWordCount, seo: seo ?? null });
       setStep(1);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to write script");
@@ -217,7 +210,7 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         ))}
       </div>
 
-      {activeAngle && (
+      {(step === 0 || step === 1) && activeAngle && (
         <div className="mt-4 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 text-sm font-bold text-emerald-400">
@@ -270,7 +263,19 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      <ScriptLengthDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onSelect={handleWriteScript} busy={!!writingId} />
+      {step === 2 && activeAngle && <TitleSuggestionsPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 3 && activeAngle && <DescriptionCreatorPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 4 && activeAngle && <TagCreationPanel key={activeAngle.id} angleId={activeAngle.id} />}
+
+      <ScriptLengthDialog
+        open={dialogOpen}
+        onClose={() => {
+          if (!writingId) setDialogOpen(false);
+        }}
+        onSelect={handleWriteScript}
+        busy={!!writingId}
+        progressLabel={progress}
+      />
 
       {preview && (
         <ScriptPreviewModal
