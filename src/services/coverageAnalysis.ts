@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
+import { groqProvider } from "@/providers/ai/groqProvider";
 
 export interface CoverageMapItem { angle: string; coverage: number }
 export interface AngleSaturationRow { angle: string; coverage: number; opportunity: number }

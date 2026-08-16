@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";

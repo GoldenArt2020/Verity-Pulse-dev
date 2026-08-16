@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 
 interface AngleContext {

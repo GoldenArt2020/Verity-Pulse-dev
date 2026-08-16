@@ -1,7 +1,7 @@
 import type { AIProvider, ProviderHealth } from "./types";
-import { gorouterFastProvider } from "./gorouterProvider";
+import { groqProvider } from "./groqProvider";
 
-const providers: AIProvider[] = [gorouterFastProvider];
+const providers: AIProvider[] = [groqProvider];
 const healthLog: Record<string, ProviderHealth> = {};
 
 function recordHealth(name: string, status: ProviderHealth["status"], message?: string) {

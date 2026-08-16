@@ -1,6 +1,6 @@
 // src/services/newsAlerts.ts
 import { createServiceClient } from "@/lib/supabase/service";
-import { gorouterFastProvider as groqProvider } from "@/providers/ai/gorouterProvider";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import type { NormalizedArticle } from "@/providers/news/types";
 
 const KEYWORD_PATTERN =
