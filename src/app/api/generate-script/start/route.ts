@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createScriptJob } from "@/services/scriptWriter";
 import { isValidScriptWordCount } from "@/constants/scriptOptions";
+import { createScriptJob } from "@/services/scriptWriter";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
