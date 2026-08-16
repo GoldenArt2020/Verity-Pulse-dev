@@ -1,20 +1,72 @@
 import { createClient } from "@/lib/supabase/server";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
-/**
- * Deterministic competition score (0-100), derived purely from existing
- * YouTube coverage of this exact case — NOT general news/media coverage,
- * which is a different signal entirely. More existing videos means more
- * entrenched competition for a new creator covering the same story.
- * Scales to 100 at 20+ existing videos; beyond that, saturation is
- * effectively total regardless of the exact count.
- */
-function computeCompetitionScore(videos: YouTubeVideoDetail[]): number {
-  if (videos.length === 0) return 0;
-  return Math.min(100, Math.round((videos.length / 20) * 100));
-}
 
 const GENRE_CACHE_DAYS = 7;
+
+// Major news outlets whose YouTube uploads shouldn't count as "creator
+// competition" — a case getting picked up by CNN or Fox News is media
+// attention, not another true-crime creator covering the same story.
+// Matched case-insensitively as a substring against the channel title,
+// so "Fox News" also catches "FOX 5 News", "Fox News Insider", etc.
+// This is not exhaustive (local affiliate call-sign channels like WBRC
+// or KHOU aren't caught) — add more outlets here as they show up in
+// real results.
+const NEWS_CHANNEL_BLOCKLIST = [
+  "fox news",
+  "cnn",
+  "abc news",
+  "nbc news",
+  "cbs news",
+  "msnbc",
+  "bbc news",
+  "sky news",
+  "reuters",
+  "associated press",
+  "ap news",
+  "newsnation",
+  "global news",
+  "ctv news",
+  "cbc news",
+  "usa today",
+  "the sun",
+  "daily mail",
+  "inside edition",
+  "entertainment tonight",
+  "tmz",
+  "people",
+  "eyewitness news",
+  "action news",
+  "news 12",
+  "wsvn",
+  "wfaa",
+  "khou",
+  "wbrc",
+];
+
+function isNewsChannel(channelTitle: string | null | undefined): boolean {
+  if (!channelTitle) return false;
+  const lower = channelTitle.toLowerCase();
+  return NEWS_CHANNEL_BLOCKLIST.some((outlet) => lower.includes(outlet));
+}
+
+/** Filters out news-outlet uploads so only actual creator coverage remains. */
+function filterToCreatorVideos(videos: YouTubeVideoDetail[]): YouTubeVideoDetail[] {
+  return videos.filter((v) => !isNewsChannel(v.channelTitle));
+}
+
+/**
+ * Deterministic competition score (0-100), derived purely from existing
+ * CREATOR YouTube coverage of this exact case — news-outlet uploads are
+ * excluded before this ever runs (see filterToCreatorVideos), so this is
+ * never inflated by media attention. Scales to 100 at 50+ existing
+ * creator videos; beyond that, saturation is effectively total
+ * regardless of the exact count.
+ */
+function computeCompetitionScore(creatorVideos: YouTubeVideoDetail[]): number {
+  if (creatorVideos.length === 0) return 0;
+  return Math.min(100, Math.round((creatorVideos.length / 50) * 100));
+}
 
 function slugifyGenreKey(category: string | null): string {
   if (!category) return "general";
@@ -67,7 +119,7 @@ export async function getOrFetchGenreBenchmarkTitles(category: string | null): P
   const batches = await Promise.all(
     queries.map((q) => youtubeProvider.searchCaseVideos(q, 20).catch(() => []))
   );
-  const videos = batches.flat();
+  const videos = filterToCreatorVideos(batches.flat());
 
   if (videos.length > 0) {
     await supabase
@@ -83,9 +135,11 @@ export async function getOrFetchGenreBenchmarkTitles(category: string | null): P
 
 /**
  * Returns cached YouTube coverage videos (title + views + publish date) for
- * this case. If never fetched before, runs one searchCaseVideos() call (100
- * YouTube API units) and caches permanently on the `cases` row. Never
- * re-searches once cached.
+ * this case — news-outlet channels filtered out, so only actual creator
+ * coverage counts. If never fetched before, runs one searchCaseVideos()
+ * call (100 YouTube API units) and caches permanently on the `cases` row,
+ * including a deterministic competition_score computed from the filtered
+ * result. Never re-searches once cached.
  */
 export async function getOrFetchYouTubeCoverage(
   caseId: string,
@@ -111,14 +165,15 @@ export async function getOrFetchYouTubeCoverage(
     return [];
   }
 
-  const videos = await youtubeProvider.searchCaseVideos(caseName, 50);
-  const competitionScore = computeCompetitionScore(videos);
+  const rawVideos = await youtubeProvider.searchCaseVideos(caseName, 50);
+  const creatorVideos = filterToCreatorVideos(rawVideos);
+  const competitionScore = computeCompetitionScore(creatorVideos);
 
   const { error: updateError } = await supabase
     .from("cases")
     .update({
-      youtube_coverage_videos: videos,
-      youtube_titles: videos.map((v) => v.title),
+      youtube_coverage_videos: creatorVideos,
+      youtube_titles: creatorVideos.map((v) => v.title),
       youtube_coverage_fetched_at: new Date().toISOString(),
       competition_score: competitionScore,
     })
@@ -128,5 +183,5 @@ export async function getOrFetchYouTubeCoverage(
     console.error("Failed to cache YouTube coverage:", updateError.message);
   }
 
-  return videos;
+  return creatorVideos;
 }
