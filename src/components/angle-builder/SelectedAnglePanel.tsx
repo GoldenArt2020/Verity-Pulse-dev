@@ -9,6 +9,7 @@ import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewM
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 import type { ScriptSeoSummary } from "@/services/scriptWriter";
 import type { BackgroundProfile } from "@/hooks/useCase";
+import { VideoSourcesSection } from "@/components/angle-builder/VideoSourcesSection";
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
@@ -354,6 +355,7 @@ export function SelectedAnglePanel({
                 {writing ? (progress ?? "Writing...") : "Write Script"}
               </button>
             )}
+            <VideoSourcesSection caseId={caseId} caseName={angle.title.split(":")[0]} />
           </div>
         </>
       )}
@@ -364,7 +366,7 @@ export function SelectedAnglePanel({
         onSelect={handleWriteScript}
         busy={writing}
       />
-
+      
       {preview && (
         <ScriptPreviewModal
           script={preview.script}
@@ -384,4 +386,5 @@ export function SelectedAnglePanel({
       )}
     </div>
   );
+  
 }

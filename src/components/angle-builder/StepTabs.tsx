@@ -3,9 +3,9 @@
 const STEPS = [
   "Generate Angles",
   "Analyze & Refine",
-  "Select Best Angle",
-  "Build Narrative",
-  "Optimize",
+  "Title Suggestions",
+  "Description Creator",
+  "Tag Creation",
 ] as const;
 
 export function StepTabs({
