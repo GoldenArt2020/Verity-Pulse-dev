@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, Loader2, ExternalLink, Check, X, Radio } from "lucide-react";
 
+const COUNTRY_CODE_LABELS: Record<string, string> = {
+  us: "US",
+  gb: "UK",
+  au: "AU",
+  ca: "CA",
+  ie: "IE",
+  nz: "NZ",
+};
+
 interface CaseAlert {
   id: string;
   provider: string;
@@ -169,6 +178,11 @@ export default function NewsAlertsPage() {
                       {a.location && (
                         <span className="rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] font-medium text-slate-400">
                           {a.location}
+                        </span>
+                      )}
+                      {a.source_country && (
+                        <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-blue-400">
+                          {COUNTRY_CODE_LABELS[a.source_country.toLowerCase()] ?? a.source_country}
                         </span>
                       )}
                       <span className="rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-500">
