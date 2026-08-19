@@ -83,7 +83,9 @@ const CANDIDATE_SHAPE = `{
       "bestAngle": string (the single best storytelling angle for this case, framed as a specific unanswered question or narrative thread — not just a restatement of the case name),
       "thumbnailConcept": string (a short, concrete thumbnail concept — what should be shown/juxtaposed to create a curiosity gap),
       "openingHook": string (a single compelling opening line for the video script, promising a story/question rather than just naming the case)
-    }`;
+    }
+    
+    CRITICAL: every numeric field above must be a plain JSON number (e.g. 50), NEVER a spelled-out word (never "fifty", "eighty-five", etc.) and never a quoted string. Output raw digits only for every score field.`;
 
 function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
   if (!dna?.audienceDNA) {
