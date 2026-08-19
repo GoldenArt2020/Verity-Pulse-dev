@@ -1,6 +1,7 @@
 "use client";
 import type { LucideIcon } from "lucide-react";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronLeft, LogOut, X } from "lucide-react";

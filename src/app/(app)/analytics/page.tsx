@@ -9,6 +9,7 @@ import { OpportunityGauge } from "@/components/dashboard/OpportunityGauge";
 import { RecommendationConversionCard } from "@/components/dashboard/RecommendationConversionCard";
 import { RecentCases } from "@/components/dashboard/RecentCases";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { ChannelInsightsPanel } from "@/components/dashboard/ChannelInsightsPanel";
 
 export default function AnalyticsPage() {
   const { stats, loading } = useDashboardStats();
@@ -57,6 +58,7 @@ export default function AnalyticsPage() {
           ))}
           <ChannelStatCards />
         </div>
+        <ChannelInsightsPanel />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <OpportunityOverview />
           <OpportunityGauge />

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { SCENES } from "@/lib/illustrations/sceneLibrary";
 import { selectScene } from "@/lib/illustrations/selectScene";
 import { useCaseVisual } from "@/hooks/useCaseVisual";

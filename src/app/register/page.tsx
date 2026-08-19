@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import Image from "next/image";
 
 export default function RegisterPage() {
   const router = useRouter();
