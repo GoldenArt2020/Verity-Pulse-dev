@@ -278,16 +278,15 @@ Include every case listed above exactly once, using its exact CASE name as "titl
 }
 
 /**
- * Groq occasionally returns a response with an unescaped character
- * inside a JSON string (a title with a raw quote/apostrophe the model
- * failed to escape) or wraps the JSON in stray text despite the prompt
- * saying not to — a naive JSON.parse on the raw response is one bad
- * title away from throwing "Unterminated string in JSON", which used to
- * take down the entire recommendation refresh. Extracting the substring
- * between the first "{" and last "}" (same defensive pattern already
- * used in scriptWriter.ts / generate-angle's response parsing) survives
- * stray wrapper text; genuinely malformed JSON inside still throws, but
- * callers now retry once (see withRetry below) instead of failing hard.
+ * Groq occasionally returns a response with an unescaped character inside
+ * a JSON string (a title with a raw quote/apostrophe the model failed to
+ * escape) or wraps the JSON in stray text despite the prompt saying not
+ * to — a naive JSON.parse on the raw response is one bad title away from
+ * throwing "Unterminated string in JSON". Extracting the substring
+ * between the first "{" and last "}" survives stray wrapper text;
+ * genuinely malformed JSON inside still throws, but every call site below
+ * wraps this in withRetry so one bad response doesn't kill the whole
+ * recommendation refresh.
  */
 function parseJSON<T>(raw: string): T {
   const cleaned = raw
@@ -474,13 +473,14 @@ async function fetchPersonalizedRecommendations(
 
   const searchContext = formatSearchContext(searchResults);
 
-    const { candidates } = await withRetry(async () => {
+  const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
       buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 2600 }
     );
     return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   });
+
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
 }
 
@@ -507,14 +507,15 @@ async function fetchTrendRecommendations(
 
   const searchContext = formatSearchContext(usableResults);
 
-    const { candidates } = await withRetry(async () => {
+  const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
-      buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
+      buildTrendPrompt(searchContext, label, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 2600 }
     );
     return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   });
-  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
+
+  return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
 }
 
 interface CaseAlertRow {
@@ -600,15 +601,13 @@ Detected: ${w.row.published_at ?? w.row.created_at}
 External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube combined)`,
   }));
 
-    const { candidates } = await withRetry(async () => {
+  const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
-      buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
-      { temperature: 0.4, maxTokens: 2600 }
+      buildNewsAlertPrompt(alertContext, dna, excludedTitles),
+      { temperature: 0.3, maxTokens: 2600 }
     );
     return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
   });
-  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
-}
 
   const signalByTitle = new Map(qualifying.map((w) => [normalizeTitle(w.title), w.signal]));
 
@@ -681,7 +680,7 @@ export async function generateRecommendations(
     const parsed = await withRetry(async () => {
       const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
         temperature: 0.2,
-        maxTokens: 400,
+        maxTokens: 600,
       });
       return parseJSON<TopicExtraction>(topicRaw);
     });
