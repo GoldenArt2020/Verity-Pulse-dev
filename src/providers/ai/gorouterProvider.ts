@@ -1,3 +1,4 @@
+import axios from "axios";
 import type { AIProvider, AIGenerateOptions } from "./types";
 import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
@@ -15,8 +16,8 @@ import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 // your GoRouter dashboard's Model Square (https://gorouter.app/pricing)
 // for the exact slug strings available to your wallet, and set the
 // GROUTER_MODEL_* env vars below if the defaults here don't match.
-const GOROUTER_BASE_URL = (process.env.GROUTER_BASE_URL || "https://gorouter.app/v1").replace(/\/+$/, "");
-const GOROUTER_CHAT_URL = `${GOROUTER_BASE_URL}/chat/completions`;
+const GOROUTER_BASE_URL = (process.env.GROUTER_BASE_URL);
+const GOROUTER_CHAT_URL = `${GOROUTER_BASE_URL}chat/completions`;
 
 // Stay comfortably under this app's existing 60s serverless ceiling
 // (see maxDuration on the generate-script routes) so a hung GoRouter
@@ -69,27 +70,27 @@ function classifyError({ status, raw, isBlockPage }: GorouterErrorInfo): string 
 
 async function callGorouterModel(model: string, prompt: string, options?: AIGenerateOptions): Promise<string> {
   return withRotatingKey("GROUTER", async (apiKey) => {
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    let res: Response;
+    let response;
     try {
-      res = await fetch(GOROUTER_CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
+      response = await axios.post(
+        GOROUTER_CHAT_URL,
+        {
           model,
           messages: [{ role: "user", content: prompt }],
           temperature: options?.temperature ?? 0.4,
           max_tokens: options?.maxTokens ?? 1024,
-        }),
-        signal: controller.signal,
-      });
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          timeout: REQUEST_TIMEOUT_MS,
+          validateStatus: () => true,
+        }
+      );
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
+      if (axios.isAxiosError(err) && (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT")) {
         const error = new Error(`GoRouter request timed out after ${REQUEST_TIMEOUT_MS / 1000}s (model: ${model}).`) as Error & {
           status?: number;
         };
@@ -101,18 +102,18 @@ async function callGorouterModel(model: string, prompt: string, options?: AIGene
       ) as Error & { status?: number };
       error.status = 0;
       throw error;
-    } finally {
-      clearTimeout(timeoutHandle);
     }
 
-    if (!res.ok) {
+    if (response.status < 200 || response.status >= 300) {
       // Read the body as text FIRST — a Cloudflare/proxy block page is
       // HTML, not JSON, so trying res.json() first would throw and we'd
       // lose the body content that actually proves what happened.
-      const bodyText = await res.text().catch(() => "");
+      const bodyText = typeof response.data === "string"
+        ? response.data
+        : JSON.stringify(response.data ?? "");
       const isBlockPage = BLOCK_PAGE_MARKERS.test(bodyText);
 
-      let raw = `${res.status} ${res.statusText}`;
+      let raw = `${response.status} ${response.statusText}`;
       let code: string | undefined;
       if (!isBlockPage) {
         try {
@@ -127,30 +128,23 @@ async function callGorouterModel(model: string, prompt: string, options?: AIGene
         raw = bodyText;
       }
 
-      const error = new Error(classifyError({ status: res.status, code, raw, isBlockPage })) as Error & {
+      const error = new Error(classifyError({ status: response.status, code, raw, isBlockPage })) as Error & {
         status?: number;
         code?: string;
       };
-      error.status = res.status;
+      error.status = response.status;
       error.code = code;
       throw error;
     }
 
-    let data: unknown;
-    try {
-      data = await res.json();
-    } catch {
-      const error = new Error("GoRouter returned a malformed (non-JSON) response.") as Error & { status?: number };
-      error.status = res.status;
-      throw error;
-    }
+    const data: unknown = response.data;
 
     const content = (data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
       const error = new Error("GoRouter response didn't include the expected message content.") as Error & {
         status?: number;
       };
-      error.status = res.status;
+      error.status = response.status;
       throw error;
     }
     return content;
