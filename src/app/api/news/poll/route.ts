@@ -1,3 +1,5 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { apitubeProvider } from "@/providers/news/apitubeProvider";
 import { newsdataProvider } from "@/providers/news/newsdataProvider";
 import { guardianProvider } from "@/providers/news/guardianProvider";
