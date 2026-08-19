@@ -306,6 +306,88 @@ function parseJSON<T>(raw: string): T {
   return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
 }
 
+/**
+ * Candidate-list-aware version of parseJSON. If Groq's response is
+ * truncated mid-array (cut off by maxTokens before the closing `]`/`}`),
+ * a plain JSON.parse throws and the ENTIRE batch of recommendations is
+ * lost — even though most candidates before the cutoff were complete,
+ * valid JSON. This walks the raw string with a string-aware brace
+ * counter, extracts every top-level `{...}` object that closed cleanly,
+ * and parses each independently — so one truncated trailing candidate
+ * costs you one candidate, not the whole request. Only throws if
+ * literally zero complete candidates can be recovered.
+ */
+function parseCandidatesResponse(raw: string): { candidates: ScoredCandidate[] } {
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  try {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+  } catch {
+    // fall through to repair
+  }
+
+  const arrayStart = cleaned.indexOf("[");
+  if (arrayStart === -1) {
+    throw new Error(`No candidates array found in AI response: ${raw.slice(0, 200)}`);
+  }
+
+  const candidates: ScoredCandidate[] = [];
+  let depth = 0;
+  let objStart = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = arrayStart; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        const objText = cleaned.slice(objStart, i + 1);
+        try {
+          candidates.push(JSON.parse(objText));
+        } catch {
+          // this one candidate was malformed/truncated — skip it, keep the rest
+        }
+        objStart = -1;
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    throw new Error(`Could not recover any complete candidates from AI response: ${raw.slice(0, 200)}`);
+  }
+
+  return { candidates };
+}
+
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -478,9 +560,9 @@ async function fetchPersonalizedRecommendations(
   const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
       buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
-      { temperature: 0.4, maxTokens: 2600 }
+      { temperature: 0.4, maxTokens: 4000 }
     );
-    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+    return parseCandidatesResponse(raw);
   });
 
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
@@ -512,9 +594,9 @@ async function fetchTrendRecommendations(
   const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
       buildTrendPrompt(searchContext, label, dna, excludedTitles),
-      { temperature: 0.4, maxTokens: 2600 }
+      { temperature: 0.4, maxTokens: 4000 }
     );
-    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+    return parseCandidatesResponse(raw);
   });
 
   return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
@@ -606,9 +688,9 @@ External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube co
   const { candidates } = await withRetry(async () => {
     const raw = await groqProvider.generateText(
       buildNewsAlertPrompt(alertContext, dna, excludedTitles),
-      { temperature: 0.3, maxTokens: 2600 }
+      { temperature: 0.3, maxTokens: 4000 }
     );
-    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+    return parseCandidatesResponse(raw);
   });
 
   const signalByTitle = new Map(qualifying.map((w) => [normalizeTitle(w.title), w.signal]));
