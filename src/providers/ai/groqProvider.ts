@@ -3,8 +3,13 @@ import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
+const MAX_EMPTY_RETRIES = 2;
 
-async function callGroq(prompt: string, options?: AIGenerateOptions): Promise<string> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callGroqOnce(prompt: string, options?: AIGenerateOptions): Promise<string> {
   return withRotatingKey("GROQ", async (apiKey) => {
     const res = await fetch(GROQ_API_URL, {
       method: "POST",
@@ -30,6 +35,30 @@ async function callGroq(prompt: string, options?: AIGenerateOptions): Promise<st
     const data = await res.json();
     return data.choices?.[0]?.message?.content ?? "";
   });
+}
+
+/**
+ * openai/gpt-oss-120b is a reasoning model that, per Groq's own community
+ * forum reports, sometimes burns its response on hidden reasoning and
+ * returns empty visible content — reported as happening on a meaningful
+ * fraction of requests even with reasoning_effort tuned down. Since this
+ * is a known upstream quirk rather than something our request shape
+ * controls, retry automatically on an empty response before giving up,
+ * rather than letting every caller's JSON.parse crash on "".
+ */
+async function callGroq(prompt: string, options?: AIGenerateOptions): Promise<string> {
+  let lastResult = "";
+  for (let attempt = 0; attempt <= MAX_EMPTY_RETRIES; attempt++) {
+    lastResult = await callGroqOnce(prompt, options);
+    if (lastResult.trim().length > 0) {
+      return lastResult;
+    }
+    if (attempt < MAX_EMPTY_RETRIES) {
+      console.warn(`[groqProvider] Empty response on attempt ${attempt + 1}, retrying...`);
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  throw new Error("Groq returned an empty response after retries");
 }
 
 export const groqProvider: AIProvider = {
