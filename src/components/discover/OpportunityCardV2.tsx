@@ -37,8 +37,7 @@ export function OpportunityCardV2({
     >
       <div className="relative h-24 w-full shrink-0 overflow-hidden bg-[#18181B]">
         {imageUrl && !imageLoading && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <Image src={imageUrl} alt="" fill sizes="280px" className="object-cover transition-transform duration-500 group-hover:scale-105" />
         )}
         <span className="absolute left-2 top-2 rounded-full bg-blue-500 px-2 py-0.5 text-[9px] font-bold text-white">
           #{rank}

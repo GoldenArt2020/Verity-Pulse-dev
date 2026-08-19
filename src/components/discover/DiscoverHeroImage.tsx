@@ -37,11 +37,12 @@ export function DiscoverHero() {
             WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1), rgba(0,0,0,0))",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={heroImage}
             alt=""
-            className="h-full w-full object-cover opacity-[0.18]"
+            fill
+            sizes="42vw"
+            className="object-cover opacity-[0.18]"
           />
         </div>
       )}

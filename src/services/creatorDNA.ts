@@ -297,25 +297,6 @@ export function applyBaseRegionOverride(dna: ChannelDNA, baseRegion: string | nu
     },
   };
 }
-/**
- * A creator-selected base region (set during onboarding) always wins over
- * whatever the DNA inference determined from video titles — inference is
- * a best-effort guess when a creator hasn't told us directly, not a
- * source of truth to argue with once they have. Applied every time DNA
- * is read for use in recommendations, not just at connect time, so it
- * stays authoritative through re-analysis too.
- */
-export function applyBaseRegionOverride(dna: ChannelDNA, baseRegion: string | null | undefined): ChannelDNA {
-  if (!baseRegion) return dna;
-  return {
-    ...dna,
-    regionDistribution: {
-      ...dna.regionDistribution,
-      primaryRegion: baseRegion,
-      isMultiRegion: false,
-    },
-  };
-}
 
 export async function getOrBuildChannelDNA(
   channelSummary: YouTubeChannelSummary,
@@ -334,8 +315,6 @@ export async function getOrBuildChannelDNA(
   if (fetchError) throw new Error(`Failed to check existing channel: ${fetchError.message}`);
 
   const effectiveBaseRegion = (existingChannel?.base_region as string | null | undefined) ?? baseRegion ?? null;
-
-    const effectiveBaseRegion = (existingChannel?.base_region as string | null | undefined) ?? baseRegion ?? null;
 
   if (existingChannel?.channel_dna && existingChannel?.last_analyzed) {
     const ageDays =

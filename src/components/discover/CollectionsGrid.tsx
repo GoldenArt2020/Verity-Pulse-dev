@@ -26,11 +26,12 @@ function CollectionTile({ label, count }: { label: string; count: number }) {
       className="group relative h-40 w-[200px] sm:w-[240px] shrink-0 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[#111114] text-left transition-all duration-200 hover:-translate-y-1 hover:border-blue-500/30"
     >
       {url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={url}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-60 transition-transform duration-500 group-hover:scale-105"
+          fill
+          sizes="(min-width: 640px) 240px, 200px"
+          className="object-cover opacity-60 transition-transform duration-500 group-hover:scale-105"
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent transition-opacity duration-200 group-hover:from-black/90" />

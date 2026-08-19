@@ -51,7 +51,7 @@ export function Sidebar() {
   const content = (
     <>
       <div className={`flex items-center gap-2.5 px-5 py-6 ${collapsed ? "justify-center px-0" : ""}`}>
-        <img src="/verity-pulse-icon.png" alt="VerityPulse" className="h-8 w-8 shrink-0 object-contain" />
+        <Image src="/verity-pulse-icon.png" alt="VerityPulse" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
         {!collapsed && (
           <span className="font-display text-[16px] font-bold tracking-tight text-sidebar-foreground">
             VerityPulse

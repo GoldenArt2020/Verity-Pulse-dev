@@ -58,8 +58,7 @@ export function CaseVisual({
 
   return (
     <div className={`relative overflow-hidden bg-slate-900 ${className}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url!} alt="" className="h-full w-full object-cover" loading="lazy" />
+      <Image src={url!} alt="" fill sizes="100vw" className="object-cover" />
     </div>
   );
 }
