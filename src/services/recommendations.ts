@@ -388,6 +388,69 @@ function parseCandidatesResponse(raw: string): { candidates: ScoredCandidate[] }
   return { candidates };
 }
 
+/**
+ * Same truncation problem as parseCandidatesResponse, but for the plain
+ * string array `{ "topics": [...] }` returned by topic extraction — a
+ * simple brace/array walk doesn't apply since these are bare strings, not
+ * objects. Recovers every fully-closed quoted string before the cutoff
+ * and drops only the one truncated trailing element.
+ */
+function parseTopicsResponse(raw: string): TopicExtraction {
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  try {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+  } catch {
+    // fall through to repair
+  }
+
+  const arrayStart = cleaned.indexOf("[");
+  if (arrayStart === -1) {
+    return { topics: [] };
+  }
+
+  const topics: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let current = "";
+
+  for (let i = arrayStart + 1; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+
+    if (inString) {
+      if (escaped) {
+        current += ch;
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        topics.push(current);
+        current = "";
+        inString = false;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "]") {
+      break;
+    }
+  }
+
+  return { topics };
+}
+
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -764,9 +827,9 @@ export async function generateRecommendations(
     const parsed = await withRetry(async () => {
       const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
         temperature: 0.2,
-        maxTokens: 600,
+        maxTokens: 1000,
       });
-      return parseJSON<TopicExtraction>(topicRaw);
+      return parseTopicsResponse(topicRaw);
     });
     topics = parsed.topics;
   }
