@@ -17,6 +17,7 @@ async function callGroq(prompt: string, options?: AIGenerateOptions): Promise<st
         messages: [{ role: "user", content: prompt }],
         temperature: options?.temperature ?? 0.4,
         max_tokens: options?.maxTokens ?? 1024,
+        reasoning_effort: "low",
       }),
     });
 
