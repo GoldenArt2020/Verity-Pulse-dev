@@ -277,13 +277,40 @@ Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 Include every case listed above exactly once, using its exact CASE name as "title" — do not skip any, do not merge them together, do not invent additional cases beyond this list. Score every field honestly and distinctly.${buildExclusionBlock(excludedTitles ?? new Set())}`;
 }
 
+/**
+ * Groq occasionally returns a response with an unescaped character
+ * inside a JSON string (a title with a raw quote/apostrophe the model
+ * failed to escape) or wraps the JSON in stray text despite the prompt
+ * saying not to — a naive JSON.parse on the raw response is one bad
+ * title away from throwing "Unterminated string in JSON", which used to
+ * take down the entire recommendation refresh. Extracting the substring
+ * between the first "{" and last "}" (same defensive pattern already
+ * used in scriptWriter.ts / generate-angle's response parsing) survives
+ * stray wrapper text; genuinely malformed JSON inside still throws, but
+ * callers now retry once (see withRetry below) instead of failing hard.
+ */
 function parseJSON<T>(raw: string): T {
   const cleaned = raw
     .trim()
     .replace(/^```json\s*/i, "")
     .replace(/```$/i, "")
     .trim();
-  return JSON.parse(cleaned);
+
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
+  }
+
+  return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+}
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    return await fn();
+  }
 }
 
 function toRecommendation(
@@ -447,12 +474,13 @@ async function fetchPersonalizedRecommendations(
 
   const searchContext = formatSearchContext(searchResults);
 
-  const raw = await groqProvider.generateText(
-    buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 2600 }
-  );
-
-  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+    const { candidates } = await withRetry(async () => {
+    const raw = await groqProvider.generateText(
+      buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
+      { temperature: 0.4, maxTokens: 2600 }
+    );
+    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  });
   return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
 }
 
@@ -479,12 +507,14 @@ async function fetchTrendRecommendations(
 
   const searchContext = formatSearchContext(usableResults);
 
-  const raw = await groqProvider.generateText(
-    buildTrendPrompt(searchContext, label, dna, excludedTitles),
-    { temperature: 0.4, maxTokens: 2600 }
-  );
-  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
-  return scoreAndFilter(candidates ?? [], dna, label, excludedTitles, assignments, currentSubniche);
+    const { candidates } = await withRetry(async () => {
+    const raw = await groqProvider.generateText(
+      buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
+      { temperature: 0.4, maxTokens: 2600 }
+    );
+    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  });
+  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
 }
 
 interface CaseAlertRow {
@@ -570,11 +600,15 @@ Detected: ${w.row.published_at ?? w.row.created_at}
 External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube combined)`,
   }));
 
-  const raw = await groqProvider.generateText(
-    buildNewsAlertPrompt(alertContext, dna, excludedTitles),
-    { temperature: 0.3, maxTokens: 2600 }
-  );
-  const { candidates } = parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+    const { candidates } = await withRetry(async () => {
+    const raw = await groqProvider.generateText(
+      buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
+      { temperature: 0.4, maxTokens: 2600 }
+    );
+    return parseJSON<{ candidates: ScoredCandidate[] }>(raw);
+  });
+  return scoreAndFilter(candidates ?? [], dna, "for-you", excludedTitles, assignments, currentSubniche);
+}
 
   const signalByTitle = new Map(qualifying.map((w) => [normalizeTitle(w.title), w.signal]));
 
@@ -644,11 +678,13 @@ export async function generateRecommendations(
   let topics: string[] = [];
 
   if (videos.length > 0) {
-    const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
-      temperature: 0.2,
-      maxTokens: 400,
+    const parsed = await withRetry(async () => {
+      const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
+        temperature: 0.2,
+        maxTokens: 400,
+      });
+      return parseJSON<TopicExtraction>(topicRaw);
     });
-    const parsed = parseJSON<TopicExtraction>(topicRaw);
     topics = parsed.topics;
   }
 
