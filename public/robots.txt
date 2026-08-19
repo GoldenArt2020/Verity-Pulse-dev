@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /$
+Allow: /register
+Disallow: /dashboard
+Disallow: /discover
+Disallow: /angle-builder
+Disallow: /case-analyzer
+Disallow: /projects
+Disallow: /script-jobs
+Disallow: /saved-cases
+Disallow: /notifications
+Disallow: /settings
+Disallow: /billing
+Disallow: /profile
+Disallow: /integrations
+Disallow: /team
+Disallow: /analytics
+Disallow: /performance
+Disallow: /channel-intelligence
+Disallow: /ai-assistant
+Disallow: /search
+Disallow: /api/
+
+Sitemap: https://verity-pulse-dev-three.vercel.app/sitemap.xml

@@ -44,6 +44,86 @@ async function getAccessToken(refreshToken: string): Promise<string> {
   return data.access_token;
 }
 
+export interface VideoPerformance {
+  videoId: string;
+  views: number;
+  impressions: number;
+  impressionClickThroughRate: number;
+  averageViewDuration: number;
+  averageViewPercentage: number;
+}
+
+export async function getVideoPerformance(refreshToken: string, videoIds: string[], days = 28): Promise<VideoPerformance[]> {
+  if (videoIds.length === 0) return [];
+  const accessToken = await getAccessToken(refreshToken);
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  const params = new URLSearchParams({
+    ids: "channel==MINE",
+    startDate: fmt(start),
+    endDate: fmt(end),
+    dimensions: "video",
+    metrics: "views,impressions,impressionClickThroughRate,averageViewDuration,averageViewPercentage",
+    filters: `video==${videoIds.join(",")}`,
+    maxResults: "50",
+  });
+
+  const res = await fetch(`${REPORTS_URL}?${params.toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`YouTube Analytics video-performance request failed: ${res.status} ${body}`);
+  }
+
+  const data = await res.json();
+  const rows: (string | number)[][] = data.rows ?? [];
+
+  return rows.map((row) => ({
+    videoId: String(row[0]),
+    views: Number(row[1] ?? 0),
+    impressions: Number(row[2] ?? 0),
+    impressionClickThroughRate: Number(row[3] ?? 0),
+    averageViewDuration: Number(row[4] ?? 0),
+    averageViewPercentage: Number(row[5] ?? 0),
+  }));
+}
+
+export interface RetentionPoint {
+  elapsedVideoTimeRatio: number;
+  audienceWatchRatio: number;
+}
+
+export async function getVideoRetentionCurve(refreshToken: string, videoId: string): Promise<RetentionPoint[]> {
+  const accessToken = await getAccessToken(refreshToken);
+
+  const params = new URLSearchParams({
+    ids: "channel==MINE",
+    startDate: "2020-01-01",
+    endDate: new Date().toISOString().slice(0, 10),
+    dimensions: "elapsedVideoTimeRatio",
+    metrics: "audienceWatchRatio",
+    filters: `video==${videoId}`,
+  });
+
+  const res = await fetch(`${REPORTS_URL}?${params.toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`YouTube Analytics retention request failed: ${res.status} ${body}`);
+  }
+
+  const data = await res.json();
+  const rows: number[][] = data.rows ?? [];
+
+  return rows
+    .map((row) => ({ elapsedVideoTimeRatio: Number(row[0] ?? 0), audienceWatchRatio: Number(row[1] ?? 0) }))
+    .sort((a, b) => a.elapsedVideoTimeRatio - b.elapsedVideoTimeRatio);
+}
+
 export interface ChannelAnalyticsSummary {
   views: number;
   watchTimeMinutes: number;

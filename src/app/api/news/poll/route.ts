@@ -1,21 +1,33 @@
-// src/app/api/news/poll/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { apitubeProvider } from "@/providers/news/apitubeProvider";
 import { newsdataProvider } from "@/providers/news/newsdataProvider";
+import { guardianProvider } from "@/providers/news/guardianProvider";
+import { currentsProvider } from "@/providers/news/currentsProvider";
+import { googleNewsRssProvider } from "@/providers/news/googleNewsRssProvider";
 import { processIncomingArticles } from "@/services/newsAlerts";
 import type { NewsProvider } from "@/providers/news/types";
 
 // How often each provider is allowed to actually hit its external API,
 // independent of how often this route gets called (every 5 min via GitHub
-// Actions). Keeps both free tiers comfortably under quota.
+// Actions).
 const POLL_INTERVALS_MINUTES: Record<string, number> = {
   apitube: 5,
   newsdata: 24 * 60,
+  guardian: 15,
+  currents: 60,
+  // No API key/quota to protect here, but the underlying content skews
+  // several days stale (median ~6.6 days per recent sampling), so there's
+  // no real benefit to polling more often than this — it exists to catch
+  // smaller stories the other four sources miss, not to be fast.
+  "google-news-rss": 4 * 60,
 };
 
-const PROVIDERS: NewsProvider[] = [apitubeProvider, newsdataProvider];
-
+const PROVIDERS: NewsProvider[] = [
+  apitubeProvider,
+  newsdataProvider,
+  guardianProvider,
+  currentsProvider,
+  googleNewsRssProvider,
+];
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
