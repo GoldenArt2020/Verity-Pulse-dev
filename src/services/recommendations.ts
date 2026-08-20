@@ -750,7 +750,7 @@ External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube co
   }));
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText((
+    const raw = await aiRouter.generateText(
       buildNewsAlertPrompt(alertContext, dna, excludedTitles),
       { temperature: 0.3, maxTokens: 4000 }
     );
