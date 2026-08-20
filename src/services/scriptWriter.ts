@@ -360,7 +360,7 @@ export async function createScriptJob(
    if (!groqProvider.isConfigured()) {
     throw new Error("No AI provider is configured — cannot write this script");
   }
-  if (!gorouterWriteProvider.isConfigured()) {
+  if (!groqProvider.isConfigured()) {
     throw new Error("Claude is not configured — cannot write this script");
   }
 
@@ -532,7 +532,7 @@ export async function advanceScriptJob(
   try {
     const maxTokens = Math.min(6000, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      gorouterWriteProvider.generateText(
+      groqProvider.generateText(
         buildSectionPrompt(caseRow, angle, job.brief, job.channel_dna, job.outline, plan, job.previous_tail),
         { temperature: 0.65, maxTokens }
       )
@@ -542,7 +542,7 @@ export async function advanceScriptJob(
     if (!endsCleanly(sectionText)) {
       try {
         const tail = sectionText.split(/\s+/).slice(-60).join(" ");
-        const continuation = await gorouterWriteProvider.generateText(buildContinuationPrompt(caseRow, tail), {
+        const continuation = await groqProvider.generateText(buildContinuationPrompt(caseRow, tail), {
           temperature: 0.65,
           maxTokens: 200,
         });
