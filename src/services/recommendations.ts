@@ -9,7 +9,6 @@ import { computeAlertTrendSignal } from "@/services/newsAlertTrends";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 import { deriveChannelSubniche } from "@/lib/channelSubniche";
 import { analyzeChannelCoverage } from "@/lib/youtubeCoverageAnalysis";
-import { groqProvider } from "@/providers/ai/groqProvider";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
