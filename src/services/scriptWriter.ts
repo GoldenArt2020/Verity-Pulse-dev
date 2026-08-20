@@ -427,7 +427,7 @@ export async function createScriptJob(
   const craftSourcesText = craftSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
 
   const researchRaw = await withRetry(() =>
-    groqProvider.generateText(buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText), {
+    aiRouter.generateText(buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText), {
       temperature: 0.3,
       maxTokens: 2200,
     })
@@ -436,7 +436,7 @@ export async function createScriptJob(
 
   const sectionCount = sectionCountFor(wordCount);
   const outlineRaw = await withRetry(() =>
-    groqProvider.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
+    aiRouter.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
       temperature: 0.4,
       maxTokens: 700,
     })
@@ -643,7 +643,7 @@ export async function finalizeScriptJob(
 
   let seo: ScriptSeoSummary | null = null;
   try {
-    const seoRaw = await groqProvider.generateText(buildSeoSummaryPrompt(caseRow, angle, cleanScript), {
+    const seoRaw = await aiRouter.generateText(buildSeoSummaryPrompt(caseRow, angle, cleanScript), {
       temperature: 0.3,
       maxTokens: 400,
     });
