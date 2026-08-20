@@ -871,15 +871,15 @@ export async function generateRecommendations(
     ),
     delayed(
       () => fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles, assignments, currentSubniche),
-      800
+      4000
     ),
     delayed(
       () => fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
-      1600
+      8000
     ),
     delayed(
       () => fetchNewsAlertRecommendations(supabase, channelDNA, excludedTitles, assignments, currentSubniche),
-      2400
+      12000
     ),
   ]);
 
