@@ -43,10 +43,23 @@ function getNextKey(provider: ProviderName): string {
   return key;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Calls `fn` with a rotating API key. On a 429 (rate limit) or 5xx response,
  * automatically retries with the next key in the pool, up to the number of
  * keys available. Throws the last error if every key is exhausted.
+ *
+ * Waits briefly before each retry (not just switching keys instantly) —
+ * Groq's free tier limits are largely TOKENS-per-minute, not just
+ * requests-per-minute, and that budget can be effectively shared across
+ * keys created under related accounts. Switching keys with zero delay
+ * doesn't help when the actual constraint is "wait for the minute window
+ * to roll over" — a short wait does. This also naturally smooths out
+ * bursts where several Groq calls fire in the same instant (e.g. a
+ * recommendations refresh kicking off multiple prompts via Promise.all).
  */
 export async function withRotatingKey<T>(
   provider: ProviderName,
@@ -58,8 +71,9 @@ export async function withRotatingKey<T>(
   }
 
   let lastError: unknown;
+  const maxAttempts = Math.max(keys.length, 3); // even with 1 key, still worth a couple of backoff retries
 
-  for (let attempt = 0; attempt < keys.length; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const key = getNextKey(provider);
     try {
       return await fn(key);
@@ -75,6 +89,14 @@ export async function withRotatingKey<T>(
         // Not a rate-limit/server issue — don't burn through keys for
         // something a different key won't fix (e.g. bad request body).
         throw err;
+      }
+
+      if (attempt < maxAttempts - 1) {
+        // Exponential-ish backoff: 600ms, 1400ms, 2400ms... capped, plus a
+        // little jitter so several concurrent calls don't all retry in
+        // perfect lockstep and re-collide on the next attempt.
+        const waitMs = Math.min(600 * (attempt + 1) * (attempt + 1), 6000) + Math.random() * 300;
+        await sleep(waitMs);
       }
       // else: loop continues, tries next key
     }

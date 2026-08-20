@@ -853,13 +853,34 @@ export async function generateRecommendations(
     ...assignmentExclusionSample(assignments, currentSubniche),
   ]);
 
+  function delayed<T>(promiseFactory: () => Promise<T>, delayMs: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        promiseFactory().then(resolve).catch(reject);
+      }, delayMs);
+    });
+  }
+
   const [personalized, currentlyTrending, aboutToTrend, newsAlerts] = await Promise.all([
-    topics.length > 0
-      ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles, assignments, currentSubniche)
-      : Promise.resolve([]),
-    fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles, assignments, currentSubniche),
-    fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
-    fetchNewsAlertRecommendations(supabase, channelDNA, excludedTitles, assignments, currentSubniche),
+    delayed(
+      () =>
+        topics.length > 0
+          ? fetchPersonalizedRecommendations(topics, channelDNA, excludedTitles, assignments, currentSubniche)
+          : Promise.resolve([]),
+      0
+    ),
+    delayed(
+      () => fetchTrendRecommendations("currently-trending", channelDNA, excludedTitles, assignments, currentSubniche),
+      800
+    ),
+    delayed(
+      () => fetchTrendRecommendations("about-to-trend", channelDNA, excludedTitles, assignments, currentSubniche),
+      1600
+    ),
+    delayed(
+      () => fetchNewsAlertRecommendations(supabase, channelDNA, excludedTitles, assignments, currentSubniche),
+      2400
+    ),
   ]);
 
   const merged = [...personalized, ...currentlyTrending, ...aboutToTrend, ...newsAlerts];
