@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { aiRouter } from "@/providers/ai/router";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { getOrFetchYouTubeCoverage, getOrFetchGenreBenchmarkTitles } from "@/services/youtubeCoverage";
 import { formatSourcesWithReliability } from "@/lib/sourceReliability";
@@ -297,7 +297,7 @@ async function generateAngleBatch(
   channelDNA: ChannelDNA | null,
   opts: { angleRange: string; titleIdeaRange: string; maxTokens: number }
 ): Promise<ParsedResponse> {
-  const raw = await groqProvider.generateText(
+  const raw = await aiRouter.generateText(
     buildPrompt(
       caseName,
       category,

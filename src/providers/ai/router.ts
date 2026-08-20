@@ -1,4 +1,4 @@
-import type { AIProvider, ProviderHealth } from "./types";
+import type { AIProvider, AIGenerateOptions, ProviderHealth } from "./types";
 import { groqProvider } from "./groqProvider";
 import { gorouterFastProvider } from "./gorouterProvider";
 
@@ -35,6 +35,8 @@ export const aiRouter = {
   summarizeCase: (rawText: string) => withFallback((p) => p.summarizeCase(rawText)),
   generateNarratives: (caseSummary: string) => withFallback((p) => p.generateNarratives(caseSummary)),
   scoreTitle: (title: string, context?: string) => withFallback((p) => p.scoreTitle(title, context)),
-  generateText: (prompt: string) => withFallback((p) => p.generateText(prompt)),
+  generateText: (prompt: string, options?: AIGenerateOptions) =>
+    withFallback((p) => p.generateText(prompt, options)),
+  isConfigured: () => providers.some((p) => p.isConfigured()),
   getHealth: (): ProviderHealth[] => Object.values(healthLog),
 };

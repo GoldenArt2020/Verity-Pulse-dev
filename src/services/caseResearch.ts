@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { aiRouter } from "@/providers/ai/router";
 import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
 import { runBackgroundResearch } from "@/services/backgroundResearch";
@@ -84,7 +84,7 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   "caseFacts": {
     "people": [ { "name": string, "role": string (e.g. "victim", "accused", "witness"), "details": string (age, occupation, relevant background — every fact stated in the sources, not summarized away) } ],
     "timeline": [ { "date": string (as specific as the sources allow), "event": string } ] (every dated event the sources mention, in order),
-    "charges": string[] (exact charges, including any that changed over time, e.g. "attempted murder \u2192 upgraded to murder"),
+    "charges": string[] (exact charges, including any that changed over time, e.g. "attempted murder → upgraded to murder"),
     "keyFigures": string[] (every concrete, citable number, measurement, or quoted line from the sources — alcohol readings, distances, amounts raised, exact quotes attributed to named people, sentencing details, etc. Keep each as a short standalone fact),
     "locations": string[] (specific named locations from the sources),
     "unresolvedQuestions": string[] (what the sources explicitly say is still unknown or unresolved, e.g. pending trial, unidentified suspect, undetermined motive)
@@ -121,7 +121,7 @@ function parseAnalysis(raw: string): ResearchAnalysis {
 
 /**
  * First-pass research for a stub Case: multi-query Tavily search (case
- * name, victims, timeline, charges/court, latest news) + ONE Groq call to
+ * name, victims, timeline, charges/court, latest news) + ONE AI call to
  * produce summary, category, tags, scores, a case-specific image search
  * query, demographic/case-type tagging, AND a structured case_facts
  * dossier (named people, dated timeline, charges, key figures/quotes,
@@ -136,8 +136,10 @@ function parseAnalysis(raw: string): ResearchAnalysis {
  * src/services/youtubeCoverage.ts) so the Angle Builder header shows an
  * actual data-driven coverage score immediately rather than waiting until
  * angles are generated.
- * SERVER-ONLY — uses Tavily/Groq secret keys which must never be read in
- * the browser. Only ever imported from /api/case/research/route.ts.
+ * SERVER-ONLY — uses Tavily/AI provider secret keys which must never be
+ * read in the browser. Only ever imported from /api/case/research/route.ts.
+ * Routes through aiRouter (GoRouter, falling back to Groq) rather than
+ * calling one provider directly.
  *
  * `victimDemographics`/`caseTypeTags`/`solvedStatus` are extracted
  * cautiously — the prompt explicitly instructs the model to leave
@@ -149,8 +151,8 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this case");
   }
-  if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot analyze this case");
+  if (!aiRouter.isConfigured()) {
+    throw new Error("No AI provider is configured — cannot analyze this case");
   }
 
   const results = await gatherSources(caseName);
@@ -161,7 +163,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
 
   const sourcesText = formatSourcesWithReliability(results, 800);
 
-  const raw = await groqProvider.generateText(buildAnalysisPrompt(caseName, sourcesText), {
+  const raw = await aiRouter.generateText(buildAnalysisPrompt(caseName, sourcesText), {
     temperature: 0.3,
     maxTokens: 4000,
   });

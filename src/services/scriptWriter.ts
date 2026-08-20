@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { aiRouter } from "@/providers/ai/router";
 import { gorouterWriteProvider } from "@/providers/ai/gorouterProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
@@ -358,8 +358,8 @@ export async function createScriptJob(
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this script");
   }
-  if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot research this script");
+   if (!aiRouter.isConfigured()) {
+    throw new Error("No AI provider is configured — cannot write this script");
   }
   if (!gorouterWriteProvider.isConfigured()) {
     throw new Error("Claude is not configured — cannot write this script");
