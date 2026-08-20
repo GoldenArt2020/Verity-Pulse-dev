@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { aiRouter } from "@/providers/ai/router";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { getOrFetchYouTubeCoverage, getOrFetchGenreBenchmarkTitles } from "@/services/youtubeCoverage";
 import { formatSourcesWithReliability } from "@/lib/sourceReliability";
@@ -297,7 +297,7 @@ async function generateAngleBatch(
   channelDNA: ChannelDNA | null,
   opts: { angleRange: string; titleIdeaRange: string; maxTokens: number }
 ): Promise<ParsedResponse> {
-  const raw = await aiRouter.generateText(
+  const raw = await groqProvider.generateText(
     buildPrompt(
       caseName,
       category,
@@ -324,7 +324,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "caseId is required" }, { status: 400 });
   }
 
-    if (!aiRouter.isConfigured()) {
+    if (!groqProvider.isConfigured()) {
     return NextResponse.json({ error: "No AI provider is configured" }, { status: 500 });
   }
 

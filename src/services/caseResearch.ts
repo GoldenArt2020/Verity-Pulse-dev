@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { aiRouter } from "@/providers/ai/router";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
 import { runBackgroundResearch } from "@/services/backgroundResearch";
@@ -151,7 +151,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this case");
   }
-  if (!aiRouter.isConfigured()) {
+  if (!groqProvider.isConfigured()) {
     throw new Error("No AI provider is configured — cannot analyze this case");
   }
 
@@ -163,7 +163,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
 
   const sourcesText = formatSourcesWithReliability(results, 800);
 
-  const raw = await aiRouter.generateText(buildAnalysisPrompt(caseName, sourcesText), {
+  const raw = await groqProvider.generateText(buildAnalysisPrompt(caseName, sourcesText), {
     temperature: 0.3,
     maxTokens: 4000,
   });

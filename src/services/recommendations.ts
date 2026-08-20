@@ -9,7 +9,7 @@ import { computeAlertTrendSignal } from "@/services/newsAlertTrends";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 import { deriveChannelSubniche } from "@/lib/channelSubniche";
 import { analyzeChannelCoverage } from "@/lib/youtubeCoverageAnalysis";
-import { aiRouter } from "@/providers/ai/router";
+import { groqProvider } from "@/providers/ai/groqProvider";
 
 export type TrendStatus = "for-you" | "currently-trending" | "about-to-trend";
 
@@ -622,7 +622,7 @@ async function fetchPersonalizedRecommendations(
   const searchContext = formatSearchContext(searchResults);
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 4000 }
     );
@@ -656,7 +656,7 @@ async function fetchTrendRecommendations(
   const searchContext = formatSearchContext(usableResults);
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildTrendPrompt(searchContext, label, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 4000 }
     );
@@ -750,7 +750,7 @@ External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube co
   }));
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildNewsAlertPrompt(alertContext, dna, excludedTitles),
       { temperature: 0.3, maxTokens: 4000 }
     );
@@ -815,7 +815,7 @@ export async function generateRecommendations(
   videos: YouTubeVideoDetail[],
   channelDNA?: ChannelDNA | null
 ): Promise<Recommendation[]> {
-   if (!aiRouter.isConfigured()) {
+   if (!groqProvider.isConfigured()) {
     throw new Error("No AI provider is configured — cannot write this script");
   }
   if (!tavilyProvider.isConfigured()) {
@@ -826,7 +826,7 @@ export async function generateRecommendations(
 
   if (videos.length > 0) {
     const parsed = await withRetry(async () => {
-      const topicRaw = await aiRouter.generateText(buildTopicExtractionPrompt(videos), {
+      const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
         temperature: 0.2,
         maxTokens: 1000,
       });

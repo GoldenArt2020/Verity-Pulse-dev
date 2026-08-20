@@ -1,8 +1,5 @@
 type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE" | "GROUTER";
 
-// In-memory per-instance state. Serverless instances are short-lived,
-// so this resets on cold start — that's fine, it just means rotation
-// restarts at key 1 each time a new instance spins up.
 const cursors: Record<ProviderName, number> = {
   GROQ: 0,
   TAVILY: 0,
@@ -21,8 +18,6 @@ function loadKeys(provider: ProviderName): string[] {
     keys.push(value);
     i++;
   }
-  // Fallback: support the old single-key env var name too,
-  // so nothing breaks if only GROQ_API_KEY (no suffix) is set.
   if (keys.length === 0 && process.env[`${provider}_API_KEY`]) {
     keys.push(process.env[`${provider}_API_KEY`]!);
   }
@@ -33,34 +28,71 @@ export function hasAnyKey(provider: ProviderName): boolean {
   return loadKeys(provider).length > 0;
 }
 
-function getNextKey(provider: ProviderName): string {
-  const keys = loadKeys(provider);
-  if (keys.length === 0) {
-    throw new Error(`No API keys configured for ${provider}. Set ${provider}_API_KEY_1 (and optionally _2, _3...) in your environment.`);
+// Proactive per-key rate limiting — tracks each individual key's call
+// timestamps so we can route around a key that's close to its per-minute
+// budget BEFORE it 429s, rather than only reacting after the fact.
+// 20 is deliberately conservative under Groq's free-tier ~30 RPM per key.
+const RPM_LIMITS: Partial<Record<ProviderName, number>> = {
+  GROQ: 20,
+};
+
+const RPM_WINDOW_MS = 60_000;
+const callLog: Map<string, number[]> = new Map();
+
+function pruneOld(timestamps: number[]): number[] {
+  const cutoff = Date.now() - RPM_WINDOW_MS;
+  return timestamps.filter((t) => t > cutoff);
+}
+
+function recordCall(key: string) {
+  const existing = pruneOld(callLog.get(key) ?? []);
+  existing.push(Date.now());
+  callLog.set(key, existing);
+}
+
+function callsInWindow(key: string): number {
+  const existing = pruneOld(callLog.get(key) ?? []);
+  callLog.set(key, existing);
+  return existing.length;
+}
+
+function pickKey(provider: ProviderName, keys: string[]): { key: string; waitMs: number } {
+  const limit = RPM_LIMITS[provider];
+
+  if (!limit) {
+    const key = keys[cursors[provider] % keys.length];
+    cursors[provider] = (cursors[provider] + 1) % keys.length;
+    return { key, waitMs: 0 };
   }
-  const key = keys[cursors[provider] % keys.length];
-  cursors[provider] = (cursors[provider] + 1) % keys.length;
-  return key;
+
+  let best: { key: string; count: number } | null = null;
+  for (const k of keys) {
+    const count = callsInWindow(k);
+    if (count < limit && (!best || count < best.count)) {
+      best = { key: k, count };
+    }
+  }
+  if (best) return { key: best.key, waitMs: 0 };
+
+  let soonestFreeAt = Infinity;
+  let soonestKey = keys[0];
+  for (const k of keys) {
+    const timestamps = pruneOld(callLog.get(k) ?? []);
+    if (timestamps.length === 0) continue;
+    const freeAt = Math.min(...timestamps) + RPM_WINDOW_MS;
+    if (freeAt < soonestFreeAt) {
+      soonestFreeAt = freeAt;
+      soonestKey = k;
+    }
+  }
+  const waitMs = Math.max(0, soonestFreeAt - Date.now()) + 250;
+  return { key: soonestKey, waitMs };
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Calls `fn` with a rotating API key. On a 429 (rate limit) or 5xx response,
- * automatically retries with the next key in the pool, up to the number of
- * keys available. Throws the last error if every key is exhausted.
- *
- * Waits briefly before each retry (not just switching keys instantly) —
- * Groq's free tier limits are largely TOKENS-per-minute, not just
- * requests-per-minute, and that budget can be effectively shared across
- * keys created under related accounts. Switching keys with zero delay
- * doesn't help when the actual constraint is "wait for the minute window
- * to roll over" — a short wait does. This also naturally smooths out
- * bursts where several Groq calls fire in the same instant (e.g. a
- * recommendations refresh kicking off multiple prompts via Promise.all).
- */
 export async function withRotatingKey<T>(
   provider: ProviderName,
   fn: (apiKey: string) => Promise<T>
@@ -71,10 +103,15 @@ export async function withRotatingKey<T>(
   }
 
   let lastError: unknown;
-  const maxAttempts = Math.max(keys.length, 3); // even with 1 key, still worth a couple of backoff retries
+  const maxAttempts = Math.max(keys.length, 3);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const key = getNextKey(provider);
+    const { key, waitMs } = pickKey(provider, keys);
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+    recordCall(key);
+
     try {
       return await fn(key);
     } catch (err: unknown) {
@@ -83,22 +120,16 @@ export async function withRotatingKey<T>(
         ?? (err as { response?: { status?: number } })?.response?.status;
 
       const isRateLimitOrServerError =
-  status === 429 || status === 401 || (typeof status === "number" && status >= 500);
+        status === 429 || status === 401 || (typeof status === "number" && status >= 500);
 
       if (!isRateLimitOrServerError) {
-        // Not a rate-limit/server issue — don't burn through keys for
-        // something a different key won't fix (e.g. bad request body).
         throw err;
       }
 
       if (attempt < maxAttempts - 1) {
-        // Exponential-ish backoff: 600ms, 1400ms, 2400ms... capped, plus a
-        // little jitter so several concurrent calls don't all retry in
-        // perfect lockstep and re-collide on the next attempt.
-        const waitMs = Math.min(600 * (attempt + 1) * (attempt + 1), 6000) + Math.random() * 300;
-        await sleep(waitMs);
+        const backoffMs = Math.min(600 * (attempt + 1) * (attempt + 1), 6000) + Math.random() * 300;
+        await sleep(backoffMs);
       }
-      // else: loop continues, tries next key
     }
   }
 
