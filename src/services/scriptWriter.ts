@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import { groqProvider } from "@/providers/ai/groqProvider";
-import { claudeProvider } from "@/providers/ai/claudeProvider";
+import { gorouterWriteProvider } from "@/providers/ai/gorouterProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
@@ -361,7 +361,7 @@ export async function createScriptJob(
   if (!groqProvider.isConfigured()) {
     throw new Error("Groq is not configured — cannot research this script");
   }
-  if (!claudeProvider.isConfigured()) {
+  if (!gorouterWriteProvider.isConfigured()) {
     throw new Error("Claude is not configured — cannot write this script");
   }
 
@@ -533,7 +533,7 @@ export async function advanceScriptJob(
   try {
     const maxTokens = Math.min(6000, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      claudeProvider.generateText(
+      gorouterWriteProvider.generateText(
         buildSectionPrompt(caseRow, angle, job.brief, job.channel_dna, job.outline, plan, job.previous_tail),
         { temperature: 0.65, maxTokens }
       )
@@ -543,7 +543,7 @@ export async function advanceScriptJob(
     if (!endsCleanly(sectionText)) {
       try {
         const tail = sectionText.split(/\s+/).slice(-60).join(" ");
-        const continuation = await claudeProvider.generateText(buildContinuationPrompt(caseRow, tail), {
+        const continuation = await gorouterWriteProvider.generateText(buildContinuationPrompt(caseRow, tail), {
           temperature: 0.65,
           maxTokens: 200,
         });

@@ -16,7 +16,7 @@ import { withRotatingKey, hasAnyKey } from "@/lib/keyRotation";
 // your GoRouter dashboard's Model Square (https://gorouter.app/pricing)
 // for the exact slug strings available to your wallet, and set the
 // GROUTER_MODEL_* env vars below if the defaults here don't match.
-const GOROUTER_BASE_URL = (process.env.GROUTER_BASE_URL);
+const GOROUTER_BASE_URL = process.env.GROUTER_BASE_URL || "https://gorouter.app/v1/";
 const GOROUTER_CHAT_URL = `${GOROUTER_BASE_URL}chat/completions`;
 
 // Stay comfortably under this app's existing 60s serverless ceiling
@@ -203,14 +203,11 @@ function makeGorouterProvider(name: string, config: GorouterModelConfig): AIProv
 // (Groq's llama-3.3-70b-versatile) for these tasks, via whatever slug
 // your GoRouter account exposes for it.
 export const gorouterFastProvider = makeGorouterProvider("gorouter-fast", {
-  primary: process.env.GROUTER_MODEL_FAST || "llama-3.3-70b-versatile",
-  fallback: process.env.GROUTER_MODEL_FAST_FALLBACK,
+  primary: process.env.GROUTER_MODEL_FAST || "claude-opus-4-8",
+  fallback: process.env.GROUTER_MODEL_FAST_FALLBACK || "claude-opus-4-8-thinking",
 });
 
-// High-quality prose model for actual script section writing/continuation
-// — routes through GoRouter using the same model this app already relied
-// on directly (Claude Sonnet, falling back to Haiku) for that task.
 export const gorouterWriteProvider = makeGorouterProvider("gorouter-write", {
-  primary: process.env.GROUTER_MODEL_WRITE || "claude-sonnet-5",
-  fallback: process.env.GROUTER_MODEL_WRITE_FALLBACK || "claude-haiku-4-5-20251001",
+  primary: process.env.GROUTER_MODEL_WRITE || "claude-opus-5",
+  fallback: process.env.GROUTER_MODEL_WRITE_FALLBACK || "claude-opus-4-8",
 });
