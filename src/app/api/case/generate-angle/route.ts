@@ -324,8 +324,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "caseId is required" }, { status: 400 });
   }
 
-  if (!groqProvider.isConfigured()) {
-    return NextResponse.json({ error: "Groq is not configured" }, { status: 500 });
+    if (!aiRouter.isConfigured()) {
+    return NextResponse.json({ error: "No AI provider is configured" }, { status: 500 });
   }
 
   const supabase = await createClient();
