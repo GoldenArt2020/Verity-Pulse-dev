@@ -66,8 +66,6 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [writingId, setWritingId] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
-  const [seoByAngle, setSeoByAngle] = useState<Record<string, ScriptSeoSummary>>({});
-
   const [step, setStep] = useState(0);
 
   const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
@@ -106,52 +104,29 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
 
   const activeAngle = angles.find((a) => a.id === activeId) ?? null;
 
-  async function runToCompletion(jobId: string, totalSections: number, sectionsAlreadyDone: number) {
-    let sectionsCompleted = sectionsAlreadyDone;
-    let status: "writing" | "seo" | "complete" | "failed" = sectionsAlreadyDone >= totalSections ? "seo" : "writing";
-
-    while (status === "writing") {
-      setProgress(`Writing section ${sectionsCompleted + 1} of ${totalSections}...`);
-      const result = await postJson<{
-        status: "writing" | "seo" | "complete" | "failed";
-        sectionsCompleted: number;
-        totalSections: number;
-      }>("/api/generate-script/section", { jobId });
-      status = result.status;
-      sectionsCompleted = result.sectionsCompleted;
-    }
-
-    setProgress("Finalizing script and SEO metadata...");
-    return postJson<{ script: string; wordCount: number; seo: ScriptSeoSummary | null }>(
-      "/api/generate-script/finish",
-      { jobId }
-    );
-  }
-
   async function handleWriteScript(wordCount: ScriptWordCount) {
     setDialogOpen(false);
     if (!activeAngle) return;
     setWritingId(activeAngle.id);
     setWriteError(null);
+    setProgress("Writing your script — this can take a minute or two...");
     try {
-      const { jobId, totalSections } = await postJson<{ jobId: string; totalSections: number }>(
-        "/api/generate-script/start",
-        { angleId: activeAngle.id, caseId, wordCount }
-      );
-
-      const { script, wordCount: finalWordCount, seo } = await runToCompletion(jobId, totalSections, 0);
+      const idempotencyKey = crypto.randomUUID();
+      const data = await postJson<{ script: string; wordCount: number }>("/api/scripts/generate", {
+        angleId: activeAngle.id,
+        caseId,
+        wordCount,
+        idempotencyKey,
+      });
 
       setAngles((prev) =>
         prev.map((a) =>
           a.id === activeAngle.id
-            ? { ...a, script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
+            ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: data.wordCount }
             : a
         )
       );
-      if (seo) {
-        setSeoByAngle((prev) => ({ ...prev, [activeAngle.id]: seo }));
-      }
-      setPreview({ script, wordCount: finalWordCount, seo: seo ?? null });
+      setPreview({ script: data.script, wordCount: data.wordCount, seo: null });
       setStep(1);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to write script");
@@ -164,7 +139,7 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   function handleReopenScript(angle: ProjectAngle) {
     if (!angle.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
-    setPreview({ script: angle.script, wordCount, seo: seoByAngle[angle.id] ?? null });
+    setPreview({ script: angle.script, wordCount, seo: null });
   }
 
   if (loading) {

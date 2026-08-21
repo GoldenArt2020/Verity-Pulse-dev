@@ -4,9 +4,9 @@ import { Loader2, X } from "lucide-react";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
 const LABELS: Record<ScriptWordCount, { title: string; sub: string }> = {
-  3000: { title: "3,000 words", sub: "~18–20 min narration · short, tight episode" },
-  6000: { title: "6,000 words", sub: "~35–40 min narration · standard episode" },
-  9000: { title: "9,000 words", sub: "~55–60 min narration · extended, in-depth episode" },
+  5000: { title: "5,000 words", sub: "~30 min narration · tight, fast-moving, strongest evidence only" },
+  7000: { title: "7,000 words", sub: "~42 min narration · deeper investigation, fuller context" },
+  10000: { title: "10,000 words", sub: "~60 min narration · full investigation, competing theories, courtroom depth" },
 };
 
 export function ScriptLengthDialog({
@@ -42,8 +42,7 @@ export function ScriptLengthDialog({
           )}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          The script is researched and written section by section to hit this target, with SEO-friendly phrasing
-          built in throughout.
+          Each length is written with genuine additional depth, not padding — pick what fits the story.
         </p>
 
         <div className="mt-4 space-y-2">
@@ -63,7 +62,7 @@ export function ScriptLengthDialog({
         {busy && (
           <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2.5 text-xs text-slate-300">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-400" />
-            {progressLabel ?? "Working..."}
+            {progressLabel ?? "Writing your script — this can take a minute or two for longer scripts..."}
           </div>
         )}
       </div>
