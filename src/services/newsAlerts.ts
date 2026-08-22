@@ -9,6 +9,14 @@ const KEYWORD_PATTERN =
 const DEDUP_WINDOW_DAYS = 21;
 const STRIP_WORDS = /\b(trial|case|murder|killing|homicide|investigation|update|day \d+)\b/gi;
 
+// Classification is the slow part (a Groq call per article) — process
+// articles in small concurrent batches rather than fully sequentially.
+// groqProvider itself caps global concurrency and paces request starts,
+// so this doesn't risk re-triggering rate limits; it just keeps that
+// queue fed instead of leaving it idle between each article's other,
+// non-Groq work (DB round-trips).
+const CLASSIFY_CONCURRENCY = 5;
+
 /**
  * Reduces a case name to its core identifying words so alerts about the
  * same case from different outlets/articles (which rarely use identical
@@ -130,76 +138,97 @@ export async function processIncomingArticles(
     (a) => KEYWORD_PATTERN.test(a.title) || (a.snippet && KEYWORD_PATTERN.test(a.snippet))
   );
 
-  // Pull existing tracked case names ONCE per run (not per-article) so a
-  // newly-surfaced alert never duplicates something already sitting in
-  // the actual Cases area — previously this only checked against OTHER
-  // alerts, never against real tracked cases.
+  if (candidates.length === 0) {
+    return { candidates: 0, inserted: 0, skipped: 0, skipReasons };
+  }
+
+  // Batched duplicate-URL check — ONE query for every candidate instead
+  // of one round-trip per article.
+  const { data: existingUrlRows } = await supabase
+    .from("case_alerts")
+    .select("url")
+    .in("url", candidates.map((a) => a.url));
+  const existingUrls = new Set((existingUrlRows ?? []).map((r) => r.url));
+
+  // Pull existing tracked case names ONCE per run so a newly-surfaced
+  // alert never duplicates something already sitting in the actual Cases
+  // area.
   const { data: trackedCases } = await supabase.from("cases").select("name");
   const normalizedTrackedCases = (trackedCases ?? [])
     .map((c) => (c.name ? normalizeCaseName(c.name) : null))
     .filter((n): n is string => !!n);
 
-  for (const article of candidates) {
-    const { data: existing } = await supabase
-      .from("case_alerts")
-      .select("id")
-      .eq("url", article.url)
-      .maybeSingle();
-    if (existing) {
-      skipReasons.duplicateUrl++;
-      continue;
-    }
+  // Recent-alert case names, ALSO fetched once — this query was
+  // previously re-run per article despite always returning the same
+  // result within a single run. This array is appended to as new cases
+  // get inserted during this run, so within-run duplicates (two
+  // articles about the same fresh case) still get caught.
+  const cutoff = new Date(Date.now() - DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentAlertRows } = await supabase
+    .from("case_alerts")
+    .select("case_name")
+    .gte("created_at", cutoff)
+    .not("case_name", "is", null);
+  const normalizedRecentCaseNames = (recentAlertRows ?? [])
+    .map((r) => (r.case_name ? normalizeCaseName(r.case_name) : null))
+    .filter((n): n is string => !!n);
 
+  const toClassify = candidates.filter((a) => {
+    if (existingUrls.has(a.url)) {
+      skipReasons.duplicateUrl++;
+      return false;
+    }
+    return true;
+  });
+
+  async function processOne(article: NormalizedArticle): Promise<void> {
     let classification: ClassifyResult | null = null;
     try {
       classification = await classifyArticle(article);
     } catch (err) {
       console.error("newsAlerts: classification failed", err);
       skipReasons.classificationFailed++;
-      continue;
+      return;
     }
 
     if (!classification) {
       skipReasons.classificationFailed++;
-      continue;
+      return;
     }
 
     if (!classification.isMurderCase) {
       skipReasons.notMurderCase++;
-      continue;
+      return;
     }
 
     if (!classification.isNewlyReportedCase) {
       skipReasons.notFreshCase++;
-      continue;
+      return;
     }
 
     if (classification.caseName) {
       const normalizedNew = normalizeCaseName(classification.caseName);
 
-      // Already an actual tracked case in the Cases area — never re-alert on it.
       const alreadyTracked = normalizedTrackedCases.some((c) => isLikelySameCase(normalizedNew, c));
       if (alreadyTracked) {
         skipReasons.alreadyTrackedCase++;
-        continue;
+        return;
       }
 
-      // Already alerted on recently (but not yet promoted/dismissed either way).
-      const cutoff = new Date(Date.now() - DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const { data: recentAlerts } = await supabase
-        .from("case_alerts")
-        .select("case_name")
-        .gte("created_at", cutoff)
-        .not("case_name", "is", null);
-
-      const alreadyAlerted = (recentAlerts ?? []).some((r) =>
-        r.case_name ? isLikelySameCase(normalizedNew, normalizeCaseName(r.case_name)) : false
-      );
-
+      const alreadyAlerted = normalizedRecentCaseNames.some((c) => isLikelySameCase(normalizedNew, c));
       if (alreadyAlerted) {
         skipReasons.dedupedSameCase++;
-        continue;
+        return;
       }
+
+      // Record it immediately so a second article about the same fresh
+      // case, classified concurrently in this same batch, sees it too.
+      // NOTE: with CLASSIFY_CONCURRENCY > 1, two articles about the same
+      // brand-new case landing in the exact same batch can both pass this
+      // check before either pushes — a small, accepted race. The
+      // duplicate-key guard on insert below is the final backstop for
+      // that rare case, not just cosmetic.
+      normalizedRecentCaseNames.push(normalizedNew);
     }
 
     const { error } = await supabase.from("case_alerts").insert({
@@ -220,10 +249,15 @@ export async function processIncomingArticles(
         console.error("newsAlerts: insert failed", error.message);
       }
       skipReasons.insertFailed++;
-      continue;
+      return;
     }
 
     inserted++;
+  }
+
+  for (let i = 0; i < toClassify.length; i += CLASSIFY_CONCURRENCY) {
+    const batch = toClassify.slice(i, i + CLASSIFY_CONCURRENCY);
+    await Promise.all(batch.map(processOne));
   }
 
   const skipped = Object.values(skipReasons).reduce((a, b) => a + b, 0);
