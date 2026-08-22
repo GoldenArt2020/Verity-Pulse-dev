@@ -39,7 +39,10 @@ export async function checkAndReserveGeneration(
     .maybeSingle();
 
   if (existing) {
-    return { ok: true, generationId: existing.id };
+    return {
+      ok: false,
+      reason: existing.status === "complete" ? "This generation has already completed." : "This generation is already in progress.",
+    };
   }
 
   const { data: entitlement, error: entError } = await supabase
@@ -57,6 +60,7 @@ export async function checkAndReserveGeneration(
       .from("user_entitlements")
       .update({ credits: entitlement.credits - 1, updated_at: new Date().toISOString() })
       .eq("user_id", userId)
+      .eq("credits", entitlement.credits)
       .gt("credits", 0)
       .select("credits")
       .maybeSingle();

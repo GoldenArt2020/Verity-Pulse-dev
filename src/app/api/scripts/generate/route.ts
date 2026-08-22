@@ -40,12 +40,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "idempotencyKey is required" }, { status: 400 });
   }
 
+  const { data: angle } = await supabase
+    .from("angles")
+    .select("id")
+    .eq("id", angleId)
+    .eq("case_id", caseId)
+    .maybeSingle();
+  if (!angle) {
+    return NextResponse.json({ error: "Angle does not belong to the requested case." }, { status: 404 });
+  }
+
   // 3. Check entitlement + atomically reserve one credit BEFORE calling
   //    Claude — an unpaid or over-quota user must never be able to
   //    consume API balance, even by hitting this route directly.
   const reservation = await checkAndReserveGeneration(user.id, wordCount, idempotencyKey, { angleId, caseId });
   if (!reservation.ok) {
-    return NextResponse.json({ error: reservation.reason }, { status: 403 });
+    const isDuplicate = reservation.reason?.startsWith("This generation ") ?? false;
+    return NextResponse.json({ error: reservation.reason }, { status: isDuplicate ? 409 : 403 });
   }
 
   const generationId = reservation.generationId!;

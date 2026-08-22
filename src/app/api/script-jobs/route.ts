@@ -15,9 +15,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const { caseId, angleId, wordCount, styleNote } = body ?? {};
 
-  const isValidWordCount = typeof wordCount === "number" && wordCount >= 500 && wordCount <= 20000;
-  if (!caseId || !angleId || !isValidWordCount) {
-    return NextResponse.json({ error: "caseId, angleId, and a valid wordCount (500-20000) are required" }, { status: 400 });
+  if (!caseId || !angleId || !isValidScriptWordCount(wordCount)) {
+    return NextResponse.json({ error: "caseId, angleId, and wordCount (5000, 7000, or 10000) are required" }, { status: 400 });
   }
 
   try {

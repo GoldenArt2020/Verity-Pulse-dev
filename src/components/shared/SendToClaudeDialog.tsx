@@ -2,11 +2,11 @@
 
 import { Loader2, X } from "lucide-react";
 
-const WORD_COUNT_OPTIONS = [3000, 5000, 10000] as const;
+const WORD_COUNT_OPTIONS = [5000, 7000, 10000] as const;
 
 const LABELS: Record<(typeof WORD_COUNT_OPTIONS)[number], { title: string; sub: string }> = {
-  3000: { title: "3,000 words", sub: "~18-20 min narration · short, tight episode" },
-  5000: { title: "5,000 words", sub: "~30 min narration · standard episode" },
+  5000: { title: "5,000 words", sub: "~30 min narration · tight, fast-moving episode" },
+  7000: { title: "7,000 words", sub: "~42 min narration · deeper investigation" },
   10000: { title: "10,000 words", sub: "~60 min narration · extended, in-depth episode" },
 };
 

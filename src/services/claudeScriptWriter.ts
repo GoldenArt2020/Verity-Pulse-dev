@@ -153,6 +153,7 @@ async function loadContext(
       .from("angles")
       .select("title, core_question, why_it_works, research_focus, opening_hook")
       .eq("id", angleId)
+      .eq("case_id", caseId)
       .single(),
     supabase.from("cases").select("name, summary").eq("id", caseId).single(),
   ]);
