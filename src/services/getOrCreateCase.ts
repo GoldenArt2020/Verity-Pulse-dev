@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 export interface CaseStub {
   id: string;
@@ -19,22 +20,19 @@ export interface CaseStub {
 function isValidCaseName(name: string): boolean {
   const words = name.split(/\s+/).filter(Boolean);
   if (words.length >= 2) return true;
-  // Allow a single "word" only if it's a substantial descriptive phrase
-  // some other way (rare, but avoids false-rejecting edge cases) —
-  // otherwise a single bare token (a first name, an initial, etc.) is too
-  // vague to be a real case identifier.
   return words.length === 1 && words[0].length >= 15;
 }
 
 /**
- * Returns the existing Case row for this name if one exists (case-insensitive),
- * otherwise creates a minimal stub row and returns it.
- * Client-safe — no secrets involved, just an RLS-protected DB write.
+ * Shared core: validates the name, checks for an existing case
+ * case-insensitively, creates a stub if none exists. Takes an already-
+ * constructed Supabase client so the caller controls whether that's a
+ * browser client (user's own session/cookies) or a server client
+ * (request-scoped session) — this function itself doesn't know or care
+ * which, so the same dedup/validation logic can't drift between the two
+ * call paths.
  */
-export async function getOrCreateCase(name: string): Promise<CaseStub> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-    console.log("Current user in getOrCreateCase:", user);
+async function getOrCreateCaseCore(supabase: SupabaseClient, name: string): Promise<CaseStub> {
   const trimmedName = name.trim();
 
   if (!trimmedName) {
@@ -76,4 +74,25 @@ export async function getOrCreateCase(name: string): Promise<CaseStub> {
   }
 
   return created;
+}
+
+/**
+ * Client-side entry point — unchanged behavior from before, still uses
+ * the browser Supabase client internally. Existing callers keep working
+ * exactly as they did.
+ */
+export async function getOrCreateCase(name: string): Promise<CaseStub> {
+  const supabase = createBrowserClient();
+  return getOrCreateCaseCore(supabase, name);
+}
+
+/**
+ * Server-side entry point — takes an already-constructed server Supabase
+ * client (from `@/lib/supabase/server`'s `createClient()`, which is
+ * request-scoped and cookie-aware) rather than building its own. Use this
+ * from API routes; using the browser-client version there would run
+ * without the right session context.
+ */
+export async function getOrCreateCaseServer(supabase: SupabaseClient, name: string): Promise<CaseStub> {
+  return getOrCreateCaseCore(supabase, name);
 }

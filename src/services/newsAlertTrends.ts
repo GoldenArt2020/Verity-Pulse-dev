@@ -11,6 +11,16 @@ export interface AlertTrendSignal {
 const CURRENTLY_TRENDING_FLOOR = 65;
 const ABOUT_TO_TREND_FLOOR = 40;
 const RECENCY_WINDOW_DAYS = 7;
+// A case that broke in the last 48h hasn't had TIME to accumulate
+// search/YouTube momentum yet — that's not evidence it's unimportant,
+// it's just math (no outlet or creator can build coverage of something
+// that happened 6 hours ago). Since "about-to-trend" exists specifically
+// to catch cases BEFORE they build buzz, requiring pre-existing momentum
+// to qualify defeats its own purpose. This freshness path lets a
+// genuinely new case qualify on recency alone when the momentum score
+// hasn't caught up yet, rather than only ever catching cases that have
+// already started trending under a different name.
+const FRESHNESS_WINDOW_HOURS = 48;
 
 /**
  * Computes a combined search-momentum signal for a news-alert case title,
@@ -28,11 +38,19 @@ const RECENCY_WINDOW_DAYS = 7;
  * over-covered cases). A case can have low total YouTube coverage but high
  * momentum right now — that's exactly an "about-to-trend" case — or high
  * total coverage with fresh momentum right now, which is
- * "currently-trending". A case with neither returns trendStatus: null and
- * is filtered out of recommendations entirely by the caller, staying in
- * the /news-alerts manual review queue instead.
+ * "currently-trending". A case with neither, AND that isn't itself
+ * fresh-breaking news (see FRESHNESS_WINDOW_HOURS), returns
+ * trendStatus: null and is filtered out of recommendations entirely by
+ * the caller, staying in the /news-alerts manual review queue instead.
+ *
+ * @param publishedAt ISO timestamp of the underlying alert's original
+ *   publish/detection time, if known. Used only for the freshness
+ *   qualifying path below — omit to fall back to pure momentum scoring.
  */
-export async function computeAlertTrendSignal(title: string): Promise<AlertTrendSignal> {
+export async function computeAlertTrendSignal(
+  title: string,
+  publishedAt?: string | null
+): Promise<AlertTrendSignal> {
   const [googleSignal, youtubeSignal] = await Promise.all([
     computeGoogleSignal(title),
     computeYoutubeSignal(title),
@@ -45,6 +63,11 @@ export async function computeAlertTrendSignal(title: string): Promise<AlertTrend
     trendStatus = "currently-trending";
   } else if (combinedScore >= ABOUT_TO_TREND_FLOOR) {
     trendStatus = "about-to-trend";
+  } else if (publishedAt) {
+    const ageHours = (Date.now() - new Date(publishedAt).getTime()) / (1000 * 60 * 60);
+    if (ageHours >= 0 && ageHours <= FRESHNESS_WINDOW_HOURS) {
+      trendStatus = "about-to-trend";
+    }
   }
 
   return { combinedScore, trendStatus, googleSignal, youtubeSignal };

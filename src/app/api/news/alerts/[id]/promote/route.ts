@@ -1,6 +1,7 @@
 // src/app/api/news/alerts/[id]/promote/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateCaseServer } from "@/services/getOrCreateCase";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,18 +21,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This alert has already been promoted" }, { status: 400 });
   }
 
-  // Leave summary null so the case follows the same "stub" research flow the
-  // angle-builder page already handles for any freshly created case.
-  const { data: newCase, error: caseError } = await supabase
-    .from("cases")
-    .insert({ name: alert.case_name || alert.headline, summary: null })
-    .select("id")
-    .single();
-
-  if (caseError || !newCase) {
+  // Now reuses the same name-validation + case-insensitive dedup logic
+  // the rest of the app relies on, instead of a raw insert that could
+  // create duplicate cases for the same story under a slightly different
+  // headline, or create an unresearchable case from a too-vague name.
+  let newCase;
+  try {
+    newCase = await getOrCreateCaseServer(supabase, alert.case_name || alert.headline);
+  } catch (err) {
     return NextResponse.json(
-      { error: `Failed to create case: ${caseError?.message}` },
-      { status: 500 }
+      { error: err instanceof Error ? err.message : "Failed to create case" },
+      { status: 400 }
     );
   }
 

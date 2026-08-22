@@ -731,7 +731,7 @@ async function fetchNewsAlertRecommendations(
   const withSignal = await Promise.all(
     alertRows.map(async (row) => {
       const title = row.case_name || row.headline;
-      const signal = await computeAlertTrendSignal(title);
+      const signal = await computeAlertTrendSignal(title, row.published_at ?? row.created_at);
       return { row, title, signal };
     })
   );
