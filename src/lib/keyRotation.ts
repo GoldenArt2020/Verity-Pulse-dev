@@ -80,7 +80,12 @@ function pickKey(provider: ProviderName, keys: string[]): { key: string; waitMs:
       soonestKey = k;
     }
   }
-  const waitMs = Math.max(0, soonestFreeAt - Date.now()) + 250;
+  // Cap the wait hard — on a route with its own tight time budget (case
+  // research, script generation), a rate-limit wait must never be allowed
+  // to consume the whole request by itself. Better to risk a real 429
+  // (which the retry loop above already handles) than guarantee a timeout.
+  const MAX_PROACTIVE_WAIT_MS = 4000;
+  const waitMs = Math.min(MAX_PROACTIVE_WAIT_MS, Math.max(0, soonestFreeAt - Date.now()) + 250);
   return { key: soonestKey, waitMs };
 }
 
