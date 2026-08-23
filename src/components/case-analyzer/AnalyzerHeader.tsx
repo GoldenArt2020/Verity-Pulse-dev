@@ -71,6 +71,7 @@ export function AnalyzerHeader({ caseId }: { caseId?: string }) {
         <div className="text-center">
           <p className="text-[11px] text-slate-500">Competition Score</p>
           <p className="mt-1 text-xl font-semibold text-white">{caseData.competition_score ?? "—"} <span className="text-[11px] font-normal text-slate-500">/100</span></p>
+          <p className="mt-0.5 text-[10px] text-slate-600">Lower is better</p>
         </div>
 
         <div className="text-center">

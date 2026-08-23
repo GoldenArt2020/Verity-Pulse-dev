@@ -254,7 +254,7 @@ export function AngleBuilderHeader({
           <div className="text-center">
             <p className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
               Competition Score
-              <InfoTooltip text="0–100 estimate of how saturated this case is, adjusted for the connected channel's niche. If most existing coverage sits outside this channel's proven case-type strength, the effective competition for this channel is shown as lower than the raw global number." />
+              <InfoTooltip text="0–100 estimate of how saturated this case is. Lower is better — 0 means no existing creator coverage found, 100 means heavily covered already. Adjusted for the connected channel's niche: if most existing coverage sits outside this channel's proven case-type strength, the effective competition for this channel is shown as lower than the raw global number." />
             </p>
             <p className="mt-1 text-xl font-semibold text-white">
               {scores.competitionScore} <span className="text-[11px] font-normal text-slate-500">/100</span>

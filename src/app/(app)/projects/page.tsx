@@ -161,7 +161,7 @@ export default function ProjectsListPage() {
                   )}
                   <div className="mt-4 flex gap-4 text-xs text-slate-500">
                     {p.cases?.opportunity_score != null && <span>Opportunity: {p.cases.opportunity_score}</span>}
-                    {p.cases?.competition_score != null && <span>Competition: {p.cases.competition_score}</span>}
+                    {p.cases?.competition_score != null && <span>Competition: {p.cases.competition_score} (lower is better)</span>}
                   </div>
                 </Link>
 

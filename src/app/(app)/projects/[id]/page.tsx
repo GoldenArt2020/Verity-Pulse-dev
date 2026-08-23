@@ -183,6 +183,7 @@ export default function ProjectDetailPage() {
           <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
             <p className="text-xs text-slate-500">Competition</p>
             <p className="mt-1 text-xl font-semibold text-white">{c.competition_score}</p>
+            <p className="mt-0.5 text-[10px] text-slate-600">Lower is better</p>
           </div>
         )}
       </div>
