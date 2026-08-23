@@ -15,13 +15,17 @@ async function callAgentRouter(model: string, prompt: string, options?: AIGenera
         max_tokens: options?.maxTokens ?? 1024,
       }),
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      const error = new Error(`AgentRouter request failed: ${res.status} ${text.slice(0, 300)}`) as Error & { status?: number };
+    const bodyText = await res.text();
+
+    if (!res.ok || /^\s*<!doctype|^\s*<html/i.test(bodyText)) {
+      const error = new Error(
+        `AgentRouter blocked or rejected this request (status ${res.status}) — looks like a WAF/challenge page, not the API: ${bodyText.slice(0, 200)}`
+      ) as Error & { status?: number };
       error.status = res.status;
       throw error;
     }
-    const data = await res.json();
+
+    const data = JSON.parse(bodyText);
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
       throw new Error("AgentRouter response missing message content.");
