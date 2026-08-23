@@ -3,6 +3,7 @@ import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 
 const GENRE_CACHE_DAYS = 7;
+const COVERAGE_CACHE_DAYS = 7;
 
 // Major news outlets whose YouTube uploads shouldn't count as "creator
 // competition" — a case getting picked up by CNN or Fox News is media
@@ -34,7 +35,9 @@ const NEWS_CHANNEL_BLOCKLIST = [
   "inside edition",
   "entertainment tonight",
   "tmz",
-  "people",
+  "people.com",
+  "people magazine",
+  "peopletv",
   "eyewitness news",
   "action news",
   "news 12",
@@ -157,15 +160,28 @@ export async function getOrFetchYouTubeCoverage(
     throw new Error(`Failed to load case: ${fetchError.message}`);
   }
 
-  if (caseRow?.youtube_coverage_fetched_at && caseRow.youtube_coverage_videos) {
+  const isFresh =
+    caseRow?.youtube_coverage_fetched_at &&
+    (Date.now() - new Date(caseRow.youtube_coverage_fetched_at).getTime()) / (1000 * 60 * 60 * 24) < COVERAGE_CACHE_DAYS;
+
+  if (isFresh && caseRow.youtube_coverage_videos) {
     return caseRow.youtube_coverage_videos as YouTubeVideoDetail[];
   }
 
   if (!youtubeProvider.isConfigured()) {
-    return [];
+    return (caseRow?.youtube_coverage_videos as YouTubeVideoDetail[]) ?? [];
   }
 
-  const rawVideos = await youtubeProvider.searchCaseVideos(caseName, 50);
+  const [plainResults, qualifiedResults] = await Promise.all([
+    youtubeProvider.searchCaseVideos(caseName, 50).catch(() => []),
+    youtubeProvider.searchCaseVideos(`${caseName} true crime case`, 50).catch(() => []),
+  ]);
+  const seen = new Set<string>();
+  const rawVideos = [...plainResults, ...qualifiedResults].filter((v) => {
+    if (seen.has(v.videoId)) return false;
+    seen.add(v.videoId);
+    return true;
+  });
   const creatorVideos = filterToCreatorVideos(rawVideos);
   const competitionScore = computeCompetitionScore(creatorVideos);
 
