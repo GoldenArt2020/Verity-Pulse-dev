@@ -347,7 +347,10 @@ export async function POST(req: NextRequest) {
   }
 
   const [youtubeVideos, genreVideos] = await Promise.all([
-    getOrFetchYouTubeCoverage(caseId, caseRow.name).catch(() => []),
+    // Force-refreshed on every angle generation rather than relying on the
+    // 7-day cache — this app is built around trending/breaking cases, and
+    // coverage can shift within hours, not days, when a case is hot.
+    getOrFetchYouTubeCoverage(caseId, caseRow.name, { forceRefresh: true }).catch(() => []),
     getOrFetchGenreBenchmarkTitles(caseRow.category ?? null).catch(() => []),
   ]);
 

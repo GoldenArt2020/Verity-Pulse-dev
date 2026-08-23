@@ -146,7 +146,8 @@ export async function getOrFetchGenreBenchmarkTitles(category: string | null): P
  */
 export async function getOrFetchYouTubeCoverage(
   caseId: string,
-  caseName: string
+  caseName: string,
+  options?: { forceRefresh?: boolean }
 ): Promise<YouTubeVideoDetail[]> {
   const supabase = await createClient();
 
@@ -164,7 +165,7 @@ export async function getOrFetchYouTubeCoverage(
     caseRow?.youtube_coverage_fetched_at &&
     (Date.now() - new Date(caseRow.youtube_coverage_fetched_at).getTime()) / (1000 * 60 * 60 * 24) < COVERAGE_CACHE_DAYS;
 
-  if (isFresh && caseRow.youtube_coverage_videos) {
+  if (!options?.forceRefresh && isFresh && caseRow.youtube_coverage_videos) {
     return caseRow.youtube_coverage_videos as YouTubeVideoDetail[];
   }
 
