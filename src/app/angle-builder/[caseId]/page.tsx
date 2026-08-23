@@ -86,7 +86,17 @@ export default function AngleBuilderPage({ params }: { params: Promise<{ caseId:
       body: JSON.stringify({ caseId: caseData.id, caseName: caseData.name }),
     })
       .then(async (res) => {
-        const data = await res.json();
+        const bodyText = await res.text();
+        let data: { error?: string } = {};
+        try {
+          data = JSON.parse(bodyText);
+        } catch {
+          throw new Error(
+            res.status === 504
+              ? "Research timed out — the case may need retrying, or is unusually slow to research."
+              : `Research failed (status ${res.status})`
+          );
+        }
         if (!res.ok) throw new Error(data.error ?? "Research failed");
         await refetch();
         setResearchDone(true);

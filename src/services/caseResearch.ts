@@ -42,10 +42,8 @@ interface ResearchAnalysis {
 function buildResearchQueries(caseName: string): string[] {
   return [
     caseName,
-    `${caseName} victims injured`,
-    `${caseName} timeline what happened`,
-    `${caseName} charges court hearing trial`,
-    `${caseName} latest news update`,
+    `${caseName} victims timeline what happened`,
+    `${caseName} charges court hearing trial latest news`,
   ];
 }
 
@@ -164,7 +162,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
 
   const raw = await groqProvider.generateText(buildAnalysisPrompt(caseName, sourcesText), {
     temperature: 0.3,
-    maxTokens: 4000,
+    maxTokens: 3000,
   });
 
   const analysis = parseAnalysis(raw);
