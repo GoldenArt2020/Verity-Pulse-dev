@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const { error } = await supabase
       .from("channels")
-      .update({ base_region: baseRegion || null })
+      .update({ base_region: baseRegion || null, region_locked: !!baseRegion })
       .eq("id", id)
       .eq("user_id", user.id);
 

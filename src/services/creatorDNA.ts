@@ -291,9 +291,10 @@ export function applyBaseRegionOverride(dna: ChannelDNA, baseRegion: string | nu
   return {
     ...dna,
     regionDistribution: {
-      ...dna.regionDistribution,
+      distribution: { [baseRegion]: 100 },
       primaryRegion: baseRegion,
       isMultiRegion: false,
+      source: "user-declared",
     },
   };
 }
@@ -392,6 +393,8 @@ export async function getOrBuildChannelDNA(
     generatedAt: new Date().toISOString(),
   };
 
+  const overriddenDna = applyBaseRegionOverride(dna, effectiveBaseRegion);
+
   const { error: updateError } = await supabase
     .from("channels")
     .update({
@@ -399,14 +402,14 @@ export async function getOrBuildChannelDNA(
       subscriber_count: channelSummary.subscriberCount,
       video_count: channelSummary.videoCount,
       view_count: channelSummary.viewCount,
-      channel_dna: dna,
-      region_distribution: regionDistribution,
-      audience_dna: dna.audienceDNA,
-      country: regionDistribution.primaryRegion,
+      channel_dna: overriddenDna,
+      region_distribution: overriddenDna.regionDistribution,
+      audience_dna: overriddenDna.audienceDNA,
+      country: overriddenDna.regionDistribution.primaryRegion,
       last_analyzed: new Date().toISOString(),
     })
     .eq("id", channelDbId);
   if (updateError) throw new Error(`Failed to update channel: ${updateError.message}`);
 
-  return applyBaseRegionOverride(dna, effectiveBaseRegion);
+  return overriddenDna;
 }

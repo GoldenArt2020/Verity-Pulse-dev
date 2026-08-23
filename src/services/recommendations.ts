@@ -4,7 +4,8 @@ import { groqProvider } from "@/providers/ai/groqProvider";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
-import { scoreCandidate, isBlockedByRegion, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
+import { scoreCandidate, RECOMMENDATION_THRESHOLD, type ScoredCandidate, type ScoreBreakdown } from "@/services/recommendationScoring";
+import { resolveChannelGeographicProfile, isGeographicallyEligible, describeGeographicConstraint } from "@/lib/geography";
 import { computeAlertTrendSignal } from "@/services/newsAlertTrends";
 import { CASE_TYPE_TAG_LIST_TEXT } from "@/lib/caseTypeTaxonomy";
 import { deriveChannelSubniche } from "@/lib/channelSubniche";
@@ -92,6 +93,7 @@ function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
     return "No Creator DNA profile available yet for this channel — score creatorDnaMatch and audienceInterest conservatively at 50.";
   }
   const a = dna.audienceDNA;
+  const geoConstraint = describeGeographicConstraint(resolveChannelGeographicProfile(dna));
   return `CREATOR DNA PROFILE:
 - Preferred case types (ranked): ${a.caseTypePreferences.join(", ") || "unknown"}
 - Victim demographic pattern: ethnicity=${a.victimDemographicPreferences.ethnicity ?? "no clear pattern"}, age range=${a.victimDemographicPreferences.ageRange ?? "no clear pattern"}
@@ -101,7 +103,9 @@ function buildAudienceDnaBlock(dna?: ChannelDNA | null): string {
     dna.channelStyle
       ? `\n- Storytelling style: ${dna.channelStyle.storytellingStyle}, tone: ${dna.channelStyle.emotionalTone}`
       : ""
-  }`;
+  }
+
+${geoConstraint}`;
 }
 
 function normalizeTitle(title: string): string {
@@ -499,11 +503,12 @@ function scoreAndFilter(
   assignments: Map<string, ClaimedAssignment>,
   currentSubniche: string
 ): Recommendation[] {
+  const geoProfile = dna ? resolveChannelGeographicProfile(dna) : null;
   const filtered = candidates.filter(
     (c) =>
       !excludedTitles.has(normalizeTitle(c.title)) &&
       !isBlockedByAssignment(c.title, assignments, currentSubniche) &&
-      (!dna || !isBlockedByRegion(c.region, dna))
+      (!geoProfile || isGeographicallyEligible(c.region, geoProfile))
   );
 
   if (!dna) {

@@ -1,5 +1,6 @@
 import type { ChannelDNA, LensPerformance } from "@/services/creatorDNA";
 import { normalizeCaseTypeTag } from "@/lib/caseTypeTaxonomy";
+import { normalizeCountry } from "@/lib/geography";
 
 const LENS_IDS = [
   "victim-centered",
@@ -121,19 +122,17 @@ function demographicMatchScore(
  * region) are unaffected.
  */
 export function isBlockedByRegion(candidateRegion: string | null, dna: ChannelDNA): boolean {
-  const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
+  const primaryRegion = normalizeCountry(dna.regionDistribution?.primaryRegion ?? null);
   if (!primaryRegion) return false;
-  if (!candidateRegion) return true;
-  return candidateRegion.toLowerCase() !== primaryRegion.toLowerCase();
+  const normalizedCandidate = normalizeCountry(candidateRegion);
+  if (!normalizedCandidate) return true;
+  return normalizedCandidate !== primaryRegion;
 }
 
 /**
- * NOTE: by the time this runs, every candidate has already passed the
- * hard geographic eligibility gate in src/lib/geography.ts — an
- * out-of-country case never reaches this function at all. This score's
- * only remaining job is to rank eligible countries against each other
- * for a multi-country channel (e.g. prioritize the primary country over
- * a secondary one), NOT to gate eligibility.
+ * NOTE: geography.ts's isGeographicallyEligible exists but is not
+ * currently wired into the recommendation pipeline — isBlockedByRegion
+ * above is the actual hard gate in use.
  */
 function regionalMatchScore(candidateRegion: string | null, dna: ChannelDNA): number {
   const primaryRegion = dna.regionDistribution?.primaryRegion ?? null;
