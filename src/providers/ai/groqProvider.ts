@@ -9,6 +9,14 @@ const MAX_RATE_LIMIT_RETRIES = 3;
 // than this for a single retry, or a rate-limit backoff could itself
 // cause the whole request to time out before Groq is even tried again.
 const MAX_BACKOFF_MS = 8000;
+// Previously there was no cap on the fetch itself — a genuine hang (not a
+// 429, not an error, just no response ever arriving) would ride out the
+// full 60s Hobby ceiling with no retry logic ever triggering, since
+// nothing here ever actually fails in that case. Worse, since only
+// MAX_CONCURRENT_REQUESTS slots exist, a hung call also never releases
+// its slot, risking stalling other Groq calls in the same warm instance.
+// This bounds a single attempt so a hang fails fast and predictably.
+const GROQ_TIMEOUT_MS = 45_000;
 
 // A single logical operation (e.g. generating recommendations) can fire
 // several independent Groq calls in quick succession via Promise.all.
@@ -77,20 +85,38 @@ async function callGroqOnce(prompt: string, options?: AIGenerateOptions): Promis
     await acquireSlot();
     try {
       for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
-        const res = await fetch(GROQ_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: GROQ_MODEL,
-            messages: [{ role: "user", content: prompt }],
-            temperature: options?.temperature ?? 0.4,
-            max_tokens: options?.maxTokens ?? 1024,
-            reasoning_effort: "low",
-          }),
-        });
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS);
+
+        let res: Response;
+        try {
+          res = await fetch(GROQ_API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: GROQ_MODEL,
+              messages: [{ role: "user", content: prompt }],
+              temperature: options?.temperature ?? 0.4,
+              max_tokens: options?.maxTokens ?? 1024,
+              reasoning_effort: "low",
+            }),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            const error = new Error(`Groq request timed out after ${GROQ_TIMEOUT_MS / 1000}s`) as Error & {
+              status?: number;
+            };
+            error.status = 408;
+            throw error;
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
 
         if (res.ok) {
           const data = await res.json();
