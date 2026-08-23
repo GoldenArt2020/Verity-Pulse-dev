@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { aiRouter } from "@/providers/ai/router";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
 import type { YouTubeVideoDetail } from "@/providers/youtube/types";
 import type { ChannelDNA } from "@/services/creatorDNA";
@@ -621,7 +621,7 @@ async function fetchPersonalizedRecommendations(
   const searchContext = formatSearchContext(searchResults);
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildPersonalizedPrompt(topics, searchContext, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 4000 }
     );
@@ -655,7 +655,7 @@ async function fetchTrendRecommendations(
   const searchContext = formatSearchContext(usableResults);
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildTrendPrompt(searchContext, label, dna, excludedTitles),
       { temperature: 0.4, maxTokens: 4000 }
     );
@@ -749,7 +749,7 @@ External search-signal score: ${w.signal.combinedScore}/100 (Google + YouTube co
   }));
 
   const { candidates } = await withRetry(async () => {
-    const raw = await aiRouter.generateText(
+    const raw = await groqProvider.generateText(
       buildNewsAlertPrompt(alertContext, dna, excludedTitles),
       { temperature: 0.3, maxTokens: 4000 }
     );
@@ -814,8 +814,8 @@ export async function generateRecommendations(
   videos: YouTubeVideoDetail[],
   channelDNA?: ChannelDNA | null
 ): Promise<Recommendation[]> {
-  if (!aiRouter.isConfigured()) {
-    throw new Error("No AI provider is configured — cannot generate recommendations");
+  if (!groqProvider.isConfigured()) {
+    throw new Error("Groq is not configured — cannot generate recommendations");
   }
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot generate recommendations");
@@ -825,7 +825,7 @@ export async function generateRecommendations(
 
   if (videos.length > 0) {
     const parsed = await withRetry(async () => {
-      const topicRaw = await aiRouter.generateText(buildTopicExtractionPrompt(videos), {
+      const topicRaw = await groqProvider.generateText(buildTopicExtractionPrompt(videos), {
         temperature: 0.2,
         maxTokens: 1000,
       });
