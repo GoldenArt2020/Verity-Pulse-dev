@@ -1,12 +1,7 @@
-type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE" | "GROUTER";
+type ProviderName = "GROQ" | "TAVILY" | "YOUTUBE" | "GEMINI" | "CLAUDE" | "GROUTER" | "AGENTROUTER" | "OPENAI";
 
 const cursors: Record<ProviderName, number> = {
-  GROQ: 0,
-  TAVILY: 0,
-  YOUTUBE: 0,
-  GEMINI: 0,
-  CLAUDE: 0,
-  GROUTER: 0,
+  GROQ: 0, TAVILY: 0, YOUTUBE: 0, GEMINI: 0, CLAUDE: 0, GROUTER: 0, AGENTROUTER: 0, OPENAI: 0,
 };
 
 function loadKeys(provider: ProviderName): string[] {

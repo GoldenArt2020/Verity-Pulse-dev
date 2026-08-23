@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { scriptRouter } from "@/providers/ai/router";
 import type { ChannelDNA } from "@/services/creatorDNA";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
@@ -357,10 +357,10 @@ export async function createScriptJob(
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this script");
   }
-   if (!groqProvider.isConfigured()) {
+   if (!scriptRouter.isConfigured()) {
     throw new Error("No AI provider is configured — cannot write this script");
   }
-  if (!groqProvider.isConfigured()) {
+  if (!scriptRouter.isConfigured()) {
     throw new Error("Claude is not configured — cannot write this script");
   }
 
@@ -426,7 +426,7 @@ export async function createScriptJob(
   const craftSourcesText = craftSearchResults.map((r, i) => `${i + 1}. [${r.title}]\n${r.snippet}`).join("\n\n");
 
   const researchRaw = await withRetry(() =>
-    groqProvider.generateText(buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText), {
+    scriptRouter.generateText(buildResearchPrompt(caseRow, angle, caseSourcesText, craftSourcesText), {
       temperature: 0.3,
       maxTokens: 2200,
     })
@@ -435,7 +435,7 @@ export async function createScriptJob(
 
   const sectionCount = sectionCountFor(wordCount);
   const outlineRaw = await withRetry(() =>
-    groqProvider.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
+    scriptRouter.generateText(buildOutlinePrompt(caseRow, angle, brief, sectionCount), {
       temperature: 0.4,
       maxTokens: 700,
     })
@@ -532,7 +532,7 @@ export async function advanceScriptJob(
   try {
     const maxTokens = Math.min(6000, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
     const sectionRaw = await withRetry(() =>
-      groqProvider.generateText(
+      scriptRouter.generateText(
         buildSectionPrompt(caseRow, angle, job.brief, job.channel_dna, job.outline, plan, job.previous_tail),
         { temperature: 0.65, maxTokens }
       )
@@ -542,7 +542,7 @@ export async function advanceScriptJob(
     if (!endsCleanly(sectionText)) {
       try {
         const tail = sectionText.split(/\s+/).slice(-60).join(" ");
-        const continuation = await groqProvider.generateText(buildContinuationPrompt(caseRow, tail), {
+        const continuation = await scriptRouter.generateText(buildContinuationPrompt(caseRow, tail), {
           temperature: 0.65,
           maxTokens: 200,
         });
@@ -642,7 +642,7 @@ export async function finalizeScriptJob(
 
   let seo: ScriptSeoSummary | null = null;
   try {
-    const seoRaw = await groqProvider.generateText(buildSeoSummaryPrompt(caseRow, angle, cleanScript), {
+    const seoRaw = await scriptRouter.generateText(buildSeoSummaryPrompt(caseRow, angle, cleanScript), {
       temperature: 0.3,
       maxTokens: 400,
     });
