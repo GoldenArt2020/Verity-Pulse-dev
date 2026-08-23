@@ -5,6 +5,7 @@ import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
 import { runBackgroundResearch } from "@/services/backgroundResearch";
 import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
+import { after } from "next/server";
 
 interface VictimDemographics {
   ethnicity: string | null;
@@ -204,23 +205,27 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     console.error("Failed to save sources:", sourcesError.message);
   }
 
-  // Second pass: named victim/suspect background profiles, run
-  // automatically off the people just extracted above. Non-fatal — if this
-  // fails, the primary research above has already succeeded and saved, so
-  // we log and move on rather than failing the whole research step.
-  try {
-    await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
-  } catch (err) {
-    console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
-  }
+  // Second pass: named victim/suspect background profiles, and real
+  // YouTube coverage data. Both are genuinely optional enrichment — the
+  // primary research above has already saved successfully by this point —
+  // so neither should block the response. Previously these were awaited
+  // inline, and their combined latency (a search + AI call per named
+  // person, potentially several people, plus a YouTube search) could push
+  // the whole request past Vercel's hard 60s ceiling — which is exactly
+  // what showed up as a 504 / failed navigation. after() lets the
+  // response return as soon as the primary research is saved, while this
+  // enrichment still runs to completion in the background.
+  after(async () => {
+    try {
+      await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
+    } catch (err) {
+      console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
+    }
 
-  // Real YouTube coverage (channel-by-channel view data), run right after
-  // the main research so the Angle Builder header shows an actual
-  // data-driven score immediately rather than waiting until angles are
-  // generated. Non-fatal for the same reason as background research above.
-  try {
-    await getOrFetchYouTubeCoverage(caseId, caseName);
-  } catch (err) {
-    console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err);
-  }
+    try {
+      await getOrFetchYouTubeCoverage(caseId, caseName);
+    } catch (err) {
+      console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err);
+    }
+  });
 }
