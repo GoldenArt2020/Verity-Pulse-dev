@@ -216,16 +216,13 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
   // response return as soon as the primary research is saved, while this
   // enrichment still runs to completion in the background.
   after(async () => {
-    try {
-      await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
-    } catch (err) {
-      console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
-    }
-
-    try {
-      await getOrFetchYouTubeCoverage(caseId, caseName);
-    } catch (err) {
-      console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err);
-    }
+    await Promise.allSettled([
+      runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []).catch((err) =>
+        console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err)
+      ),
+      getOrFetchYouTubeCoverage(caseId, caseName).catch((err) =>
+        console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err)
+      ),
+    ]);
   });
 }
