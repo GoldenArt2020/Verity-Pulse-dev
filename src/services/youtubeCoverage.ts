@@ -202,3 +202,31 @@ export async function getOrFetchYouTubeCoverage(
 
   return creatorVideos;
 }
+
+/**
+ * Returns whatever coverage is currently cached, if anything — never
+ * makes a live YouTube call. Use this when a request can't afford to
+ * wait on a real search (e.g. mid-generation, on the clock against a
+ * serverless timeout) and a slightly-stale number is fine for right now.
+ */
+export async function getCachedYouTubeCoverage(caseId: string): Promise<YouTubeVideoDetail[]> {
+  const supabase = await createClient();
+  const { data: caseRow } = await supabase
+    .from("cases")
+    .select("youtube_coverage_videos")
+    .eq("id", caseId)
+    .maybeSingle();
+  return (caseRow?.youtube_coverage_videos as YouTubeVideoDetail[]) ?? [];
+}
+
+/**
+ * Fire-and-forget refresh — the caller does not wait on this, so a live
+ * YouTube search never adds to that request's response time. Use
+ * alongside getCachedYouTubeCoverage: serve the cached number instantly,
+ * then kick this off so the NEXT read is current.
+ */
+export function refreshYouTubeCoverageInBackground(caseId: string, caseName: string): void {
+  getOrFetchYouTubeCoverage(caseId, caseName, { forceRefresh: true }).catch((err) => {
+    console.error(`Background YouTube coverage refresh failed for case ${caseId}:`, err);
+  });
+}

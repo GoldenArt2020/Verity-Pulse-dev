@@ -1,8 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { getOrFetchYouTubeCoverage, getOrFetchGenreBenchmarkTitles } from "@/services/youtubeCoverage";
+import {
+  getCachedYouTubeCoverage,
+  refreshYouTubeCoverageInBackground,
+  getOrFetchGenreBenchmarkTitles,
+} from "@/services/youtubeCoverage";
 import { formatSourcesWithReliability } from "@/lib/sourceReliability";
 import { topByVelocity, formatVelocityBlock } from "@/lib/titleVelocity";
 import { normalizeTitleIdeas, type TitleIdea } from "@/lib/titleIdeas";
@@ -347,12 +351,18 @@ export async function POST(req: NextRequest) {
   }
 
   const [youtubeVideos, genreVideos] = await Promise.all([
-    // Force-refreshed on every angle generation rather than relying on the
-    // 7-day cache — this app is built around trending/breaking cases, and
-    // coverage can shift within hours, not days, when a case is hot.
-    getOrFetchYouTubeCoverage(caseId, caseRow.name, { forceRefresh: true }).catch(() => []),
+    // Instant cache read — never blocks on a live YouTube call. A forced
+    // live refresh here previously pushed some requests past Vercel's
+    // hard 60s ceiling and caused 504s, so freshness is now handled
+    // out-of-band below instead of on this request's critical path.
+    getCachedYouTubeCoverage(caseId).catch(() => []),
     getOrFetchGenreBenchmarkTitles(caseRow.category ?? null).catch(() => []),
   ]);
+
+  // Keep coverage current for the *next* generation without this one
+  // waiting on a live search. `after()` runs this once the response has
+  // already been sent, so it can't add to this request's response time.
+  after(() => refreshYouTubeCoverageInBackground(caseId, caseRow.name));
 
   const findings = tavilyProvider.isConfigured()
     ? await tavilyProvider.search(`${caseRow.name} case latest update trial news`, 6).catch(() => [])
