@@ -1,4 +1,5 @@
 import type { AIProvider, AIGenerateOptions, ProviderHealth } from "./types";
+import { groqProvider } from "./groqProvider";
 import { agentRouterFastProvider, agentRouterWriteProvider } from "./agentRouterProvider";
 import { claudeProvider } from "./claudeProvider";
 import { openaiProvider } from "./openaiProvider";
@@ -40,8 +41,12 @@ function makeRouter(providers: AIProvider[]) {
   };
 }
 
-// "Other calls" — angle generation, recommendations, research. AgentRouter first, paid OpenAI on failure.
-export const aiRouter = makeRouter([agentRouterFastProvider, openaiProvider]);
+// "Other calls" — angle generation, recommendations, research. Groq first
+// (fast, cheap, reliable), AgentRouter and OpenAI as fallback if Groq is
+// down or rate-limited.
+export const aiRouter = makeRouter([groqProvider, agentRouterFastProvider, openaiProvider]);
 
-// Script writing prose. AgentRouter first, paid Claude on failure.
+// Script writing prose. Unchanged priority — AgentRouter (Claude Opus)
+// first, Claude direct as fallback. scriptWriter.ts's section-writing step
+// calls claudeProvider directly anyway, bypassing this router.
 export const scriptRouter = makeRouter([agentRouterWriteProvider, claudeProvider]);
