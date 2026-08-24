@@ -11,6 +11,12 @@ jobs:
     steps:
       - name: Trigger poll endpoint
         run: |
-          curl -sf -X POST "${{ secrets.POLL_ENDPOINT_URL }}" \
+          http_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "${{ secrets.POLL_ENDPOINT_URL }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json"
+            -H "Content-Type: application/json")
+          echo "HTTP status: $http_code"
+          echo "Response body:"
+          cat response.txt
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            exit 1
+          fi
