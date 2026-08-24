@@ -17,6 +17,15 @@ const STRIP_WORDS = /\b(trial|case|murder|killing|homicide|investigation|update|
 // non-Groq work (DB round-trips).
 const CLASSIFY_CONCURRENCY = 5;
 
+// Hard ceiling on how many articles this run will classify, regardless of
+// how many candidates were found. Providers run concurrently now (see
+// route.ts), all funneling into groqProvider's own 2-request global cap —
+// without a ceiling here, a run that surfaces many candidates at once
+// could queue long enough to exceed the route's time budget. Articles
+// beyond this cap are simply skipped for this run; since polling repeats
+// every 5 minutes and dedup is URL-based, most will either get reprocessed
+// next run if the provider still returns them, or age out harmlessly.
+const MAX_ARTICLES_PER_RUN = 15;
 /**
  * Reduces a case name to its core identifying words so alerts about the
  * same case from different outlets/articles (which rarely use identical
@@ -173,13 +182,15 @@ export async function processIncomingArticles(
     .map((r) => (r.case_name ? normalizeCaseName(r.case_name) : null))
     .filter((n): n is string => !!n);
 
-  const toClassify = candidates.filter((a) => {
-    if (existingUrls.has(a.url)) {
-      skipReasons.duplicateUrl++;
-      return false;
-    }
-    return true;
-  });
+  const toClassify = candidates
+    .filter((a) => {
+      if (existingUrls.has(a.url)) {
+        skipReasons.duplicateUrl++;
+        return false;
+      }
+      return true;
+    })
+    .slice(0, MAX_ARTICLES_PER_RUN);
 
   async function processOne(article: NormalizedArticle): Promise<void> {
     let classification: ClassifyResult | null = null;
