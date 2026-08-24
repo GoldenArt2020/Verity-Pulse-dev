@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
-import { groqProvider } from "@/providers/ai/groqProvider";
+import { aiRouter } from "@/providers/ai/router";
+import { after } from "next/server";
 import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
 import { runBackgroundResearch } from "@/services/backgroundResearch";
 import { getOrFetchYouTubeCoverage } from "@/services/youtubeCoverage";
-import { after } from "next/server";
 
 interface VictimDemographics {
   ethnicity: string | null;
@@ -205,24 +205,27 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     console.error("Failed to save sources:", sourcesError.message);
   }
 
-  // Second pass: named victim/suspect background profiles, and real
-  // YouTube coverage data. Both are genuinely optional enrichment — the
-  // primary research above has already saved successfully by this point —
-  // so neither should block the response. Previously these were awaited
-  // inline, and their combined latency (a search + AI call per named
-  // person, potentially several people, plus a YouTube search) could push
-  // the whole request past Vercel's hard 60s ceiling — which is exactly
-  // what showed up as a 504 / failed navigation. after() lets the
-  // response return as soon as the primary research is saved, while this
-  // enrichment still runs to completion in the background.
+  // Second pass: named victim/suspect background profiles + real YouTube
+  // coverage data. Both are non-fatal and were previously awaited
+  // sequentially here, which stacked their latency onto this single HTTP
+  // request and risked the whole route exceeding Vercel's timeout even
+  // though the PRIMARY research (already saved above) is the only part the
+  // caller actually needs back quickly. next/server's after() runs this
+  // work AFTER the response is sent, while guaranteeing (unlike a bare
+  // unawaited promise) that Vercel keeps the function alive until it
+  // finishes — so the response returns fast, but the background work still
+  // reliably completes and saves.
   after(async () => {
-    await Promise.allSettled([
-      runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []).catch((err) =>
-        console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err)
-      ),
-      getOrFetchYouTubeCoverage(caseId, caseName).catch((err) =>
-        console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err)
-      ),
-    ]);
+    try {
+      await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
+    } catch (err) {
+      console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
+    }
+
+    try {
+      await getOrFetchYouTubeCoverage(caseId, caseName);
+    } catch (err) {
+      console.error("YouTube coverage fetch failed (non-fatal):", err instanceof Error ? err.message : err);
+    }
   });
 }
