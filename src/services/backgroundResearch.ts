@@ -24,14 +24,11 @@ interface CaseFactsPerson {
 const PROFILE_ROLE_PATTERN = /victim|suspect|accused|killer|defendant|perpetrator|convicted/i;
 
 function selectProfileCandidates(people: CaseFactsPerson[]): CaseFactsPerson[] {
-  return people.filter((p) => PROFILE_ROLE_PATTERN.test(p.role)).slice(0, 5);
+  return people.filter((p) => PROFILE_ROLE_PATTERN.test(p.role)).slice(0, 3);
 }
 
 async function gatherPersonSources(caseName: string, person: CaseFactsPerson): Promise<SearchResult[]> {
-  const queries = [
-    `"${person.name}" ${caseName} who was background`,
-    `"${person.name}" life before ${caseName}`,
-  ];
+  const queries = [`"${person.name}" ${caseName} who was background`];
   const batches = await Promise.all(
     queries.map((q) => tavilyProvider.search(q, 5).catch(() => [] as SearchResult[]))
   );
