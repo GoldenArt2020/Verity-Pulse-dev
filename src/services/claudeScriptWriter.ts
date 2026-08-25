@@ -263,7 +263,13 @@ export async function generateScript(
     body: JSON.stringify({
       model: MODEL,
       max_tokens: maxTokens,
-      temperature: 0.7,
+      // Deliberately omitted: `temperature` is rejected outright by
+      // some models (extended-thinking variants in particular manage
+      // sampling internally and error on a fixed value — this is what
+      // caused "'temperature' is deprecated for this model" 400s).
+      // Omitting it uses Claude's own default, which is already
+      // well-suited to narrative writing, and keeps this resilient to
+      // whatever model ANTHROPIC_SCRIPT_MODEL ends up pointing at.
       system: [
         // Cached, identical for every user/script — best caching payoff.
         { type: "text", text: RETENTION_ENGINE, cache_control: { type: "ephemeral" } },
