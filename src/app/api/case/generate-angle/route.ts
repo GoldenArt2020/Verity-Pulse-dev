@@ -321,6 +321,10 @@ async function generateAngleBatch(
 }
 
 export async function POST(req: NextRequest) {
+  const requestStartedAt = Date.now();
+  const HARD_BUDGET_MS = 55_000;
+  const MIN_MS_TO_ATTEMPT_FALLBACK = 15_000;
+
   const body = await req.json().catch(() => null);
   const caseId = body?.caseId as string | undefined;
 
@@ -404,9 +408,28 @@ export async function POST(req: NextRequest) {
       genreVideos,
       findings,
       channelDNA,
-      { angleRange: "between 6 and 8", titleIdeaRange: "8-10", maxTokens: 5500 }
+      { angleRange: "between 6 and 8", titleIdeaRange: "8-10", maxTokens: 4200 }
     );
   } catch (firstErr) {
+    const elapsedMs = Date.now() - requestStartedAt;
+    const remainingMs = HARD_BUDGET_MS - elapsedMs;
+
+    // A slow first attempt leaves too little time for a second provider call
+    // and the database writes that follow it.
+    if (remainingMs < MIN_MS_TO_ATTEMPT_FALLBACK) {
+      console.error(
+        `generate-angle: skipping fallback retry, only ${remainingMs}ms left in budget`,
+        firstErr
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Generation is taking longer than usual right now (likely a temporary AI provider slowdown). Please try again in a moment.",
+        },
+        { status: 503 }
+      );
+    }
+
     try {
       // Retry deliberately smaller and cheaper than the first attempt, not
       // identical — if the first attempt was slow enough to fail, retrying
@@ -422,7 +445,7 @@ export async function POST(req: NextRequest) {
         genreVideos,
         findings,
         channelDNA,
-        { angleRange: "exactly 4", titleIdeaRange: "4-5", maxTokens: 2600 }
+        { angleRange: "exactly 4", titleIdeaRange: "4-5", maxTokens: 2000 }
       );
     } catch (secondErr) {
       console.error("generate-angle: both attempts failed", firstErr, secondErr);
