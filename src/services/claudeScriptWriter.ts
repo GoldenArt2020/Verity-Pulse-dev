@@ -200,14 +200,43 @@ Do not write a preamble like "Here is the script." Do not include a section titl
 }
 
 function parseJsonObject<T>(raw: string): T {
-  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1) {
-    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
+  const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+
+  try {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+  } catch {
+    // fall through to repair
   }
-  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-  return JSON.parse(cleaned);
+
+  const firstBrace = cleaned.indexOf("{");
+  if (firstBrace === -1) {
+    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
+  }
+
+  let attempt = cleaned.slice(firstBrace);
+  const lastComma = attempt.lastIndexOf(",");
+  const lastCloseBracket = Math.max(attempt.lastIndexOf("]"), attempt.lastIndexOf("}"));
+  if (lastComma > lastCloseBracket) {
+    attempt = attempt.slice(0, lastComma);
+  }
+
+  const openBraces = (attempt.match(/\{/g) ?? []).length;
+  const closeBraces = (attempt.match(/\}/g) ?? []).length;
+  const openBrackets = (attempt.match(/\[/g) ?? []).length;
+  const closeBrackets = (attempt.match(/\]/g) ?? []).length;
+
+  attempt += "]".repeat(Math.max(0, openBrackets - closeBrackets));
+  attempt += "}".repeat(Math.max(0, openBraces - closeBraces));
+
+  try {
+    return JSON.parse(attempt);
+  } catch {
+    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
+  }
 }
 
 async function loadContext(
@@ -422,7 +451,7 @@ export async function startScriptJob(
   const { text: briefRaw, usage } = await callClaude(
     undefined,
     buildResearchPrompt(caseData, angle, sectionCount, researchText),
-    1200
+    2200
   );
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
   let outline = brief.outline;
