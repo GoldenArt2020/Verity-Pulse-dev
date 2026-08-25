@@ -587,10 +587,30 @@ export async function advanceScriptJob(
     return { status: done ? "ready" : "writing", sectionsCompleted: newIndex, totalSections: job.total_sections };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to write section";
+    const status = (err as { status?: number } | undefined)?.status;
+    const isTimeout = status === 408 || /timed out/i.test(message);
+
     await supabase
       .from("script_jobs")
       .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
       .eq("id", jobId);
+
+    // Lightweight tracking so we can see whether the current timeout
+    // margin (see CLAUDE_TIMEOUT_MS / sectionCountFor above) is actually
+    // working in production, without digging through Vercel logs by hand.
+    // Best-effort — a logging failure should never mask the real error.
+    supabase
+      .from("script_generation_failures")
+      .insert({
+        job_id: jobId,
+        user_id: userId,
+        section_index: job.current_section_index,
+        target_words: plan.targetWords,
+        error_message: message,
+        is_timeout: isTimeout,
+      })
+      .then(undefined, () => {});
+
     throw err instanceof Error ? err : new Error(message);
   }
 }
