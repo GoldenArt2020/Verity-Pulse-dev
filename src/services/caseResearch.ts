@@ -149,8 +149,8 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this case");
   }
-  if (!groqProvider.isConfigured()) {
-    throw new Error("Groq is not configured — cannot analyze this case");
+  if (!aiRouter.isConfigured()) {
+    throw new Error("No AI provider is configured — cannot analyze this case");
   }
 
   const results = await gatherSources(caseName);
@@ -161,7 +161,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
 
   const sourcesText = formatSourcesWithReliability(results, 800);
 
-  const raw = await groqProvider.generateText(buildAnalysisPrompt(caseName, sourcesText), {
+  const raw = await aiRouter.generateText(buildAnalysisPrompt(caseName, sourcesText), {
     temperature: 0.3,
     maxTokens: 3000,
   });
