@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apitubeProvider } from "@/providers/news/apitubeProvider";
 import { newsdataProvider } from "@/providers/news/newsdataProvider";
-import { guardianProvider } from "@/providers/news/guardianProvider";
 import { currentsProvider } from "@/providers/news/currentsProvider";
 import { googleNewsRssProvider } from "@/providers/news/googleNewsRssProvider";
 import { processIncomingArticles } from "@/services/newsAlerts";
 import type { NewsProvider } from "@/providers/news/types";
 
 // Without this, Vercel falls back to a short default timeout for this
-// route. Five providers, each potentially doing article-processing work,
+// route. Four providers, each potentially doing article-processing work,
 // can add up past that default even when running in parallel below.
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -20,19 +19,17 @@ export const dynamic = "force-dynamic";
 const POLL_INTERVALS_MINUTES: Record<string, number> = {
   apitube: 5,
   newsdata: 24 * 60,
-  guardian: 15,
   currents: 60,
   // No API key/quota to protect here, but the underlying content skews
   // several days stale (median ~6.6 days per recent sampling), so there's
   // no real benefit to polling more often than this — it exists to catch
-  // smaller stories the other four sources miss, not to be fast.
+  // smaller stories the other three sources miss, not to be fast.
   "google-news-rss": 4 * 60,
 };
 
 const PROVIDERS: NewsProvider[] = [
   apitubeProvider,
   newsdataProvider,
-  guardianProvider,
   currentsProvider,
   googleNewsRssProvider,
 ];
