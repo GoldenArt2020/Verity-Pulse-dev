@@ -7,20 +7,9 @@ import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
 import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
-import type { ScriptSeoSummary } from "@/services/scriptWriter";
 import type { BackgroundProfile } from "@/hooks/useCase";
+import { useScriptJob } from "@/hooks/useScriptJob";
 import { VideoSourcesSection } from "@/components/angle-builder/VideoSourcesSection";
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Request to ${url} failed`);
-  return data as T;
-}
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
@@ -46,48 +35,30 @@ export function SelectedAnglePanel({
   backgroundProfiles: BackgroundProfile[];
 }) {
   const router = useRouter();
-  const [writing, setWriting] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
-    null
-  );
   const [openingProject, setOpeningProject] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null);
 
-  async function handleWriteScript(wordCount: ScriptWordCount) {
+  const scriptJob = useScriptJob({
+    angleId: angle?.id ?? null,
+    caseId,
+    hasExistingScript: !!angle?.script,
+    onComplete: (angleId, script, wordCount) => onScriptGenerated(angleId, script, wordCount, null),
+  });
+
+  const preview = scriptJob.preview;
+
+  function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
-    setWriting(true);
-    setWriteError(null);
     setDialogOpen(false);
-    setProgress("Writing your script — this can take a minute or two...");
-    try {
-      const idempotencyKey = crypto.randomUUID();
-      const data = await postJson<{ script: string }>("/api/scripts/generate", {
-        angleId: angle.id,
-        caseId,
-        wordCount,
-        idempotencyKey,
-      });
-
-      onScriptGenerated(angle.id, data.script, wordCount, null);
-      setPreview({ script: data.script, wordCount, seo: null });
-    } catch (err) {
-      setWriteError(err instanceof Error ? err.message : "Failed to generate script");
-    } finally {
-      setWriting(false);
-      setProgress(null);
-    }
+    setWriteError(null);
+    scriptJob.start(angle.id, wordCount);
   }
 
   function handleReopenScript() {
     if (!angle?.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
-    setPreview({
-      script: angle.script,
-      wordCount,
-      seo: angle.seo ? { description: angle.seo.description ?? "", keywords: angle.seo.tags ?? [] } : null,
-    });
+    scriptJob.openPreview({ script: angle.script, wordCount });
   }
 
   async function handleOpenInProject() {
@@ -102,7 +73,7 @@ export function SelectedAnglePanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to open project");
-      setPreview(null);
+      scriptJob.closePreview();
       router.push(`/projects/${data.id}?angle=${angle.id}`);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to open project");
@@ -269,7 +240,9 @@ export function SelectedAnglePanel({
           )}
 
           <div className="mt-5">
-            {writeError && !preview && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
+            {(writeError || scriptJob.error) && !preview && (
+              <p className="mb-2 text-xs text-rose-400">{writeError ?? scriptJob.error}</p>
+            )}
             {angle.script ? (
               <button
                 onClick={handleReopenScript}
@@ -280,11 +253,15 @@ export function SelectedAnglePanel({
             ) : (
               <button
                 onClick={() => setDialogOpen(true)}
-                disabled={writing}
+                disabled={scriptJob.writing}
                 className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
               >
-                {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {writing ? (progress ?? "Writing...") : "Write Script"}
+                {scriptJob.writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {scriptJob.writing
+                  ? scriptJob.progress
+                    ? `Writing section ${scriptJob.progress.sectionsCompleted}/${scriptJob.progress.totalSections || "?"}...`
+                    : "Starting..."
+                  : "Write Script"}
               </button>
             )}
             <VideoSourcesSection caseId={caseId} caseName={angle.title.split(":")[0]} />
@@ -296,27 +273,26 @@ export function SelectedAnglePanel({
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onSelect={handleWriteScript}
-        busy={writing}
+        busy={scriptJob.writing}
       />
-      
+
       {preview && (
         <ScriptPreviewModal
           script={preview.script}
           wordCount={preview.wordCount}
-          seo={preview.seo}
+          seo={null}
           primaryLabel="Open in Project"
           primaryLoading={openingProject}
           primaryError={writeError}
           onPrimaryAction={handleOpenInProject}
           onRewrite={() => setDialogOpen(true)}
-          rewriting={writing}
+          rewriting={scriptJob.writing}
           onClose={() => {
-            setPreview(null);
+            scriptJob.closePreview();
             setWriteError(null);
           }}
         />
       )}
     </div>
   );
-  
 }

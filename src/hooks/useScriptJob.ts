@@ -3,11 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 
-export interface ScriptSeoSummary {
-  keywords: string[];
-  description: string;
-}
-
 export interface ScriptJobProgress {
   sectionsCompleted: number;
   totalSections: number;
@@ -16,30 +11,22 @@ export interface ScriptJobProgress {
 export interface ScriptJobPreview {
   script: string;
   wordCount: number;
-  seo: ScriptSeoSummary | null;
 }
 
 interface UseScriptJobOptions {
-  /** The angle currently selected/shown. Pass null when nothing is selected. */
   angleId: string | null;
   caseId: string;
-  /** Skip the auto-resume check for angles that already have a saved script. */
   hasExistingScript: boolean;
-  onComplete: (angleId: string, script: string, wordCount: number, seo: ScriptSeoSummary | null) => void;
+  onComplete: (angleId: string, script: string, wordCount: number) => void;
 }
 
 /**
- * Drives the full start -> section(...) -> finish job loop for whichever
- * angle is currently selected, one HTTP request at a time so nothing ever
- * risks a serverless timeout regardless of total script length.
- *
- * Auto-resume: the moment an angle without a finished script is selected,
- * this checks /api/generate-script/active for an unfinished job and, if
- * one exists, silently continues it from wherever it left off — no button,
- * no user action. If the person switches to a different angle mid-job, the
- * loop simply pauses (stops issuing further requests) rather than racing
- * in the background; the job itself is safe on the server and picks back
- * up automatically the next time that angle is selected.
+ * Drives start -> section(...) -> finish for the new entitlements-backed
+ * script pipeline (/api/scripts/*), one HTTP request at a time so no
+ * single request risks a serverless timeout regardless of script length.
+ * Note: the new writer (claudeScriptWriter.ts) does not produce an SEO
+ * summary — that field is gone from this hook entirely, unlike the old
+ * Groq-based flow.
  */
 export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }: UseScriptJobOptions) {
   const [checking, setChecking] = useState(false);
@@ -47,12 +34,7 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScriptJobPreview | null>(null);
 
-  // Always mirrors the currently selected angle — used inside the async
-  // loop to detect "the user navigated away, pause" without needing to
-  // cancel an in-flight fetch.
   const selectedAngleRef = useRef<string | null>(angleId);
-  // Which angle's job is actively running (guards against starting a
-  // second resume-loop for a job that's already being driven).
   const runningAngleRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -62,24 +44,24 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
   const runLoop = useCallback(
     async (jobId: string, forAngleId: string) => {
       try {
-        let done = false;
-        while (!done) {
+        let status: "writing" | "ready" | "complete" | "failed" = "writing";
+        while (status === "writing") {
           if (selectedAngleRef.current !== forAngleId) return; // paused — user navigated away
-          const res = await fetch("/api/generate-script/section", {
+          const res = await fetch("/api/scripts/section", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ jobId }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error ?? "Failed to write section");
-          done = data.done;
+          status = data.status;
           if (selectedAngleRef.current === forAngleId) {
             setProgress({ sectionsCompleted: data.sectionsCompleted, totalSections: data.totalSections });
           }
         }
 
         if (selectedAngleRef.current !== forAngleId) return;
-        const finishRes = await fetch("/api/generate-script/finish", {
+        const finishRes = await fetch("/api/scripts/finish", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId }),
@@ -88,10 +70,10 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
         if (!finishRes.ok) throw new Error(finishData.error ?? "Failed to finish script");
 
         runningAngleRef.current = null;
-        onComplete(forAngleId, finishData.script, finishData.wordCount, finishData.seo ?? null);
+        onComplete(forAngleId, finishData.script, finishData.wordCount);
         if (selectedAngleRef.current === forAngleId) {
           setProgress(null);
-          setPreview({ script: finishData.script, wordCount: finishData.wordCount, seo: finishData.seo ?? null });
+          setPreview({ script: finishData.script, wordCount: finishData.wordCount });
         }
       } catch (err) {
         runningAngleRef.current = null;
@@ -104,15 +86,13 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
     [onComplete]
   );
 
-  // Auto-resume: whenever the selected angle changes to one without a
-  // finished script, check for and silently continue any unfinished job.
   useEffect(() => {
     if (!angleId || hasExistingScript) return;
-    if (runningAngleRef.current === angleId) return; // already driving this one
+    if (runningAngleRef.current === angleId) return;
 
     let cancelled = false;
     setChecking(true);
-    fetch(`/api/generate-script/active?angleId=${angleId}`)
+    fetch(`/api/scripts/active?angleId=${angleId}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to check for an active script");
@@ -124,8 +104,7 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
         }
       })
       .catch(() => {
-        // Silent — worst case the person just sees "Write Script" and can
-        // start clean; not worth surfacing a resume-check failure.
+        // Silent — worst case the person just sees "Write Script" fresh.
       })
       .finally(() => {
         if (!cancelled) setChecking(false);
@@ -144,10 +123,11 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
       runningAngleRef.current = forAngleId;
       if (selectedAngleRef.current === forAngleId) setProgress({ sectionsCompleted: 0, totalSections: 0 });
       try {
-        const res = await fetch("/api/generate-script/start", {
+        const idempotencyKey = crypto.randomUUID();
+        const res = await fetch("/api/scripts/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ angleId: forAngleId, caseId, wordCount }),
+          body: JSON.stringify({ angleId: forAngleId, caseId, wordCount, idempotencyKey }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to start script");
@@ -178,15 +158,5 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
     setError(null);
   }
 
-  return {
-    checking,
-    writing: progress !== null,
-    progress,
-    error,
-    preview,
-    start,
-    closePreview,
-    openPreview,
-    clearError,
-  };
+  return { checking, writing: progress !== null, progress, error, preview, start, closePreview, openPreview, clearError };
 }

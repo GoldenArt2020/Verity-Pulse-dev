@@ -15,7 +15,7 @@ export function AnalyzerHeader({ caseId }: { caseId?: string }) {
   if (error || !caseData) {
     return (
       <div className="glass-card rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 text-sm text-slate-400">
-        We couldn't load this case right now. <button className="text-blue-400 hover:text-blue-300">Retry</button>
+        We couldn't load th        We couldn&apos;t load this case right now. <button className="text-blue-400 hover:text-blue-300">Retry</button>is case right now. <button className="text-blue-400 hover:text-blue-300">Retry</button>
       </div>
     );
   }

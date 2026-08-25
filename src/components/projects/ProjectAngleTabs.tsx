@@ -9,6 +9,7 @@ import { TitleSuggestionsPanel } from "@/components/projects/TitleSuggestionsPan
 import { DescriptionCreatorPanel } from "@/components/projects/DescriptionCreatorPanel";
 import { TagCreationPanel } from "@/components/projects/TagCreationPanel";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
+import { useScriptJob } from "@/hooks/useScriptJob";
 
 interface AngleScores {
   searchDemand: number;
@@ -31,22 +32,6 @@ interface ProjectAngle {
   scriptWordCount?: number | null;
 }
 
-interface ScriptSeoSummary {
-  keywords: string[];
-  description: string;
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Request to ${url} failed`);
-  return data as T;
-}
-
 function totalScore(a: ProjectAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
@@ -63,14 +48,26 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [writingId, setWritingId] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  const [preview, setPreview] = useState<{ script: string; wordCount: number; seo: ScriptSeoSummary | null } | null>(
-    null
-  );
+  const scriptJob = useScriptJob({
+    angleId: activeId,
+    caseId,
+    hasExistingScript: !!angles.find((a) => a.id === activeId)?.script,
+    onComplete: (angleId, script, wordCount) => {
+      setAngles((prev) =>
+        prev.map((a) =>
+          a.id === angleId
+            ? { ...a, script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: wordCount }
+            : a
+        )
+      );
+      setStep(1);
+    },
+  });
+
+  const preview = scriptJob.preview;
 
   useEffect(() => {
     let active = true;
@@ -104,42 +101,17 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
 
   const activeAngle = angles.find((a) => a.id === activeId) ?? null;
 
-  async function handleWriteScript(wordCount: ScriptWordCount) {
+  function handleWriteScript(wordCount: ScriptWordCount) {
     setDialogOpen(false);
     if (!activeAngle) return;
-    setWritingId(activeAngle.id);
     setWriteError(null);
-    setProgress("Writing your script — this can take a minute or two...");
-    try {
-      const idempotencyKey = crypto.randomUUID();
-      const data = await postJson<{ script: string; wordCount: number }>("/api/scripts/generate", {
-        angleId: activeAngle.id,
-        caseId,
-        wordCount,
-        idempotencyKey,
-      });
-
-      setAngles((prev) =>
-        prev.map((a) =>
-          a.id === activeAngle.id
-            ? { ...a, script: data.script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: data.wordCount }
-            : a
-        )
-      );
-      setPreview({ script: data.script, wordCount: data.wordCount, seo: null });
-      setStep(1);
-    } catch (err) {
-      setWriteError(err instanceof Error ? err.message : "Failed to write script");
-    } finally {
-      setWritingId(null);
-      setProgress(null);
-    }
+    scriptJob.start(activeAngle.id, wordCount);
   }
 
   function handleReopenScript(angle: ProjectAngle) {
     if (!angle.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
-    setPreview({ script: angle.script, wordCount, seo: null });
+    scriptJob.openPreview({ script: angle.script, wordCount });
   }
 
   if (loading) {
@@ -207,7 +179,7 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           </ul>
 
           <div className="mt-5 border-t border-slate-800/60 pt-4">
-            {!activeAngle.script && writingId !== activeAngle.id && (
+            {!activeAngle.script && !scriptJob.writing && (
               <button
                 onClick={() => setDialogOpen(true)}
                 className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.01]"
@@ -217,16 +189,18 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
               </button>
             )}
 
-            {writingId === activeAngle.id && (
+            {scriptJob.writing && (
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {progress ?? "Researching & writing script — longer scripts can take a few minutes..."}
+                {scriptJob.progress
+                  ? `Writing section ${scriptJob.progress.sectionsCompleted}/${scriptJob.progress.totalSections || "?"}...`
+                  : "Starting..."}
               </div>
             )}
 
-            {writeError && <p className="mt-2 text-xs text-rose-400">{writeError}</p>}
+            {(writeError || scriptJob.error) && <p className="mt-2 text-xs text-rose-400">{writeError ?? scriptJob.error}</p>}
 
-            {activeAngle.script && writingId !== activeAngle.id && (
+            {activeAngle.script && !scriptJob.writing && (
               <button
                 onClick={() => handleReopenScript(activeAngle)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-950/40"
@@ -245,24 +219,23 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       <ScriptLengthDialog
         open={dialogOpen}
         onClose={() => {
-          if (!writingId) setDialogOpen(false);
+          if (!scriptJob.writing) setDialogOpen(false);
         }}
         onSelect={handleWriteScript}
-        busy={!!writingId}
-        progressLabel={progress}
+        busy={scriptJob.writing}
       />
 
       {preview && (
         <ScriptPreviewModal
           script={preview.script}
           wordCount={preview.wordCount}
-          seo={preview.seo}
+          seo={null}
           primaryLabel="Close & keep editing here"
           primaryError={writeError}
-          onPrimaryAction={() => setPreview(null)}
+          onPrimaryAction={() => scriptJob.closePreview()}
           onRewrite={() => setDialogOpen(true)}
-          rewriting={!!writingId}
-          onClose={() => setPreview(null)}
+          rewriting={scriptJob.writing}
+          onClose={() => scriptJob.closePreview()}
         />
       )}
     </div>
