@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
 
@@ -128,7 +129,14 @@ function buildChannelBibleBlock(dna: ChannelDNA | null): string {
 /** ~2,600 words/section — fewer, larger sections means fewer sequential
  * round-trips overall, even though each is now its own request. */
 function sectionCountFor(wordCount: ValidWordCount): number {
-  return Math.max(2, Math.ceil(wordCount / 2600));
+  // Smaller sections, more requests — deliberately traded fewer round-trips
+  // for reliability. ~2,600 words/section could exceed Vercel's 60s hard
+  // cap on generation time, and because Claude billing happens per-token-
+  // generated regardless of whether the response was delivered, a timeout
+  // meant paying for a full generation and getting nothing — then retrying
+  // and paying again. ~1,100 words/section keeps each call comfortably
+  // fast enough to finish before the timeout, every time.
+  return Math.max(3, Math.ceil(wordCount / 1100));
 }
 
 function buildSectionPlan(wordCount: number, outline: string[]): SectionPlan[] {
@@ -202,6 +210,7 @@ Do not write a preamble like "Here is the script." Do not include a section titl
 function parseJsonObject<T>(raw: string): T {
   const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
 
+  // Fast path: well-formed JSON, parses cleanly on the first try.
   try {
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
@@ -212,6 +221,11 @@ function parseJsonObject<T>(raw: string): T {
     // fall through to repair
   }
 
+  // Repair path: the response was truncated (maxTokens hit) or otherwise
+  // malformed before the closing brace arrived. Rather than fail the
+  // whole research step, try to close it off — this is a best-effort
+  // repair, not a guarantee, so it's paired with a clear error if even
+  // this can't produce valid JSON.
   const firstBrace = cleaned.indexOf("{");
   if (firstBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
@@ -448,11 +462,10 @@ export async function startScriptJob(
   }
 
   const sectionCount = sectionCountFor(wordCount);
-  const { text: briefRaw, usage } = await callClaude(
-    undefined,
-    buildResearchPrompt(caseData, angle, sectionCount, researchText),
-    2200
-  );
+  const briefRaw = await groqProvider.generateText(buildResearchPrompt(caseData, angle, sectionCount, researchText), {
+    temperature: 0.3,
+    maxTokens: 2200,
+  });
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
   let outline = brief.outline;
   if (outline.length !== sectionCount) {
@@ -479,7 +492,7 @@ export async function startScriptJob(
       previous_tail: null,
       channel_dna: channelDNA,
       generation_id: generationId,
-      usage,
+      usage: {},
     })
     .select("id")
     .single();

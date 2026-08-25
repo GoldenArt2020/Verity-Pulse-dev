@@ -21,6 +21,41 @@ interface UseScriptJobOptions {
 }
 
 /**
+ * Reads a fetch Response as text first, then attempts JSON parsing — a
+ * server error (504 timeout, 502, a platform-level error page) often
+ * comes back as plain text or HTML, not JSON. Parsing with res.json()
+ * directly throws its own confusing SyntaxError in that case ("Unexpected
+ * token '<'..." or similar), masking the real problem. This surfaces a
+ * readable message either way: the server's own {error} field when
+ * present, or a clear status-based fallback when the body isn't JSON at
+ * all.
+ */
+async function parseResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Non-JSON body — fall through to the status-based message below.
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      data?.error ??
+      (res.status === 504
+        ? "That step took too long and timed out. Please try again."
+        : res.status === 502
+        ? "The server had a temporary problem. Please try again."
+        : `Request failed (${res.status}).`);
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+/**
  * Drives start -> section(...) -> finish for the new entitlements-backed
  * script pipeline (/api/scripts/*), one HTTP request at a time so no
  * single request risks a serverless timeout regardless of script length.
@@ -52,8 +87,11 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ jobId }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? "Failed to write section");
+          const data = await parseResponse<{
+            status: "writing" | "ready" | "complete" | "failed";
+            sectionsCompleted: number;
+            totalSections: number;
+          }>(res);
           status = data.status;
           if (selectedAngleRef.current === forAngleId) {
             setProgress({ sectionsCompleted: data.sectionsCompleted, totalSections: data.totalSections });
@@ -66,8 +104,7 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId }),
         });
-        const finishData = await finishRes.json();
-        if (!finishRes.ok) throw new Error(finishData.error ?? "Failed to finish script");
+        const finishData = await parseResponse<{ script: string; wordCount: number }>(finishRes);
 
         runningAngleRef.current = null;
         onComplete(forAngleId, finishData.script, finishData.wordCount);
@@ -93,9 +130,8 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
     let cancelled = false;
     setChecking(true);
     fetch(`/api/scripts/active?angleId=${angleId}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to check for an active script");
+      .then((res) => parseResponse<{ job: { jobId: string; sectionsCompleted: number; totalSections: number } | null }>(res))
+      .then((data) => {
         if (cancelled || selectedAngleRef.current !== angleId) return;
         if (data.job) {
           runningAngleRef.current = angleId;
@@ -129,8 +165,7 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ angleId: forAngleId, caseId, wordCount, idempotencyKey }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to start script");
+        const data = await parseResponse<{ jobId: string; totalSections: number }>(res);
         if (selectedAngleRef.current === forAngleId) {
           setProgress({ sectionsCompleted: 0, totalSections: data.totalSections });
         }
