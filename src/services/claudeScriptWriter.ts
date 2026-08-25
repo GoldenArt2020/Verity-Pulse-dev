@@ -130,13 +130,12 @@ function buildChannelBibleBlock(dna: ChannelDNA | null): string {
  * round-trips overall, even though each is now its own request. */
 function sectionCountFor(wordCount: ValidWordCount): number {
   // Smaller sections, more requests — deliberately traded fewer round-trips
-  // for reliability. ~2,600 words/section could exceed Vercel's 60s hard
-  // cap on generation time, and because Claude billing happens per-token-
-  // generated regardless of whether the response was delivered, a timeout
-  // meant paying for a full generation and getting nothing — then retrying
-  // and paying again. ~1,100 words/section keeps each call comfortably
-  // fast enough to finish before the timeout, every time.
-  return Math.max(3, Math.ceil(wordCount / 1100));
+  // for reliability. Claude generation speed varies with load; even
+  // ~1,100 words/section was occasionally landing close enough to the 60s
+  // ceiling to time out under slow-response conditions. ~800 words/section
+  // leaves more headroom, since callClaude's own 50s internal timeout (see
+  // above) now needs the actual generation to reliably finish inside it.
+  return Math.max(3, Math.ceil(wordCount / 800));
 }
 
 function buildSectionPlan(wordCount: number, outline: string[]): SectionPlan[] {
@@ -339,6 +338,12 @@ function toGenerationUsage(raw: RawUsage): GenerationUsage {
  * omits it entirely and relies on Claude's own default rather than
  * special-casing model strings.
  */
+// Kept comfortably below the route's 60s maxDuration so a hang fails
+// fast enough to leave time for error handling/credit-refund logic to
+// still run, instead of Vercel killing the whole function cold with no
+// graceful path at all.
+const CLAUDE_TIMEOUT_MS = 50_000;
+
 async function callClaude(
   systemBlocks: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[] | undefined,
   userPrompt: string,
@@ -349,20 +354,38 @@ async function callClaude(
     throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 
-  const res = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
-      ...(systemBlocks ? { system: systemBlocks } : {}),
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), CLAUDE_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: maxTokens,
+        ...(systemBlocks ? { system: systemBlocks } : {}),
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      const error = new Error(`Claude request timed out after ${CLAUDE_TIMEOUT_MS / 1000}s`) as Error & {
+        status?: number;
+      };
+      error.status = 408;
+      throw error;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 
   if (!res.ok) {
     const errorBody = await res.text().catch(() => "");
