@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Copy, Check, Loader2, X, FolderOpen, RefreshCw } from "lucide-react";
 import type { ScriptSeoSummary } from "@/services/scriptWriter";
 
@@ -36,7 +37,9 @@ export function ScriptPreviewModal({
     setTimeout(() => setCopied(false), 1500);
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-800/60 bg-[rgb(8,13,28)]">
         <div className="flex items-center justify-between border-b border-slate-800/60 p-5">
@@ -121,6 +124,7 @@ export function ScriptPreviewModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

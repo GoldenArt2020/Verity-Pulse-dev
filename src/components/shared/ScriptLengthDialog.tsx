@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { SCRIPT_WORD_COUNT_OPTIONS, type ScriptWordCount } from "@/constants/scriptOptions";
 
@@ -23,8 +24,9 @@ export function ScriptLengthDialog({
   progressLabel?: string | null;
 }) {
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={() => !busy && onClose()}
@@ -66,6 +68,7 @@ export function ScriptLengthDialog({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
