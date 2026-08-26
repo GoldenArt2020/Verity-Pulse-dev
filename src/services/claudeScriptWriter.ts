@@ -54,12 +54,6 @@ interface ResearchBrief {
   outline: string[];
 }
 
-interface SectionPlan {
-  index: number;
-  focus: string;
-  targetWords: number;
-}
-
 export type ScriptJobStatus = "writing" | "ready" | "complete" | "failed";
 
 export interface ScriptJobRow {
@@ -90,7 +84,7 @@ const RETENTION_ENGINE = `You are the lead writer for a high-retention true crim
 
 CORE PRINCIPLE: The viewer should discover the story rather than receive the story. Do not present known facts in chronological "police arrived, then interviewed witnesses, then found evidence" order. Build the narrative around what was UNKNOWN at each stage, and how that unknown resolved into a new question.
 
-Every major section of the script should do at least one of:
+Every major beat of the script should do at least one of:
 1. Answer an existing open question
 2. Introduce a MORE important question than the one it answers
 3. Reveal evidence that recontextualizes something established earlier
@@ -108,9 +102,9 @@ ETHICAL RULES: no glorification of killers, no exploitative treatment of victims
 
 VOICE: conversational, cinematic narration. Simple but powerful English. Minimal unnecessary biography — every biographical detail should serve the story, not pad it. Plain narration text only — no scene headers, no bracketed directions, no timestamps, no speaker labels, no markdown.
 
-LENGTH DISCIPLINE: never pad to hit a word count. A shorter script should be tight and fast-moving with only the strongest evidence. A longer script should use the extra room for genuine additional depth — more evidence developments, competing theories, richer investigation progression — never filler.
+LENGTH DISCIPLINE: never pad to hit a word count. Use the full length for genuine additional depth — more evidence developments, competing theories, richer investigation progression — never filler.
 
-CONTINUITY: you will sometimes be writing one section of a longer script that another instance of you started. When given "the narration so far ends with" text, continue DIRECTLY from that point — do not repeat, recap, restart, or re-introduce anything already covered. Pick up exactly where it left off, same voice, same tense.`;
+CONTINUITY: if you are given "the narration so far ends with" text, you are continuing a script that was cut off mid-generation, not starting a new one. Continue DIRECTLY from that point — do not repeat, recap, restart, or re-introduce anything already covered. Pick up exactly where it left off, same voice, same tense.`;
 
 function buildChannelBibleBlock(dna: ChannelDNA | null): string {
   if (!dna) {
@@ -126,35 +120,7 @@ function buildChannelBibleBlock(dna: ChannelDNA | null): string {
 - Content freshness framing: ${dna.audienceDNA.contentFreshness}`;
 }
 
-/** ~2,600 words/section — fewer, larger sections means fewer sequential
- * round-trips overall, even though each is now its own request. */
-function sectionCountFor(wordCount: ValidWordCount): number {
-  // Smaller sections, more requests — deliberately traded fewer round-trips
-  // for reliability. Claude generation speed varies with load; even
-  // ~1,100 words/section was occasionally landing close enough to the 60s
-  // ceiling to time out under slow-response conditions. ~800 words/section
-  // leaves more headroom, since callClaude's own 50s internal timeout (see
-  // above) now needs the actual generation to reliably finish inside it.
-  return Math.max(3, Math.ceil(wordCount / 800));
-}
-
-function buildSectionPlan(wordCount: number, outline: string[]): SectionPlan[] {
-  const n = outline.length;
-  const base = Math.floor(wordCount / n);
-  const remainder = wordCount - base * n;
-  return outline.map((focus, i) => ({
-    index: i,
-    focus,
-    targetWords: base + (i === n - 1 ? remainder : 0),
-  }));
-}
-
-function buildResearchPrompt(
-  caseData: CaseContext,
-  angle: AngleContext,
-  sectionCount: number,
-  researchText: string
-): string {
+function buildResearchPrompt(caseData: CaseContext, angle: AngleContext, researchText: string): string {
   return `You are a research analyst preparing a structured briefing for a true crime YouTube scriptwriter working on "${caseData.name}".
 
 ANGLE: ${angle.title}
@@ -168,48 +134,15 @@ ${researchText}
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
   "caseFacts": string[] (8-15 concrete, specific facts from the source material — dates, names, roles, evidence, statements, distinguishing CONFIRMED FACT from ALLEGATION/CLAIM/REPORTING where the sources make that distinction; do not invent anything not supported by the sources),
-  "outline": string[] (exactly ${sectionCount} items — a one-line description of what each section of the narration should cover, in strict order, building toward fully answering the core question by the final section; do not number them yourself)
+  "outline": string[] (4-7 items — a one-line description of each major beat the narration should hit, in strict order, building toward fully answering the core question by the end; do not number them yourself)
 }
 
 Return ONLY the JSON object.`;
 }
 
-function buildSectionPrompt(
-  caseData: CaseContext,
-  angle: AngleContext,
-  brief: ResearchBrief,
-  outline: string[],
-  plan: SectionPlan,
-  previousTail: string | null
-): string {
-  const continuityBlock = previousTail
-    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"`
-    : `THIS IS THE OPENING of the full script. Open with this hook direction, in your own words: ${angle.openingHook}`;
-
-  return `Continue writing the narration script for "${caseData.name}".
-
-ANGLE: ${angle.title}
-CORE QUESTION: ${angle.coreQuestion}
-WHY THIS ANGLE WORKS: ${angle.whyItWorks}
-
-CASE FACTS TO DRAW FROM (do not invent facts beyond these):
-${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
-
-FULL SCRIPT OUTLINE (for your awareness of the whole arc — you are only writing ONE section of it now):
-${outline.map((o, i) => `${i + 1}. ${o}${i === plan.index ? "   <-- YOU ARE WRITING THIS SECTION NOW" : ""}`).join("\n")}
-
-${continuityBlock}
-
-WRITE ONLY SECTION ${plan.index + 1} OF ${outline.length} NOW, focused on: "${plan.focus}"
-Target length: approximately ${plan.targetWords} words for this section.
-
-Do not write a preamble like "Here is the script." Do not include a section title. Output narration text only. Finish on a complete sentence — do not cut off mid-thought.`;
-}
-
 function parseJsonObject<T>(raw: string): T {
   const cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
 
-  // Fast path: well-formed JSON, parses cleanly on the first try.
   try {
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
@@ -220,11 +153,6 @@ function parseJsonObject<T>(raw: string): T {
     // fall through to repair
   }
 
-  // Repair path: the response was truncated (maxTokens hit) or otherwise
-  // malformed before the closing brace arrived. Rather than fail the
-  // whole research step, try to close it off — this is a best-effort
-  // repair, not a guarantee, so it's paired with a clear error if even
-  // this can't produce valid JSON.
   const firstBrace = cleaned.indexOf("{");
   if (firstBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
@@ -331,6 +259,18 @@ function toGenerationUsage(raw: RawUsage): GenerationUsage {
   };
 }
 
+// No longer racing Vercel's 60s ceiling — this task runs inside Trigger.dev
+// (up to 3600s), so this is just a sane per-request safety timeout, not a
+// tight budget. Kept well under Trigger's own limit so a genuine hang
+// fails cleanly instead of silently consuming the whole task duration.
+const CLAUDE_TIMEOUT_MS = 240_000;
+
+// Anthropic's practical per-response output ceiling for this model family.
+// A 10,000-word script (~13,300 tokens) can exceed this in one shot, so
+// writeFullScript below transparently continues past this boundary rather
+// than exposing it as separate user-facing "sections."
+const MAX_TOKENS_PER_CALL = 8192;
+
 /**
  * Low-level Claude call. No `temperature` is sent — some models (extended
  * -thinking variants in particular) reject a fixed temperature outright
@@ -338,17 +278,11 @@ function toGenerationUsage(raw: RawUsage): GenerationUsage {
  * omits it entirely and relies on Claude's own default rather than
  * special-casing model strings.
  */
-// Kept comfortably below the route's 60s maxDuration so a hang fails
-// fast enough to leave time for error handling/credit-refund logic to
-// still run, instead of Vercel killing the whole function cold with no
-// graceful path at all.
-const CLAUDE_TIMEOUT_MS = 50_000;
-
 async function callClaude(
   systemBlocks: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[] | undefined,
   userPrompt: string,
   maxTokens: number
-): Promise<{ text: string; usage: RawUsage }> {
+): Promise<{ text: string; usage: RawUsage; stopReason: string | null }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY is not configured");
@@ -403,29 +337,109 @@ async function callClaude(
     .join("")
     .trim();
 
-  return { text, usage: data.usage ?? {} };
+  return { text, usage: data.usage ?? {}, stopReason: data.stop_reason ?? null };
+}
+
+function buildWritePrompt(
+  caseData: CaseContext,
+  angle: AngleContext,
+  brief: ResearchBrief,
+  wordCount: number,
+  previousTail: string | null
+): string {
+  const continuityBlock = previousTail
+    ? `THE NARRATION SO FAR ENDS WITH:\n"...${previousTail}"\n\nContinue DIRECTLY from this point.`
+    : `Open with this hook direction, in your own words: ${angle.openingHook}`;
+
+  return `Write the full narration script for "${caseData.name}".
+
+ANGLE: ${angle.title}
+CORE QUESTION: ${angle.coreQuestion}
+WHY THIS ANGLE WORKS: ${angle.whyItWorks}
+
+CASE FACTS TO DRAW FROM (do not invent facts beyond these):
+${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
+
+NARRATIVE ARC TO COVER, IN ORDER:
+${brief.outline.map((o, i) => `${i + 1}. ${o}`).join("\n")}
+
+${continuityBlock}
+
+Target total length: approximately ${wordCount} words for the complete script.
+
+Write the narration now, straight through, as one continuous piece — no section headers, no bracketed directions, no timestamps, no speaker labels, no markdown, no preamble like "Here is the script." Finish on a complete sentence.`;
 }
 
 /**
- * Script generation is split into three steps the client drives one at a
- * time, so no single HTTP request is ever a long blocking Claude call —
- * this is what prevents Vercel from killing a request mid-generation
- * (which happened repeatedly with the old single-call design: the
- * function hit its 60s ceiling while Claude was still producing tokens,
- * so the app showed a dead 504 while Anthropic still billed for
- * whatever had already been generated).
- *
- *   1. startScriptJob   — research (Tavily) + ONE Claude call that
- *      produces case facts + a section outline. Fast, cheap, no prose.
- *   2. advanceScriptJob — writes exactly ONE section of prose per call,
- *      carrying the previous section's tail forward for continuity.
- *      The client calls this repeatedly until every section is done.
- *   3. finalizeScriptJob — joins the sections and saves the finished
- *      script to the angle.
- *
- * Usage/cost accumulates across every Claude call in the job (stored on
- * the job row) and is only reported to entitlements.completeGeneration
- * once, at finish — so billing reflects the whole script, not each call.
+ * Writes the whole script in as few Claude calls as possible. Claude can
+ * write long-form content in a single response — the continuation loop
+ * here exists purely as a safety net for when a script's target length
+ * exceeds a single response's practical token ceiling (MAX_TOKENS_PER_CALL)
+ * or the model stops early for some other reason, NOT as a deliberate
+ * small-chunk design. From the caller's perspective this is one logical
+ * "write the script" operation; the chunking (if any occurs at all) is
+ * invisible outside this function.
+ */
+async function writeFullScript(
+  caseData: CaseContext,
+  angle: AngleContext,
+  brief: ResearchBrief,
+  wordCount: ValidWordCount,
+  channelDNA: ChannelDNA | null
+): Promise<{ script: string; usage: RawUsage }> {
+  const systemBlocks: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[] = [
+    { type: "text", text: RETENTION_ENGINE, cache_control: { type: "ephemeral" } },
+    { type: "text", text: buildChannelBibleBlock(channelDNA), cache_control: { type: "ephemeral" } },
+  ];
+
+  let script = "";
+  let usage: RawUsage = {};
+  let previousTail: string | null = null;
+
+  // Safety cap on continuation calls, not a target — a 10,000-word script
+  // at ~8,192 tokens/call (~5,800 words/call in practice) should finish
+  // in 2 calls; this just bounds worst-case retries if the model keeps
+  // stopping short.
+  const MAX_CALLS = 6;
+
+  for (let call = 0; call < MAX_CALLS; call++) {
+    const currentWordCount = script.split(/\s+/).filter(Boolean).length;
+    if (call > 0 && currentWordCount >= wordCount * 0.95) break;
+
+    const remainingWords = Math.max(500, wordCount - currentWordCount);
+    const maxTokens = Math.min(MAX_TOKENS_PER_CALL, Math.max(1024, Math.ceil(remainingWords * 1.8)));
+
+    const { text, usage: callUsage, stopReason } = await callClaude(
+      systemBlocks,
+      buildWritePrompt(caseData, angle, brief, remainingWords, previousTail),
+      maxTokens
+    );
+
+    script = script ? `${script} ${text}`.trim() : text.trim();
+    usage = mergeUsage(usage, callUsage);
+
+    const newWordCount = script.split(/\s+/).filter(Boolean).length;
+    const closeEnough = newWordCount >= wordCount * 0.95;
+    const stoppedNaturally = stopReason === "end_turn" || stopReason === "stop_sequence";
+
+    if (closeEnough || (stoppedNaturally && newWordCount >= wordCount * 0.7)) {
+      break;
+    }
+
+    previousTail = script.split(/\s+/).slice(-150).join(" ");
+  }
+
+  return { script, usage };
+}
+
+/**
+ * Full script pipeline: research (Tavily + Groq) once, then write the
+ * whole script (writeFullScript above handles any necessary continuation
+ * internally). Runs inside a Trigger.dev task (see src/trigger/writeScript.ts),
+ * so it is not subject to Vercel's request timeout — the old design that
+ * split writing into many small HTTP-polled sections existed only to work
+ * around that limit and is no longer needed now that generation happens
+ * in a long-running background task instead.
  */
 export async function generateScript(
   angleId: string,
@@ -442,15 +456,11 @@ export async function generateScript(
 
   const generationId = `legacy-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const startedAt = Date.now();
-  const { jobId, totalSections } = await startScriptJob(angleId, caseId, resolvedUserId, wordCount, generationId);
+  const { jobId } = await startScriptJob(angleId, caseId, resolvedUserId, wordCount, generationId);
+  const result = await advanceScriptJob(jobId, resolvedUserId);
 
-  let status: ScriptJobStatus = "writing";
-  let sectionsCompleted = 0;
-
-  while (status === "writing" && sectionsCompleted < totalSections) {
-    const result = await advanceScriptJob(jobId, resolvedUserId);
-    status = result.status;
-    sectionsCompleted = result.sectionsCompleted;
+  if (result.status !== "ready" && result.status !== "complete") {
+    throw new Error("Script generation did not complete");
   }
 
   const finished = await finalizeScriptJob(jobId, resolvedUserId);
@@ -484,18 +494,13 @@ export async function startScriptJob(
     }
   }
 
-  const sectionCount = sectionCountFor(wordCount);
-  const briefRaw = await groqProvider.generateText(buildResearchPrompt(caseData, angle, sectionCount, researchText), {
+  const briefRaw = await groqProvider.generateText(buildResearchPrompt(caseData, angle, researchText), {
     temperature: 0.3,
-    maxTokens: 2200,
+    maxTokens: 1800,
   });
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
-  let outline = brief.outline;
-  if (outline.length !== sectionCount) {
-    outline = outline.slice(0, sectionCount);
-    while (outline.length < sectionCount) {
-      outline.push(`Continue the narrative toward answering: ${angle.coreQuestion}`);
-    }
+  if (!brief.outline?.length) {
+    brief.outline = [`Cover the full arc of the case, answering: ${angle.coreQuestion}`];
   }
 
   const supabase = await createClient();
@@ -507,11 +512,11 @@ export async function startScriptJob(
       angle_id: angleId,
       status: "writing",
       word_count: wordCount,
-      brief: { caseFacts: brief.caseFacts, outline },
-      outline,
+      brief: { caseFacts: brief.caseFacts, outline: brief.outline },
+      outline: brief.outline,
       sections: [],
       current_section_index: 0,
-      total_sections: sectionCount,
+      total_sections: 1,
       previous_tail: null,
       channel_dna: channelDNA,
       generation_id: generationId,
@@ -524,10 +529,16 @@ export async function startScriptJob(
     throw new Error(`Failed to create script job: ${insertError?.message ?? "unknown error"}`);
   }
 
-  return { jobId: jobRow.id, totalSections: sectionCount };
+  return { jobId: jobRow.id, totalSections: 1 };
 }
 
-/** Writes exactly one section for an in-progress job and persists progress. */
+/**
+ * Writes the ENTIRE script in this one call (via writeFullScript's
+ * internal continuation loop, invisible to the caller) and marks the job
+ * ready. Kept as a separate step from startScriptJob purely so the two
+ * concerns (research vs. writing) stay separable and testable, not
+ * because it needs to be a distinct HTTP round-trip anymore.
+ */
 export async function advanceScriptJob(
   jobId: string,
   userId: string
@@ -549,44 +560,35 @@ export async function advanceScriptJob(
   }
 
   const { angle, caseData } = await loadContext(job.angle_id, job.case_id, userId);
-  const plans = buildSectionPlan(job.word_count, job.outline);
-  const plan = plans[job.current_section_index];
 
   try {
-    const maxTokens = Math.min(8192, Math.max(700, Math.ceil(plan.targetWords * 1.8)));
-    const channelBible = buildChannelBibleBlock(job.channel_dna);
-    const { text: sectionText, usage: sectionUsage } = await callClaude(
-      [
-        { type: "text", text: RETENTION_ENGINE, cache_control: { type: "ephemeral" } },
-        { type: "text", text: channelBible, cache_control: { type: "ephemeral" } },
-      ],
-      buildSectionPrompt(caseData, angle, job.brief, job.outline, plan, job.previous_tail),
-      maxTokens
+    const { script, usage: writeUsage } = await writeFullScript(
+      caseData,
+      angle,
+      job.brief,
+      job.word_count as ValidWordCount,
+      job.channel_dna
     );
 
-    const newSections = [...job.sections, sectionText];
-    const newIndex = job.current_section_index + 1;
-    const done = newIndex >= job.total_sections;
-    const newTail = sectionText.split(/\s+/).slice(-120).join(" ");
-    const newUsage = mergeUsage(job.usage, sectionUsage);
+    const newUsage = mergeUsage(job.usage, writeUsage);
 
     const { error: updateError } = await supabase
       .from("script_jobs")
       .update({
-        sections: newSections,
-        current_section_index: newIndex,
-        previous_tail: newTail,
-        status: done ? "ready" : "writing",
+        sections: [script],
+        current_section_index: 1,
+        previous_tail: null,
+        status: "ready",
         usage: newUsage,
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId);
 
-    if (updateError) throw new Error(`Failed to save section progress: ${updateError.message}`);
+    if (updateError) throw new Error(`Failed to save script: ${updateError.message}`);
 
-    return { status: done ? "ready" : "writing", sectionsCompleted: newIndex, totalSections: job.total_sections };
+    return { status: "ready", sectionsCompleted: 1, totalSections: 1 };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to write section";
+    const message = err instanceof Error ? err.message : "Failed to write script";
     const status = (err as { status?: number } | undefined)?.status;
     const isTimeout = status === 408 || /timed out/i.test(message);
 
@@ -595,17 +597,16 @@ export async function advanceScriptJob(
       .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
       .eq("id", jobId);
 
-    // Lightweight tracking so we can see whether the current timeout
-    // margin (see CLAUDE_TIMEOUT_MS / sectionCountFor above) is actually
-    // working in production, without digging through Vercel logs by hand.
+    // Lightweight tracking so we can see whether generation is failing in
+    // production, without digging through Trigger.dev logs by hand.
     // Best-effort — a logging failure should never mask the real error.
     supabase
       .from("script_generation_failures")
       .insert({
         job_id: jobId,
         user_id: userId,
-        section_index: job.current_section_index,
-        target_words: plan.targetWords,
+        section_index: 0,
+        target_words: job.word_count,
         error_message: message,
         is_timeout: isTimeout,
       })
@@ -694,4 +695,168 @@ export async function findActiveScriptJob(
     sectionsCompleted: job.current_section_index,
     totalSections: job.total_sections,
   };
+}
+
+// Generous headroom for a full script in one response — 10,000 words is
+// roughly 13,000-15,000 tokens. If your Claude account/model rejects this
+// max_tokens value, the API error will state the actual ceiling; lower
+// this to match if so.
+const SINGLE_CALL_MAX_TOKENS = 20000;
+
+// No Vercel 60s pressure inside a Trigger.dev task — a full 10,000-word
+// generation can genuinely take a few minutes. Kept well under Trigger's
+// own task budget (3600s, see trigger.config.ts) rather than Vercel's.
+const SINGLE_CALL_TIMEOUT_MS = 280_000;
+
+function buildFullScriptPrompt(
+  caseData: CaseContext,
+  angle: AngleContext,
+  brief: ResearchBrief,
+  wordCount: ValidWordCount
+): string {
+  return `Write the COMPLETE narration script for a true crime YouTube video about "${caseData.name}", start to finish, in one continuous piece.
+
+ANGLE: ${angle.title}
+CORE QUESTION: ${angle.coreQuestion}
+WHY THIS ANGLE WORKS: ${angle.whyItWorks}
+
+CASE FACTS TO DRAW FROM (do not invent facts beyond these):
+${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
+
+SUGGESTED STORY ARC (use this as internal structure — do not label or number sections in the output):
+${brief.outline.map((o, i) => `${i + 1}. ${o}`).join("\n")}
+
+OPENING HOOK DIRECTION: ${angle.openingHook}
+
+TARGET LENGTH: approximately ${wordCount} words. Write the FULL script now — do not stop partway, do not summarize the rest, do not ask to continue. Finish on a complete sentence, with a proper ending.
+
+Do not write a preamble like "Here is the script." Do not include a title or section headers. Output narration text only.`;
+}
+
+async function callClaudeExtended(
+  systemBlocks: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[],
+  userPrompt: string,
+  maxTokens: number
+): Promise<{ text: string; usage: RawUsage }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), SINGLE_CALL_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: maxTokens,
+        system: systemBlocks,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      const error = new Error(`Claude request timed out after ${SINGLE_CALL_TIMEOUT_MS / 1000}s`) as Error & { status?: number };
+      error.status = 408;
+      throw error;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => "");
+    const error = new Error(`Claude request failed: ${res.status} ${res.statusText} ${errorBody.slice(0, 500)}`) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
+
+  const data = await res.json();
+  const text = (data.content ?? [])
+    .filter((b: { type?: string }) => b.type === "text")
+    .map((b: { text?: string }) => b.text ?? "")
+    .join("")
+    .trim();
+
+  return { text, usage: data.usage ?? {} };
+}
+
+function endsCleanly(text: string): boolean {
+  return /[.!?]["\)\u201d\u2019]?\s*$/.test(text.trim());
+}
+
+/**
+ * True single-call generation: research + outline (Tavily + one quick
+ * Groq call, same as before) feeds ONE Claude call that writes the
+ * entire script at once. If it happens to get cut off near the very end
+ * (rare with the token headroom above, but possible), one short
+ * continuation call finishes the sentence — not a return to
+ * section-by-section chaptering. Meant to be called from inside a
+ * Trigger.dev task (see src/trigger/writeScript.ts), not directly from a
+ * Vercel API route — SINGLE_CALL_TIMEOUT_MS alone can exceed Vercel's
+ * 60s ceiling.
+ */
+export async function generateScriptSingleCall(
+  angleId: string,
+  caseId: string,
+  wordCount: ValidWordCount,
+  userId: string
+): Promise<{ script: string; usage: GenerationUsage }> {
+  const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId);
+
+  let researchText = "No additional research available beyond the case summary above.";
+  if (tavilyProvider.isConfigured()) {
+    try {
+      const results = await tavilyProvider.search(`${caseData.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6);
+      researchText = results.map((r, i) => `${i + 1}. [${r.title}] ${r.snippet}`).join("\n");
+    } catch {
+      // Non-fatal — proceed with just the case summary.
+    }
+  }
+
+  const briefRaw = await groqProvider.generateText(
+    buildResearchPrompt(caseData, angle, researchText),
+    { temperature: 0.3, maxTokens: 2200 }
+  );
+  const brief = parseJsonObject<ResearchBrief>(briefRaw);
+
+  const channelBible = buildChannelBibleBlock(channelDNA);
+  const systemBlocks = [
+    { type: "text" as const, text: RETENTION_ENGINE, cache_control: { type: "ephemeral" as const } },
+    { type: "text" as const, text: channelBible, cache_control: { type: "ephemeral" as const } },
+  ];
+
+  const { text: firstPass, usage: firstUsage } = await callClaudeExtended(
+    systemBlocks,
+    buildFullScriptPrompt(caseData, angle, brief, wordCount),
+    SINGLE_CALL_MAX_TOKENS
+  );
+
+  let script = firstPass;
+  let totalUsage = firstUsage;
+
+  if (!endsCleanly(script)) {
+    try {
+      const tail = script.split(/\s+/).slice(-60).join(" ");
+      const { text: continuation, usage: contUsage } = await callClaudeExtended(
+        systemBlocks,
+        `The script was cut off mid-sentence. Here is exactly how it ends:\n\n"...${tail}"\n\nWrite ONLY the rest of that final unfinished sentence, plus a proper closing to end the script naturally. Do not repeat anything above. Plain narration text only, no preamble.`,
+        500
+      );
+      script = `${script} ${continuation.trim()}`.trim();
+      totalUsage = mergeUsage(totalUsage, contUsage);
+    } catch {
+      // Non-fatal — ship what we have rather than fail the whole script.
+    }
+  }
+
+  return { script, usage: toGenerationUsage(totalUsage) };
 }

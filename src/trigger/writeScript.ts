@@ -1,5 +1,5 @@
 import { task } from "@trigger.dev/sdk";
-import { generateScript, type ValidWordCount } from "@/services/claudeScriptWriter";
+import { generateScriptSingleCall, type ValidWordCount } from "@/services/claudeScriptWriter";
 import { completeGeneration, failGeneration } from "@/lib/entitlements";
 
 interface WriteScriptPayload {
@@ -25,7 +25,7 @@ export const writeScript = task({
   run: async (payload: WriteScriptPayload) => {
     const startedAt = Date.now();
     try {
-      const { script, usage } = await generateScript(
+      const { script, usage } = await generateScriptSingleCall(
         payload.angleId,
         payload.caseId,
         payload.wordCount,
