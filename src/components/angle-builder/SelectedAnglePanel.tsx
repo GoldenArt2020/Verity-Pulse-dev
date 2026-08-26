@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,12 +8,16 @@ import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
 import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewModal";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 import type { BackgroundProfile } from "@/hooks/useCase";
-import { useScriptJob } from "@/hooks/useScriptJob";
 import { VideoSourcesSection } from "@/components/angle-builder/VideoSourcesSection";
 
 function totalScore(a: GeneratedAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
+}
+
+interface ScriptPreview {
+  script: string;
+  wordCount: number;
 }
 
 export function SelectedAnglePanel({
@@ -35,20 +39,13 @@ export function SelectedAnglePanel({
   backgroundProfiles: BackgroundProfile[];
 }) {
   const router = useRouter();
-  const [writeError, setWriteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [openingProject, setOpeningProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
-
-  const scriptJob = useScriptJob({
-    angleId: angle?.id ?? null,
-    caseId,
-    hasExistingScript: !!angle?.script,
-    onComplete: (angleId, script, wordCount) => onScriptGenerated(angleId, script, wordCount, null),
-  });
-
-  const preview = scriptJob.preview;
+  const [preview, setPreview] = useState<ScriptPreview | null>(null);
 
   async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
@@ -71,14 +68,18 @@ export function SelectedAnglePanel({
       let result: { status: string; script?: string; wordCount?: number; error?: string };
       do {
         await new Promise((resolve) => setTimeout(resolve, 4000));
-        result = await fetch(`/api/scripts/status/${data.runId}`).then((res) => res.json());
+        const statusRes = await fetch(`/api/scripts/status/${data.runId}`);
+        result = await statusRes.json();
+        if (!statusRes.ok) throw new Error(result.error ?? "Failed to check generation status");
       } while (result.status === "in_progress");
 
       if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
       if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
 
-      onScriptGenerated(angle.id, result.script, result.wordCount ?? wordCount, null);
+      const finalWordCount = result.wordCount ?? wordCount;
+      onScriptGenerated(angle.id, result.script, finalWordCount, null);
       setDialogOpen(false);
+      setPreview({ script: result.script, wordCount: finalWordCount });
       router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
@@ -91,13 +92,13 @@ export function SelectedAnglePanel({
   function handleReopenScript() {
     if (!angle?.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
-    scriptJob.openPreview({ script: angle.script, wordCount });
+    setPreview({ script: angle.script, wordCount });
   }
 
   async function handleOpenInProject() {
     if (!angle) return;
     setOpeningProject(true);
-    setWriteError(null);
+    setProjectError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -106,10 +107,10 @@ export function SelectedAnglePanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to open project");
-      scriptJob.closePreview();
+      setPreview(null);
       router.push(`/projects/${data.id}?angle=${angle.id}`);
     } catch (err) {
-      setWriteError(err instanceof Error ? err.message : "Failed to open project");
+      setProjectError(err instanceof Error ? err.message : "Failed to open project");
     } finally {
       setOpeningProject(false);
     }
@@ -273,9 +274,7 @@ export function SelectedAnglePanel({
           )}
 
           <div className="mt-5">
-            {(writeError || scriptJob.error) && !preview && (
-              <p className="mb-2 text-xs text-rose-400">{writeError ?? scriptJob.error}</p>
-            )}
+            {writeError && !preview && <p className="mb-2 text-xs text-rose-400">{writeError}</p>}
             {angle.script ? (
               <button
                 onClick={handleReopenScript}
@@ -312,13 +311,13 @@ export function SelectedAnglePanel({
           seo={null}
           primaryLabel="Open in Project"
           primaryLoading={openingProject}
-          primaryError={writeError}
+          primaryError={projectError}
           onPrimaryAction={handleOpenInProject}
           onRewrite={() => setDialogOpen(true)}
           rewriting={writing}
           onClose={() => {
-            scriptJob.closePreview();
-            setWriteError(null);
+            setPreview(null);
+            setProjectError(null);
           }}
         />
       )}

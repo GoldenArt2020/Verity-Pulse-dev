@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, FileText, Check } from "lucide-react";
 import { StepTabs } from "@/components/angle-builder/StepTabs";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
@@ -9,7 +9,6 @@ import { TitleSuggestionsPanel } from "@/components/projects/TitleSuggestionsPan
 import { DescriptionCreatorPanel } from "@/components/projects/DescriptionCreatorPanel";
 import { TagCreationPanel } from "@/components/projects/TagCreationPanel";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
-import { useScriptJob } from "@/hooks/useScriptJob";
 
 interface AngleScores {
   searchDemand: number;
@@ -32,6 +31,11 @@ interface ProjectAngle {
   scriptWordCount?: number | null;
 }
 
+interface ScriptPreview {
+  script: string;
+  wordCount: number;
+}
+
 function totalScore(a: ProjectAngle) {
   const s = a.scores;
   return s.searchDemand + s.competition + s.emotionalImpact + s.originality + s.audienceMatch;
@@ -51,23 +55,13 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [writeError, setWriteError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  const scriptJob = useScriptJob({
-    angleId: activeId,
-    caseId,
-    hasExistingScript: !!angles.find((a) => a.id === activeId)?.script,
-    onComplete: (angleId, script, wordCount) => {
-      setAngles((prev) =>
-        prev.map((a) =>
-          a.id === angleId
-            ? { ...a, script, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: wordCount }
-            : a
-        )
-      );
-      setStep(1);
-    },
-  });
-
-  const preview = scriptJob.preview;
+  // Which angle is currently generating (null when nothing's in flight).
+  // A ref, not just state, because the poll loop below is an async
+  // function that needs to check the LATEST value at each iteration —
+  // state captured in a closure would go stale across awaits.
+  const [writingAngleId, setWritingAngleId] = useState<string | null>(null);
+  const writingAngleRef = useRef<string | null>(null);
+  const [preview, setPreview] = useState<ScriptPreview | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -100,18 +94,63 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   }, [caseId]);
 
   const activeAngle = angles.find((a) => a.id === activeId) ?? null;
+  const writingActiveAngle = writingAngleId === activeId;
 
-  function handleWriteScript(wordCount: ScriptWordCount) {
+  async function handleWriteScript(wordCount: ScriptWordCount) {
     setDialogOpen(false);
     if (!activeAngle) return;
+    const forAngleId = activeAngle.id;
     setWriteError(null);
-    scriptJob.start(activeAngle.id, wordCount);
+    setWritingAngleId(forAngleId);
+    writingAngleRef.current = forAngleId;
+
+    try {
+      const idempotencyKey = crypto.randomUUID();
+      const response = await fetch("/api/scripts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleId: forAngleId, caseId, wordCount, idempotencyKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Failed to start script generation");
+
+      let result: { status: string; script?: string; wordCount?: number; error?: string };
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        const statusRes = await fetch(`/api/scripts/status/${data.runId}`);
+        result = await statusRes.json();
+        if (!statusRes.ok) throw new Error(result.error ?? "Failed to check generation status");
+      } while (result.status === "in_progress");
+
+      if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
+      if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
+
+      const finalWordCount = result.wordCount ?? wordCount;
+      setAngles((prev) =>
+        prev.map((a) =>
+          a.id === forAngleId
+            ? { ...a, script: result.script!, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
+            : a
+        )
+      );
+      setStep(1);
+      if (writingAngleRef.current === forAngleId) {
+        setPreview({ script: result.script, wordCount: finalWordCount });
+      }
+    } catch (err) {
+      setWriteError(err instanceof Error ? err.message : "Failed to generate script");
+    } finally {
+      if (writingAngleRef.current === forAngleId) {
+        writingAngleRef.current = null;
+        setWritingAngleId(null);
+      }
+    }
   }
 
   function handleReopenScript(angle: ProjectAngle) {
     if (!angle.script) return;
     const wordCount = angle.scriptWordCount ?? angle.script.trim().split(/\s+/).filter(Boolean).length;
-    scriptJob.openPreview({ script: angle.script, wordCount });
+    setPreview({ script: angle.script, wordCount });
   }
 
   if (loading) {
@@ -179,7 +218,7 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           </ul>
 
           <div className="mt-5 border-t border-slate-800/60 pt-4">
-            {!activeAngle.script && !scriptJob.writing && (
+            {!activeAngle.script && !writingActiveAngle && (
               <button
                 onClick={() => setDialogOpen(true)}
                 className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.01]"
@@ -189,18 +228,16 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
               </button>
             )}
 
-            {scriptJob.writing && (
+            {writingActiveAngle && (
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {scriptJob.progress
-                  ? `Writing section ${scriptJob.progress.sectionsCompleted}/${scriptJob.progress.totalSections || "?"}...`
-                  : "Starting..."}
+                Writing your script — this can take a few minutes for longer scripts...
               </div>
             )}
 
-            {(writeError || scriptJob.error) && <p className="mt-2 text-xs text-rose-400">{writeError ?? scriptJob.error}</p>}
+            {writeError && <p className="mt-2 text-xs text-rose-400">{writeError}</p>}
 
-            {activeAngle.script && !scriptJob.writing && (
+            {activeAngle.script && !writingActiveAngle && (
               <button
                 onClick={() => handleReopenScript(activeAngle)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-950/40"
@@ -219,10 +256,10 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       <ScriptLengthDialog
         open={dialogOpen}
         onClose={() => {
-          if (!scriptJob.writing) setDialogOpen(false);
+          if (!writingActiveAngle) setDialogOpen(false);
         }}
         onSelect={handleWriteScript}
-        busy={scriptJob.writing}
+        busy={writingActiveAngle}
       />
 
       {preview && (
@@ -232,10 +269,10 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           seo={null}
           primaryLabel="Close & keep editing here"
           primaryError={writeError}
-          onPrimaryAction={() => scriptJob.closePreview()}
+          onPrimaryAction={() => setPreview(null)}
           onRewrite={() => setDialogOpen(true)}
-          rewriting={scriptJob.writing}
-          onClose={() => scriptJob.closePreview()}
+          rewriting={writingActiveAngle}
+          onClose={() => setPreview(null)}
         />
       )}
     </div>
