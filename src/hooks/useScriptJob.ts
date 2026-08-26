@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 export interface ScriptJobProgress {
@@ -56,25 +56,27 @@ async function parseResponse<T>(res: Response): Promise<T> {
 }
 
 /**
- * Drives start -> section(...) -> finish for the new entitlements-backed
+ * Drives start -> section(...) -> finish for the entitlements-backed
  * script pipeline (/api/scripts/*), one HTTP request at a time so no
  * single request risks a serverless timeout regardless of script length.
- * Note: the new writer (claudeScriptWriter.ts) does not produce an SEO
- * summary — that field is gone from this hook entirely, unlike the old
- * Groq-based flow.
+ *
+ * Intentionally does NOT auto-resume a job on mount/angle-select. That
+ * silent-resume behavior used to fire /api/scripts/active on every visit
+ * to an angle and pick back up ANY row still marked "writing" — including
+ * one that died mid-request from a platform timeout or dropped
+ * connection and never got marked "failed". The result looked like
+ * scripts writing themselves unprompted. Writing only ever starts now
+ * from an explicit call to start().
  */
-export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }: UseScriptJobOptions) {
-  const [checking, setChecking] = useState(false);
+export function useScriptJob({ angleId, caseId, onComplete }: UseScriptJobOptions) {
   const [progress, setProgress] = useState<ScriptJobProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScriptJobPreview | null>(null);
 
   const selectedAngleRef = useRef<string | null>(angleId);
-  const runningAngleRef = useRef<string | null>(null);
+  selectedAngleRef.current = angleId;
 
-  useEffect(() => {
-    selectedAngleRef.current = angleId;
-  }, [angleId]);
+  const runningAngleRef = useRef<string | null>(null);
 
   const runLoop = useCallback(
     async (jobId: string, forAngleId: string) => {
@@ -123,35 +125,6 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
     [onComplete]
   );
 
-  useEffect(() => {
-    if (!angleId || hasExistingScript) return;
-    if (runningAngleRef.current === angleId) return;
-
-    let cancelled = false;
-    setChecking(true);
-    fetch(`/api/scripts/active?angleId=${angleId}`)
-      .then((res) => parseResponse<{ job: { jobId: string; sectionsCompleted: number; totalSections: number } | null }>(res))
-      .then((data) => {
-        if (cancelled || selectedAngleRef.current !== angleId) return;
-        if (data.job) {
-          runningAngleRef.current = angleId;
-          setProgress({ sectionsCompleted: data.job.sectionsCompleted, totalSections: data.job.totalSections });
-          runLoop(data.job.jobId, angleId);
-        }
-      })
-      .catch(() => {
-        // Silent — worst case the person just sees "Write Script" fresh.
-      })
-      .finally(() => {
-        if (!cancelled) setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [angleId, hasExistingScript, runLoop]);
-
   const start = useCallback(
     async (forAngleId: string, wordCount: ScriptWordCount) => {
       setError(null);
@@ -193,5 +166,5 @@ export function useScriptJob({ angleId, caseId, hasExistingScript, onComplete }:
     setError(null);
   }
 
-  return { checking, writing: progress !== null, progress, error, preview, start, closePreview, openPreview, clearError };
+  return { writing: progress !== null, progress, error, preview, start, closePreview, openPreview, clearError };
 }
