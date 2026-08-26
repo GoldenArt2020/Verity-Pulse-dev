@@ -201,22 +201,24 @@ async function loadContext(
   if (caseError || !caseRow) throw new Error(`Case not found: ${caseError?.message ?? "unknown error"}`);
 
   let channelDNA: ChannelDNA | null = null;
-  try {
-    const { data: activeRow } = await supabase
-      .from("active_channel")
-      .select("channel_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (activeRow?.channel_id) {
-      const { data: channelRow } = await supabase
-        .from("channels")
-        .select("channel_dna")
-        .eq("id", activeRow.channel_id)
+  if (userId) {
+    try {
+      const { data: activeRow } = await supabase
+        .from("active_channel")
+        .select("channel_id")
+        .eq("user_id", userId)
         .maybeSingle();
-      channelDNA = (channelRow?.channel_dna as unknown as ChannelDNA) ?? null;
+      if (activeRow?.channel_id) {
+        const { data: channelRow } = await supabase
+          .from("channels")
+          .select("channel_dna")
+          .eq("id", activeRow.channel_id)
+          .maybeSingle();
+        channelDNA = (channelRow?.channel_dna as unknown as ChannelDNA) ?? null;
+      }
+    } catch {
+      channelDNA = null;
     }
-  } catch {
-    channelDNA = null;
   }
 
   return {
@@ -230,6 +232,45 @@ async function loadContext(
     caseData: { name: caseRow.name, summary: caseRow.summary },
     channelDNA,
   };
+}
+
+export async function getOrBuildResearchBrief(
+  angleId: string,
+  caseId: string
+): Promise<ResearchBrief> {
+  const supabase = await createClient();
+
+  const { data: existingAngle } = await supabase
+    .from("angles")
+    .select("research_brief")
+    .eq("id", angleId)
+    .maybeSingle();
+
+  if (existingAngle?.research_brief) {
+    return existingAngle.research_brief as ResearchBrief;
+  }
+
+  const { angle, caseData } = await loadContext(angleId, caseId, "");
+
+  let researchText = "No additional research available beyond the case summary above.";
+  if (tavilyProvider.isConfigured()) {
+    try {
+      const results = await tavilyProvider.search(`${caseData.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6);
+      researchText = results.map((r, i) => `${i + 1}. [${r.title}] ${r.snippet}`).join("\n");
+    } catch {
+      // Non-fatal — proceed with just the case summary.
+    }
+  }
+
+  const briefRaw = await groqProvider.generateText(buildResearchPrompt(caseData, angle, researchText), {
+    temperature: 0.3,
+    maxTokens: 2200,
+  });
+  const brief = parseJsonObject<ResearchBrief>(briefRaw);
+
+  await supabase.from("angles").update({ research_brief: brief }).eq("id", angleId);
+
+  return brief;
 }
 
 function mergeUsage(a: RawUsage, b: RawUsage): RawUsage {
@@ -779,21 +820,7 @@ export async function generateScriptSingleCall(
 ): Promise<{ script: string; usage: GenerationUsage }> {
   const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId);
 
-  let researchText = "No additional research available beyond the case summary above.";
-  if (tavilyProvider.isConfigured()) {
-    try {
-      const results = await tavilyProvider.search(`${caseData.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6);
-      researchText = results.map((r, i) => `${i + 1}. [${r.title}] ${r.snippet}`).join("\n");
-    } catch {
-      // Non-fatal — proceed with just the case summary.
-    }
-  }
-
-  const briefRaw = await groqProvider.generateText(
-    buildResearchPrompt(caseData, angle, researchText),
-    { temperature: 0.3, maxTokens: 2200 }
-  );
-  const brief = parseJsonObject<ResearchBrief>(briefRaw);
+  const brief = await getOrBuildResearchBrief(angleId, caseId);
 
   const channelBible = buildChannelBibleBlock(channelDNA);
   const systemBlocks = [

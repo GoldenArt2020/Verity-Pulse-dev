@@ -47,6 +47,17 @@ export function SelectedAnglePanel({
   const [progress, setProgress] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScriptPreview | null>(null);
 
+  useEffect(() => {
+    if (!angle || angle.script) return;
+    fetch(`/api/angle/${angle.id}/prewarm-research`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseId }),
+    }).catch(() => {
+      // Silent — this is purely a background optimization, never shown to the user.
+    });
+  }, [angle?.id, angle?.script, caseId]);
+
   async function pollUntilDone(
     runId: string,
     onProgress: (msg: string) => void
