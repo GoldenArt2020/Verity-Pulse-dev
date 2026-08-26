@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { isValidWordCount } from "@/services/claudeScriptWriter";
+import { checkAndReserveGeneration } from "@/lib/entitlements";
+import { tasks } from "@trigger.dev/sdk";
+import type { writeScript } from "@/trigger/writeScript";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const angleId = body?.angleId as string | undefined;
+  const caseId = body?.caseId as string | undefined;
+  const wordCount = body?.wordCount;
+  const idempotencyKey = body?.idempotencyKey as string | undefined;
+
+  if (!angleId || !caseId) {
+    return NextResponse.json({ error: "angleId and caseId are required" }, { status: 400 });
+  }
+  if (!isValidWordCount(wordCount)) {
+    return NextResponse.json({ error: "wordCount must be 5000, 7000, or 10000." }, { status: 400 });
+  }
+  if (!idempotencyKey) {
+    return NextResponse.json({ error: "idempotencyKey is required" }, { status: 400 });
+  }
+
+  const reservation = await checkAndReserveGeneration(user.id, wordCount, idempotencyKey, { angleId, caseId });
+  if (!reservation.ok) {
+    return NextResponse.json({ error: reservation.reason }, { status: 403 });
+  }
+
+  const handle = await tasks.trigger<typeof writeScript>("write-script", {
+    angleId,
+    caseId,
+    wordCount,
+    userId: user.id,
+    generationId: reservation.generationId!,
+  });
+
+  return NextResponse.json({ runId: handle.id });
+}

@@ -38,6 +38,8 @@ export function SelectedAnglePanel({
   const [writeError, setWriteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [openingProject, setOpeningProject] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const scriptJob = useScriptJob({
     angleId: angle?.id ?? null,
@@ -48,11 +50,42 @@ export function SelectedAnglePanel({
 
   const preview = scriptJob.preview;
 
-  function handleWriteScript(wordCount: ScriptWordCount) {
+  async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
-    setDialogOpen(false);
+    setWriting(true);
     setWriteError(null);
-    scriptJob.start(angle.id, wordCount);
+    setProgress("Starting script generation...");
+
+    try {
+      const idempotencyKey = crypto.randomUUID();
+      const response = await fetch("/api/scripts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleId: angle.id, caseId, wordCount, idempotencyKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Failed to start script generation");
+
+      setProgress("Writing your script — this can take a few minutes for longer scripts...");
+
+      let result: { status: string; script?: string; wordCount?: number; error?: string };
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        result = await fetch(`/api/scripts/status/${data.runId}`).then((res) => res.json());
+      } while (result.status === "in_progress");
+
+      if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
+      if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
+
+      onScriptGenerated(angle.id, result.script, result.wordCount ?? wordCount, null);
+      setDialogOpen(false);
+      router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+    } catch (err) {
+      setWriteError(err instanceof Error ? err.message : "Failed to generate script");
+    } finally {
+      setWriting(false);
+      setProgress(null);
+    }
   }
 
   function handleReopenScript() {
@@ -253,15 +286,11 @@ export function SelectedAnglePanel({
             ) : (
               <button
                 onClick={() => setDialogOpen(true)}
-                disabled={scriptJob.writing}
+                disabled={writing}
                 className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70"
               >
-                {scriptJob.writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {scriptJob.writing
-                  ? scriptJob.progress
-                    ? `Writing section ${scriptJob.progress.sectionsCompleted}/${scriptJob.progress.totalSections || "?"}...`
-                    : "Starting..."
-                  : "Write Script"}
+                {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {writing ? progress ?? "Starting..." : "Write Script"}
               </button>
             )}
             <VideoSourcesSection caseId={caseId} caseName={angle.title.split(":")[0]} />
@@ -273,7 +302,7 @@ export function SelectedAnglePanel({
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onSelect={handleWriteScript}
-        busy={scriptJob.writing}
+        busy={writing}
       />
 
       {preview && (
