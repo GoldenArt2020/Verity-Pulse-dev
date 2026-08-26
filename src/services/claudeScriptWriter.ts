@@ -265,11 +265,10 @@ function toGenerationUsage(raw: RawUsage): GenerationUsage {
 // fails cleanly instead of silently consuming the whole task duration.
 const CLAUDE_TIMEOUT_MS = 240_000;
 
-// Anthropic's practical per-response output ceiling for this model family.
-// A 10,000-word script (~13,300 tokens) can exceed this in one shot, so
-// writeFullScript below transparently continues past this boundary rather
-// than exposing it as separate user-facing "sections."
-const MAX_TOKENS_PER_CALL = 8192;
+// Claude Sonnet 4.5's max output for a single response. A 10,000-word
+// script is roughly 13,300 tokens, so this comfortably covers the largest
+// supported word count in one call with headroom to spare.
+const MAX_TOKENS_PER_CALL = 16000;
 
 /**
  * Low-level Claude call. No `temperature` is sent — some models (extended
@@ -371,14 +370,11 @@ Write the narration now, straight through, as one continuous piece — no sectio
 }
 
 /**
- * Writes the whole script in as few Claude calls as possible. Claude can
- * write long-form content in a single response — the continuation loop
- * here exists purely as a safety net for when a script's target length
- * exceeds a single response's practical token ceiling (MAX_TOKENS_PER_CALL)
- * or the model stops early for some other reason, NOT as a deliberate
- * small-chunk design. From the caller's perspective this is one logical
- * "write the script" operation; the chunking (if any occurs at all) is
- * invisible outside this function.
+ * Writes the entire script in ONE Claude call. No section splitting, no
+ * continuation loop — this now runs inside a Trigger.dev task with up to
+ * 3600s available, so there's no per-request time pressure forcing the
+ * old chunked design. max_tokens is set high enough to cover the largest
+ * supported word count (10,000 words ≈ 13,300 tokens) with real headroom.
  */
 async function writeFullScript(
   caseData: CaseContext,
@@ -392,44 +388,15 @@ async function writeFullScript(
     { type: "text", text: buildChannelBibleBlock(channelDNA), cache_control: { type: "ephemeral" } },
   ];
 
-  let script = "";
-  let usage: RawUsage = {};
-  let previousTail: string | null = null;
+  const maxTokens = Math.min(MAX_TOKENS_PER_CALL, Math.max(2048, Math.ceil(wordCount * 2.2)));
 
-  // Safety cap on continuation calls, not a target — a 10,000-word script
-  // at ~8,192 tokens/call (~5,800 words/call in practice) should finish
-  // in 2 calls; this just bounds worst-case retries if the model keeps
-  // stopping short.
-  const MAX_CALLS = 6;
+  const { text, usage } = await callClaude(
+    systemBlocks,
+    buildWritePrompt(caseData, angle, brief, wordCount, null),
+    maxTokens
+  );
 
-  for (let call = 0; call < MAX_CALLS; call++) {
-    const currentWordCount = script.split(/\s+/).filter(Boolean).length;
-    if (call > 0 && currentWordCount >= wordCount * 0.95) break;
-
-    const remainingWords = Math.max(500, wordCount - currentWordCount);
-    const maxTokens = Math.min(MAX_TOKENS_PER_CALL, Math.max(1024, Math.ceil(remainingWords * 1.8)));
-
-    const { text, usage: callUsage, stopReason } = await callClaude(
-      systemBlocks,
-      buildWritePrompt(caseData, angle, brief, remainingWords, previousTail),
-      maxTokens
-    );
-
-    script = script ? `${script} ${text}`.trim() : text.trim();
-    usage = mergeUsage(usage, callUsage);
-
-    const newWordCount = script.split(/\s+/).filter(Boolean).length;
-    const closeEnough = newWordCount >= wordCount * 0.95;
-    const stoppedNaturally = stopReason === "end_turn" || stopReason === "stop_sequence";
-
-    if (closeEnough || (stoppedNaturally && newWordCount >= wordCount * 0.7)) {
-      break;
-    }
-
-    previousTail = script.split(/\s+/).slice(-150).join(" ");
-  }
-
-  return { script, usage };
+  return { script: text.trim(), usage };
 }
 
 /**
