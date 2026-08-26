@@ -1,6 +1,7 @@
 import { task } from "@trigger.dev/sdk";
 import { generateScriptSingleCall, type ValidWordCount } from "@/services/claudeScriptWriter";
 import { completeGeneration, failGeneration } from "@/lib/entitlements";
+import { createServiceClient } from "@/lib/supabase/service";
 
 interface WriteScriptPayload {
   angleId: string;
@@ -24,28 +25,34 @@ export const writeScript = task({
   maxDuration: 3600,
   run: async (payload: WriteScriptPayload) => {
     const startedAt = Date.now();
+    const supabase = createServiceClient();
     try {
       const { script, usage } = await generateScriptSingleCall(
         payload.angleId,
         payload.caseId,
         payload.wordCount,
-        payload.userId
+        payload.userId,
+        supabase
       );
 
-      await completeGeneration(payload.generationId, {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cacheCreationInputTokens: usage.cacheCreationInputTokens,
-        cacheReadInputTokens: usage.cacheReadInputTokens,
-        durationMs: Date.now() - startedAt,
-        estimatedCostUsd: usage.estimatedCostUsd,
-      });
+      await completeGeneration(
+        payload.generationId,
+        {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheCreationInputTokens: usage.cacheCreationInputTokens,
+          cacheReadInputTokens: usage.cacheReadInputTokens,
+          durationMs: Date.now() - startedAt,
+          estimatedCostUsd: usage.estimatedCostUsd,
+        },
+        supabase
+      );
 
       const wordCount = script.split(/\s+/).filter(Boolean).length;
       return { script, wordCount };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Script generation failed";
-      await failGeneration(payload.generationId, payload.userId, message);
+      await failGeneration(payload.generationId, payload.userId, message, createServiceClient());
       throw err;
     }
   },

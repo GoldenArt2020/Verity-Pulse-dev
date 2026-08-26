@@ -1,35 +1,24 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Service-role Supabase client — bypasses Row Level Security entirely.
+ * Service-role Supabase client for contexts with no incoming HTTP
+ * request — e.g. Trigger.dev background tasks — where the cookie-based
+ * createClient() in ./server.ts cannot work (Next.js's cookies() throws
+ * when called outside a request scope).
  *
- * ONLY use this in trusted server-to-server contexts that have already
- * verified the caller through some other means (e.g. the CRON_SECRET
- * bearer check on the news-poll route). NEVER use this for anything
- * reachable directly from a logged-in user's browser session.
- *
- * Why this exists: the normal cookie-based `createClient()` in
- * `./server.ts` has NO session at all when called from a cron job (no
- * browser, no cookies were ever sent — GitHub Actions just does a bare
- * `curl -X POST`). If a table has RLS requiring `auth.uid()` to be set,
- * every read/write from that context fails silently — Supabase returns
- * an error object rather than throwing, so nothing crashes, it just
- * quietly never persists anything. This client is how server-only
- * background jobs actually get real access.
+ * This bypasses RLS entirely, which is safe ONLY because every caller
+ * here already has an explicitly-verified userId (verified by the
+ * Vercel route that reserved the generation and enqueued the task)
+ * rather than deriving identity from a session. It must never be used
+ * to serve a request directly from the browser, and the service role
+ * key must never be exposed client-side.
  */
-export function createServiceClient() {
+export function createServiceClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL — service client cannot be created");
+  if (!url || !serviceKey) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set");
   }
-  if (!serviceKey) {
-    throw new Error(
-      "Missing SUPABASE_SERVICE_ROLE_KEY — add it in Vercel env vars (Supabase dashboard → Project Settings → API → service_role secret) for the service client to work"
-    );
-  }
-
   return createSupabaseClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

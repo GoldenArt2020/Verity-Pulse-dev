@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
 import type { ChannelDNA } from "@/services/creatorDNA";
@@ -183,9 +184,10 @@ function parseJsonObject<T>(raw: string): T {
 async function loadContext(
   angleId: string,
   caseId: string,
-  userId: string
+  userId: string,
+  supabaseClient?: SupabaseClient
 ): Promise<{ angle: AngleContext; caseData: CaseContext; channelDNA: ChannelDNA | null }> {
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? (await createClient());
 
   const [{ data: angleRow, error: angleError }, { data: caseRow, error: caseError }] = await Promise.all([
     supabase
@@ -236,9 +238,10 @@ async function loadContext(
 
 export async function getOrBuildResearchBrief(
   angleId: string,
-  caseId: string
+  caseId: string,
+  supabaseClient?: SupabaseClient
 ): Promise<ResearchBrief> {
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? (await createClient());
 
   const { data: existingAngle } = await supabase
     .from("angles")
@@ -250,7 +253,7 @@ export async function getOrBuildResearchBrief(
     return existingAngle.research_brief as ResearchBrief;
   }
 
-  const { angle, caseData } = await loadContext(angleId, caseId, "");
+  const { angle, caseData } = await loadContext(angleId, caseId, "", supabase);
 
   let researchText = "No additional research available beyond the case summary above.";
   if (tavilyProvider.isConfigured()) {
@@ -816,11 +819,12 @@ export async function generateScriptSingleCall(
   angleId: string,
   caseId: string,
   wordCount: ValidWordCount,
-  userId: string
+  userId: string,
+  supabaseClient?: SupabaseClient
 ): Promise<{ script: string; usage: GenerationUsage }> {
-  const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId);
+  const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId, supabaseClient);
 
-  const brief = await getOrBuildResearchBrief(angleId, caseId);
+  const brief = await getOrBuildResearchBrief(angleId, caseId, supabaseClient);
 
   const channelBible = buildChannelBibleBlock(channelDNA);
   const systemBlocks = [

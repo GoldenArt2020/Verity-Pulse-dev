@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ReservationResult {
   ok: boolean;
@@ -104,9 +105,10 @@ export async function completeGeneration(
     cacheReadInputTokens?: number;
     durationMs: number;
     estimatedCostUsd: number;
-  }
+  },
+  supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? (await createClient());
   await supabase
     .from("script_generations")
     .update({
@@ -124,8 +126,13 @@ export async function completeGeneration(
 
 /** A failed generation refunds the credit — the user shouldn't lose a
  * credit for a Claude API error or timeout that produced nothing usable. */
-export async function failGeneration(generationId: string, userId: string, errorMessage: string): Promise<void> {
-  const supabase = await createClient();
+export async function failGeneration(
+  generationId: string,
+  userId: string,
+  errorMessage: string,
+  supabaseClient?: SupabaseClient
+): Promise<void> {
+  const supabase = supabaseClient ?? (await createClient());
   await supabase
     .from("script_generations")
     .update({ status: "failed", error: errorMessage, completed_at: new Date().toISOString() })
