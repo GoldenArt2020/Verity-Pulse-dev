@@ -40,6 +40,7 @@ export interface GeneratedAngle {
   script: string | null;
   scriptGeneratedAt: string | null;
   scriptWordCount?: number | null;
+  activeScriptRunId?: string | null;
   seo?: { title: string | null; description: string | null; tags: string[] } | null;
   caseWriteup: string;
   channelFit: string;

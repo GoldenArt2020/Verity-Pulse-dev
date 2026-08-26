@@ -21,9 +21,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
 
     if (run.status === "COMPLETED") {
       const output = run.output as { script: string; wordCount: number } | undefined;
+      await supabase.from("angles").update({ active_script_run_id: null }).eq("active_script_run_id", runId);
       return NextResponse.json({ status: "complete", script: output?.script, wordCount: output?.wordCount });
     }
     if (run.status === "FAILED" || run.status === "CRASHED" || run.status === "TIMED_OUT") {
+      await supabase.from("angles").update({ active_script_run_id: null }).eq("active_script_run_id", runId);
       return NextResponse.json({ status: "failed", error: run.error?.message ?? "Script generation failed" });
     }
     return NextResponse.json({ status: "in_progress" });

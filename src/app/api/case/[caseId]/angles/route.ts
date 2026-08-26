@@ -12,7 +12,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("angles")
     .select(
-      "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, script_word_count, seo_description, seo_tags, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
+      "id, title, core_question, why_it_works, research_focus, opening_hook, scores, script, script_generated_at, script_word_count, active_script_run_id, seo_description, seo_tags, case_writeup, channel_fit, why_work_on_it, curiosity_gaps, latest_findings, title_ideas"
     )
     .eq("case_id", caseId)
     .eq("status", "active")
@@ -33,6 +33,7 @@ export async function GET(
     script: row.script,
     scriptGeneratedAt: row.script_generated_at,
     scriptWordCount: row.script_word_count,
+    activeScriptRunId: row.active_script_run_id ?? null,
     seo:
       row.seo_description || row.seo_tags
         ? { description: row.seo_description, tags: row.seo_tags ?? [] }

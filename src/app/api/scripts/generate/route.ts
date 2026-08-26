@@ -47,5 +47,10 @@ export async function POST(req: NextRequest) {
     generationId: reservation.generationId!,
   });
 
+  // Persisted so the client can recover and resume polling this exact
+  // real run after a connection drop, tab close, or refresh — the run
+  // itself keeps going on Trigger's servers regardless.
+  await supabase.from("angles").update({ active_script_run_id: handle.id }).eq("id", angleId);
+
   return NextResponse.json({ runId: handle.id });
 }

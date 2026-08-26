@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, FileText, Loader2, ExternalLink } from "lucide-react";
 import type { GeneratedAngle } from "@/app/angle-builder/[caseId]/page";
@@ -47,6 +47,55 @@ export function SelectedAnglePanel({
   const [progress, setProgress] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScriptPreview | null>(null);
 
+  async function pollUntilDone(
+    runId: string,
+    onProgress: (msg: string) => void
+  ): Promise<{ script: string; wordCount: number }> {
+    let consecutiveNetworkFailures = 0;
+
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
+      let result: { status: string; script?: string; wordCount?: number; error?: string };
+      try {
+        const res = await fetch(`/api/scripts/status/${runId}`);
+        result = await res.json();
+        consecutiveNetworkFailures = 0;
+      } catch {
+        consecutiveNetworkFailures++;
+        if (consecutiveNetworkFailures >= 3) {
+          onProgress("Connection lost — your script is still being written. Reconnecting...");
+        }
+        continue;
+      }
+
+      if (result.status === "in_progress") {
+        onProgress("Writing your script — this can take a few minutes for longer scripts...");
+        continue;
+      }
+      if (result.status === "failed") {
+        throw new Error(result.error ?? "Script generation failed");
+      }
+      if (!result.script) {
+        throw new Error("Script generation returned no script");
+      }
+      return { script: result.script, wordCount: result.wordCount ?? 0 };
+    }
+  }
+
+  useEffect(() => {
+    if (!angle?.activeScriptRunId || angle.script) return;
+    setWriting(true);
+    setWriteError(null);
+    pollUntilDone(angle.activeScriptRunId, setProgress)
+      .then((result) => {
+        onScriptGenerated(angle.id, result.script, result.wordCount, null);
+        router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+      })
+      .catch((err) => setWriteError(err instanceof Error ? err.message : "Failed to generate script"))
+      .finally(() => setWriting(false));
+  }, [angle?.id, angle?.activeScriptRunId]);
+
   async function handleWriteScript(wordCount: ScriptWordCount) {
     if (!angle) return;
     setWriting(true);
@@ -63,20 +112,8 @@ export function SelectedAnglePanel({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Failed to start script generation");
 
-      setProgress("Writing your script — this can take a few minutes for longer scripts...");
-
-      let result: { status: string; script?: string; wordCount?: number; error?: string };
-      do {
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-        const statusRes = await fetch(`/api/scripts/status/${data.runId}`);
-        result = await statusRes.json();
-        if (!statusRes.ok) throw new Error(result.error ?? "Failed to check generation status");
-      } while (result.status === "in_progress");
-
-      if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
-      if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
-
-      const finalWordCount = result.wordCount ?? wordCount;
+      const result = await pollUntilDone(data.runId, setProgress);
+      const finalWordCount = result.wordCount || wordCount;
       onScriptGenerated(angle.id, result.script, finalWordCount, null);
       setDialogOpen(false);
       setPreview({ script: result.script, wordCount: finalWordCount });
