@@ -315,7 +315,7 @@ export function SelectedAnglePanel({
           primaryError={writeError}
           onPrimaryAction={handleOpenInProject}
           onRewrite={() => setDialogOpen(true)}
-          rewriting={scriptJob.writing}
+          rewriting={writing}
           onClose={() => {
             scriptJob.closePreview();
             setWriteError(null);
