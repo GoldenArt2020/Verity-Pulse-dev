@@ -327,22 +327,19 @@ export async function getOrBuildResearchBrief(
   if (tavilyProvider.isConfigured()) {
     try {
       const newsOptions = computeRecencyWindow(caseData.lastUpdated);
-      const queries = [
-        { q: `${caseData.name} official timeline dates` },
-        { q: `${caseData.name} ${angle.researchFocus[0] ?? ""}` },
-        { q: `${caseData.name} announcement date confirmed` },
-        { q: `${caseData.name} victims remembered who they were` },
-        { q: `${caseData.name} sentencing outcome each defendant` },
-        { q: `${caseData.name} who confessed how many` },
+      const dateQueries = [
+        `${caseData.name} official timeline dates`,
+        `${caseData.name} ${angle.researchFocus[0] ?? ""}`,
+        `${caseData.name} announcement date confirmed`,
+        `${caseData.name} sentencing outcome each defendant`,
+        `${caseData.name} who confessed how many`,
+        `${caseData.name} each defendant sentence outcome individually`,
       ];
+      const bioQuery = `${caseData.name} victims remembered who they were`;
       const resultSets = await Promise.all(
         [
-          tavilyProvider.search(queries[0].q, 5, newsOptions).catch(() => []),
-          tavilyProvider.search(queries[1].q, 5, newsOptions).catch(() => []),
-          tavilyProvider.search(queries[2].q, 5, newsOptions).catch(() => []),
-          tavilyProvider.search(queries[3].q, 5, { topic: "general" }).catch(() => []),
-          tavilyProvider.search(queries[4].q, 4, newsOptions).catch(() => []),
-          tavilyProvider.search(queries[5].q, 4, newsOptions).catch(() => []),
+          ...dateQueries.map((query) => tavilyProvider.search(query, 4, newsOptions).catch(() => [])),
+          tavilyProvider.search(bioQuery, 5, { topic: "general" }).catch(() => []),
         ]
       );
       const seen = new Set<string>();
@@ -362,10 +359,12 @@ export async function getOrBuildResearchBrief(
     }
   }
 
-  const briefRaw = await groqProvider.generateText(buildResearchPrompt(caseData, angle, researchText), {
-    temperature: 0.3,
-    maxTokens: 2200,
-  });
+  // Research extraction uses Claude, not Groq, for this specific call —
+  // this is the factual foundation every downstream script, rewrite, and
+  // verification pass relies on. Groq was found to collapse distinct
+  // individuals' outcomes into one shared (and wrong) group statement even
+  // with explicit per-person instructions and good source material.
+  const { text: briefRaw } = await callClaude(undefined, buildResearchPrompt(caseData, angle, researchText), 2200);
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
 
   await supabase.from("angles").update({ research_brief: brief }).eq("id", angleId);
