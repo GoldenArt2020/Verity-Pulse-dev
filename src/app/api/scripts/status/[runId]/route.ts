@@ -16,13 +16,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  // Ownership check FIRST, before we ever look at the Trigger.dev run itself.
-  // Adjust the join below to match your schema — this assumes `angles.case_id`
-  // -> `cases.user_id`. If angles/cases don't carry user_id directly, join
-  // through whatever table does (e.g. a `projects` or `workspaces` table).
+  // Ownership chain: angles.case_id -> cases.channel_id -> channels.user_id.
+  // Resolve ownership before looking up the Trigger.dev run itself.
   const { data: angle, error: angleError } = await supabase
     .from("angles")
-    .select("id, case_id, cases!inner(user_id)")
+    .select("id, case_id, cases!inner(channel_id, channels!inner(user_id))")
     .eq("active_script_run_id", runId)
     .maybeSingle();
 
@@ -42,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
   }
 
   // @ts-expect-error - Supabase's generated types don't infer the joined shape here
-  const ownerId = angle.cases?.user_id;
+  const ownerId = angle.cases?.channels?.user_id;
   if (ownerId !== user.id) {
     return NextResponse.json({ error: "Not authorized to view this run." }, { status: 403 });
   }
