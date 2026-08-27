@@ -27,7 +27,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
     .maybeSingle();
 
   if (angleError) {
-    return NextResponse.json({ error: "Failed to verify run ownership." }, { status: 500 });
+    console.error("Ownership check failed:", angleError);
+    return NextResponse.json(
+      { error: `Failed to verify run ownership: ${angleError.message}` },
+      { status: 500 }
+    );
   }
 
   // If no angle currently has this runId as its active run, either it was
