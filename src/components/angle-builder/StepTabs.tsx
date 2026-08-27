@@ -2,7 +2,6 @@
 
 const STEPS = [
   "Generate Angles",
-  "Analyze & Refine",
   "Title Suggestions",
   "Description Creator",
   "Tag Creation",

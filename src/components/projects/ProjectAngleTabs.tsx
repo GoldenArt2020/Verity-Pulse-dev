@@ -128,7 +128,6 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           : a
       )
     );
-    setStep(1);
     if (writingAngleRef.current === forAngleId) {
       setPreview({ script: result.script, wordCount: finalWordCount });
     }
@@ -149,8 +148,6 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
             ? requestedAngleId
             : loaded[0]?.id ?? null;
         setActiveId(preferred);
-        const preferredAngle = loaded.find((a) => a.id === preferred);
-        if (preferredAngle?.script) setStep(1);
 
         // Resume polling for ANY angle that has a run in flight, not just the
         // active one — the job doesn't care which tab is open, and if we only
@@ -295,7 +292,7 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         ))}
       </div>
 
-      {(step === 0 || step === 1) && activeAngle && (
+      {step === 0 && activeAngle && (
         <div className="mt-4 rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-emerald-500 text-sm font-bold text-emerald-400">
@@ -348,9 +345,9 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      {step === 2 && activeAngle && <TitleSuggestionsPanel key={activeAngle.id} angleId={activeAngle.id} />}
-      {step === 3 && activeAngle && <DescriptionCreatorPanel key={activeAngle.id} angleId={activeAngle.id} />}
-      {step === 4 && activeAngle && <TagCreationPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 1 && activeAngle && <TitleSuggestionsPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 2 && activeAngle && <DescriptionCreatorPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 3 && activeAngle && <TagCreationPanel key={activeAngle.id} angleId={activeAngle.id} />}
 
       <ScriptLengthDialog
         open={dialogOpen}
