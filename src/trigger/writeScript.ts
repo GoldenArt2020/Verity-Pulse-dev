@@ -27,13 +27,20 @@ export const writeScript = task({
     const startedAt = Date.now();
     const supabase = createServiceClient();
     try {
-      const { script, usage } = await generateScriptSingleCall(
+      const { script, usage, verificationIssues } = await generateScriptSingleCall(
         payload.angleId,
         payload.caseId,
         payload.wordCount,
         payload.userId,
         supabase
       );
+
+      if (verificationIssues && verificationIssues.length > 0) {
+        console.warn(
+          `[writeScript] ${verificationIssues.length} potential factual issue(s) found for angle ${payload.angleId}:`,
+          JSON.stringify(verificationIssues, null, 2)
+        );
+      }
 
       const wordCount = script.split(/\s+/).filter(Boolean).length;
 

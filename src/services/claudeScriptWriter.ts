@@ -53,8 +53,17 @@ export interface GenerationUsage {
   estimatedCostUsd: number;
 }
 
+interface PersonFact {
+  name: string;
+  role: "victim" | "accused" | "perpetrator" | "official" | "other";
+  outcome: string;
+  confessionStatus: string | null;
+  aliveStatus: string;
+}
+
 interface ResearchBrief {
   caseFacts: string[];
+  peopleFacts: PersonFact[];
   outline: string[];
 }
 
@@ -112,7 +121,7 @@ BANNED PHRASES AND PATTERNS — these are overused AI-narration tics. Do not use
 
 If you notice yourself reaching for one of these because the moment feels like it needs a dramatic beat, find a concrete detail from the case facts instead — specificity creates the tension these phrases are trying to fake.
 
-FACTUAL DISCIPLINE — this is non-negotiable: distinguish CONFIRMED FACT from ALLEGATION, POLICE CLAIM, PROSECUTION CLAIM, DEFENSE CLAIM, REPORTING, and INFERENCE. Never present an allegation as established fact. Never invent dialogue, police statements, motives, or evidence. If the research does not establish something, say it remains unknown rather than filling the gap.
+FACTUAL DISCIPLINE — this is non-negotiable: distinguish CONFIRMED FACT from ALLEGATION, POLICE CLAIM, PROSECUTION CLAIM, DEFENSE CLAIM, REPORTING, and INFERENCE. Never present an allegation as established fact. Never invent dialogue, police statements, motives, or evidence. If the research brief does not establish something, say it remains unknown rather than filling the gap — but say this narrowly and honestly: "this script doesn't go into X" or simply omit the point, never "the historical record doesn't preserve X" or "this isn't publicly documented." A gap in your research brief is not evidence of a gap in the historical record, and claiming the latter is itself a factual error. When the peopleFacts data distinguishes outcomes between individuals (who confessed, who was convicted, who received what sentence, who is alive), never collapse those into a single collective statement about the group — state each person's specific situation.
 
 ETHICAL RULES: no glorification of killers, no exploitative treatment of victims, no graphic description beyond what's necessary and responsibly presented, no unsupported accusations.
 
@@ -156,6 +165,7 @@ DATE AND COUNT ACCURACY — critical:
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
   "caseFacts": string[] (10-18 concrete, specific facts from the source material — dates, names, roles, evidence, statements, distinguishing CONFIRMED FACT from ALLEGATION/CLAIM/REPORTING where the sources make that distinction; do not invent anything not supported by the sources. Include BOTH event/procedural facts AND biographical/human facts: who each named person was before this case touched them — age, occupation, personality, relationships, what people who knew them said about them — for victims, the accused, and any other central figures the source material describes. If the source material contains little or no biographical detail for someone, say so explicitly as a fact rather than omitting them entirely, e.g. "Source material does not describe X's life before the case."),
+  "peopleFacts": [{ "name": string, "role": "victim" | "accused" | "perpetrator" | "official" | "other", "outcome": string (specific — e.g. "sentenced to death, later exonerated" not "convicted"), "confessionStatus": string | null (only for accused; e.g. "confessed" / "did not confess" / "not stated in source material"), "aliveStatus": string (e.g. "alive as of [date]" / "died [year/date]" / "not stated in source material") }] (one entry per named individual who is a victim, accused/convicted person, or identified perpetrator — do not skip anyone the source material names in these roles),
   "outline": string[] (4-7 items — a one-line description of each major beat the narration should hit, in strict order, building toward fully answering the core question by the end; ensure at least one beat is dedicated to grounding the central people as people, not just as case participants, if the case facts support it; do not number them yourself)
 }
 
@@ -322,6 +332,8 @@ export async function getOrBuildResearchBrief(
         { q: `${caseData.name} ${angle.researchFocus[0] ?? ""}` },
         { q: `${caseData.name} announcement date confirmed` },
         { q: `${caseData.name} victims remembered who they were` },
+        { q: `${caseData.name} sentencing outcome each defendant` },
+        { q: `${caseData.name} who confessed how many` },
       ];
       const resultSets = await Promise.all(
         [
@@ -329,6 +341,8 @@ export async function getOrBuildResearchBrief(
           tavilyProvider.search(queries[1].q, 5, newsOptions).catch(() => []),
           tavilyProvider.search(queries[2].q, 5, newsOptions).catch(() => []),
           tavilyProvider.search(queries[3].q, 5, { topic: "general" }).catch(() => []),
+          tavilyProvider.search(queries[4].q, 4, newsOptions).catch(() => []),
+          tavilyProvider.search(queries[5].q, 4, newsOptions).catch(() => []),
         ]
       );
       const seen = new Set<string>();
@@ -486,6 +500,9 @@ WHY THIS ANGLE WORKS: ${angle.whyItWorks}
 CASE FACTS TO DRAW FROM (do not invent facts beyond these):
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
+STRUCTURED PEOPLE FACTS (use each person's specific outcome and status; do not merge people):
+${(brief.peopleFacts ?? []).map((person) => `- ${person.name} | role: ${person.role} | outcome: ${person.outcome} | confession: ${person.confessionStatus ?? "not applicable"} | alive status: ${person.aliveStatus}`).join("\n") || "No structured people facts available."}
+
 NARRATIVE ARC TO COVER, IN ORDER:
 ${brief.outline.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 
@@ -606,7 +623,7 @@ export async function startScriptJob(
       angle_id: angleId,
       status: "writing",
       word_count: wordCount,
-      brief: { caseFacts: brief.caseFacts, outline: brief.outline },
+      brief: { caseFacts: brief.caseFacts, peopleFacts: brief.peopleFacts ?? [], outline: brief.outline },
       outline: brief.outline,
       sections: [],
       current_section_index: 0,
@@ -821,6 +838,9 @@ WHY THIS ANGLE WORKS: ${angle.whyItWorks}
 CASE FACTS TO DRAW FROM (do not invent facts beyond these):
 ${brief.caseFacts.map((f) => `- ${f}`).join("\n")}
 
+STRUCTURED PEOPLE FACTS (use each person's specific outcome and status; do not merge people):
+${(brief.peopleFacts ?? []).map((person) => `- ${person.name} | role: ${person.role} | outcome: ${person.outcome} | confession: ${person.confessionStatus ?? "not applicable"} | alive status: ${person.aliveStatus}`).join("\n") || "No structured people facts available."}
+
 SUGGESTED STORY ARC (use this as internal structure — do not label or number sections in the output):
 ${brief.outline.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 
@@ -891,6 +911,48 @@ function endsCleanly(text: string): boolean {
   return /[.!?]["\)\u201d\u2019]?\s*$/.test(text.trim());
 }
 
+interface VerificationIssue {
+  claim: string;
+  problem: string;
+}
+
+function buildVerificationPrompt(script: string, brief: ResearchBrief): string {
+  return `You are a fact-checker reviewing a true crime script against a structured research brief before publication.
+
+RESEARCH BRIEF — PEOPLE FACTS (ground truth for this check):
+${JSON.stringify(brief.peopleFacts ?? [], null, 2)}
+
+RESEARCH BRIEF — CASE FACTS (ground truth for this check):
+${brief.caseFacts.map((fact) => `- ${fact}`).join("\n")}
+
+SCRIPT TO CHECK:
+${script}
+
+Compare the script against the brief above. Flag ONLY clear contradictions — places where the script states something that directly conflicts with a specific fact in the brief (e.g. brief says one person was sentenced to death but script implies all were; brief says a person died in a given year but script treats them as alive; brief gives one date for an event but script states a different date for the same event; brief distinguishes who confessed but script says a different or larger group confessed).
+
+Do NOT flag: stylistic choices, omissions of detail the brief also doesn't specify, reasonable narrative framing, or claims the brief doesn't address either way.
+
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{
+  "issues": [{ "claim": string (the specific script statement, quoted or closely paraphrased), "problem": string (what fact it contradicts and what the brief actually says) }]
+}
+
+If there are no contradictions, return { "issues": [] }. Return ONLY the JSON object.`;
+}
+
+export async function verifyScriptAgainstBrief(
+  script: string,
+  brief: ResearchBrief
+): Promise<VerificationIssue[]> {
+  try {
+    const { text: raw } = await callClaude(undefined, buildVerificationPrompt(script, brief), 1500);
+    const result = parseJsonObject<{ issues: VerificationIssue[] }>(raw);
+    return result.issues ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * True single-call generation: research + outline (Tavily + one quick
  * Groq call, same as before) feeds ONE Claude call that writes the
@@ -908,7 +970,7 @@ export async function generateScriptSingleCall(
   wordCount: ValidWordCount,
   userId: string,
   supabaseClient?: SupabaseClient
-): Promise<{ script: string; usage: GenerationUsage }> {
+): Promise<{ script: string; usage: GenerationUsage; verificationIssues?: VerificationIssue[] }> {
   const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId, supabaseClient);
 
   const brief = await getOrBuildResearchBrief(angleId, caseId, supabaseClient, true);
@@ -943,5 +1005,84 @@ export async function generateScriptSingleCall(
     }
   }
 
-  return { script, usage: toGenerationUsage(totalUsage) };
+  const verificationIssues = await verifyScriptAgainstBrief(script, brief);
+
+  return { script, usage: toGenerationUsage(totalUsage), verificationIssues };
+}
+
+function buildRewritePrompt(
+  caseData: CaseContext,
+  angle: AngleContext,
+  brief: ResearchBrief,
+  currentScript: string,
+  critique: string
+): string {
+  return `You are revising an existing true crime YouTube narration script for "${caseData.name}" based on editorial critique.
+
+ANGLE: ${angle.title}
+CORE QUESTION: ${angle.coreQuestion}
+
+GROUND-TRUTH RESEARCH — PEOPLE FACTS (the authoritative source for names, outcomes, confession status, alive/deceased status):
+${JSON.stringify(brief.peopleFacts ?? [], null, 2)}
+
+GROUND-TRUTH RESEARCH — CASE FACTS:
+${brief.caseFacts.map((fact) => `- ${fact}`).join("\n")}
+
+CURRENT SCRIPT:
+${currentScript}
+
+EDITORIAL CRITIQUE TO ADDRESS:
+${critique}
+
+Rewrite the FULL script addressing the critique above. Important rules:
+- Where the critique cites a specific, verifiable correction (a date, a name, a count, an outcome), apply it — but only if it doesn't contradict the GROUND-TRUTH RESEARCH above. If the critique conflicts with the ground-truth research, follow the ground-truth research and do not silently apply the critique's version.
+- Where the critique makes a stylistic or structural suggestion, use your judgment on whether it improves the script.
+- Do not introduce new claims, dates, or details that aren't supported by either the ground-truth research or the original script.
+- Preserve the overall voice, structure, and length of the original unless the critique specifically calls for a structural change.
+- Output the complete rewritten script, start to finish, in one continuous piece — no section headers, no bracketed notes, no preamble like "Here is the revised script," no commentary about what you changed. Finish on a complete sentence.`;
+}
+
+/** Rewrites a script against its research brief, then runs the same safety check as generation. */
+export async function rewriteScriptSingleCall(
+  angleId: string,
+  caseId: string,
+  currentScript: string,
+  critique: string,
+  userId: string,
+  supabaseClient?: SupabaseClient
+): Promise<{ script: string; usage: GenerationUsage; verificationIssues?: VerificationIssue[] }> {
+  const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId, supabaseClient);
+  const brief = await getOrBuildResearchBrief(angleId, caseId, supabaseClient);
+  const channelBible = buildChannelBibleBlock(channelDNA);
+  const systemBlocks = [
+    { type: "text" as const, text: RETENTION_ENGINE, cache_control: { type: "ephemeral" as const } },
+    { type: "text" as const, text: channelBible, cache_control: { type: "ephemeral" as const } },
+  ];
+
+  const { text: firstPass, usage: firstUsage } = await callClaudeExtended(
+    systemBlocks,
+    buildRewritePrompt(caseData, angle, brief, currentScript, critique),
+    SINGLE_CALL_MAX_TOKENS
+  );
+
+  let script = firstPass;
+  let totalUsage = firstUsage;
+  if (!endsCleanly(script)) {
+    try {
+      const tail = script.split(/\s+/).slice(-60).join(" ");
+      const { text: continuation, usage: contUsage } = await callClaudeExtended(
+        systemBlocks,
+        `The script was cut off mid-sentence. Here is exactly how it ends:\n\n"...${tail}"\n\nWrite ONLY the rest of that final unfinished sentence, plus a proper closing to end the script naturally. Do not repeat anything above. Plain narration text only, no preamble.`,
+        500
+      );
+      script = `${script} ${continuation.trim()}`.trim();
+      totalUsage = mergeUsage(totalUsage, contUsage);
+    } catch {
+      // Non-fatal — ship what we have rather than fail the rewrite.
+    }
+  }
+
+  const verificationIssues = await verifyScriptAgainstBrief(script, brief);
+
+  return { script, usage: toGenerationUsage(totalUsage), verificationIssues };
 }

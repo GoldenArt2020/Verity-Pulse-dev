@@ -9,6 +9,7 @@ import { ScriptPreviewModal } from "@/components/discover/scripts/ScriptPreviewM
 import { TitleSuggestionsPanel } from "@/components/projects/TitleSuggestionsPanel";
 import { DescriptionCreatorPanel } from "@/components/projects/DescriptionCreatorPanel";
 import { TagCreationPanel } from "@/components/projects/TagCreationPanel";
+import { AnalyzeRefinePanel } from "@/components/projects/AnalyzeRefinePanel";
 import type { ScriptWordCount } from "@/constants/scriptOptions";
 
 interface AngleScores {
@@ -28,9 +29,11 @@ interface ProjectAngle {
   openingHook: string;
   scores: AngleScores;
   script: string | null;
+  scriptPrevious: string | null;
   scriptGeneratedAt: string | null;
   scriptWordCount?: number | null;
   activeScriptRunId?: string | null;
+  verificationIssues?: { claim: string; problem: string }[] | null;
 }
 
 interface ScriptPreview {
@@ -345,9 +348,29 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      {step === 1 && activeAngle && <TitleSuggestionsPanel key={activeAngle.id} angleId={activeAngle.id} />}
-      {step === 2 && activeAngle && <DescriptionCreatorPanel key={activeAngle.id} angleId={activeAngle.id} />}
-      {step === 3 && activeAngle && <TagCreationPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 1 && activeAngle && (
+        <AnalyzeRefinePanel
+          key={activeAngle.id}
+          angleId={activeAngle.id}
+          caseId={caseId}
+          script={activeAngle.script}
+          scriptPrevious={activeAngle.scriptPrevious}
+          verificationIssues={activeAngle.verificationIssues}
+          onScriptUpdated={(newScript, newPrevious, newIssues) => {
+            setAngles((prev) =>
+              prev.map((a) =>
+                a.id === activeAngle.id
+                  ? { ...a, script: newScript, scriptPrevious: newPrevious, verificationIssues: newIssues }
+                  : a
+              )
+            );
+          }}
+          onViewScript={() => handleReopenScript(activeAngle)}
+        />
+      )}
+      {step === 2 && activeAngle && <TitleSuggestionsPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 3 && activeAngle && <DescriptionCreatorPanel key={activeAngle.id} angleId={activeAngle.id} />}
+      {step === 4 && activeAngle && <TagCreationPanel key={activeAngle.id} angleId={activeAngle.id} />}
 
       <ScriptLengthDialog
         open={dialogOpen}
