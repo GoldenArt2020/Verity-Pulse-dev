@@ -662,13 +662,17 @@ export async function finalizeScriptJob(
   const cleanScript = job.sections.join("\n\n").trim();
   const wordCount = cleanScript.split(/\s+/).filter(Boolean).length;
 
-  const { error: saveError } = await supabase
+  // Request the updated row so a write that affects zero rows cannot appear
+  // successful when RLS or an incorrect job reference blocks the update.
+  const { data: savedAngle, error: saveError } = await supabase
     .from("angles")
     .update({ script: cleanScript, script_generated_at: new Date().toISOString() })
-    .eq("id", job.angle_id);
+    .eq("id", job.angle_id)
+    .select("id")
+    .single();
 
-  if (saveError) {
-    throw new Error(`Failed to save script: ${saveError.message}`);
+  if (saveError || !savedAngle) {
+    throw new Error(`Failed to save script: ${saveError?.message ?? "update affected no rows"}`);
   }
 
   await supabase
