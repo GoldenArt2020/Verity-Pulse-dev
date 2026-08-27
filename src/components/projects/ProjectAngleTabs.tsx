@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, FileText, Check } from "lucide-react";
 import { StepTabs } from "@/components/angle-builder/StepTabs";
@@ -30,12 +30,23 @@ interface ProjectAngle {
   script: string | null;
   scriptGeneratedAt: string | null;
   scriptWordCount?: number | null;
+  activeScriptRunId?: string | null;
 }
 
 interface ScriptPreview {
   script: string;
   wordCount: number;
 }
+
+type PollResult = {
+  status: string;
+  script?: string;
+  wordCount?: number;
+  error?: string;
+};
+
+const POLL_INTERVAL_MS = 4000;
+const MAX_CONSECUTIVE_POLL_ERRORS = 5;
 
 function totalScore(a: ProjectAngle) {
   const s = a.scores;
@@ -57,13 +68,71 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
   const [writeError, setWriteError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  // Which angle is currently generating (null when nothing's in flight).
-  // A ref, not just state, because the poll loop below is an async
-  // function that needs to check the LATEST value at each iteration —
-  // state captured in a closure would go stale across awaits.
   const [writingAngleId, setWritingAngleId] = useState<string | null>(null);
   const writingAngleRef = useRef<string | null>(null);
   const [preview, setPreview] = useState<ScriptPreview | null>(null);
+
+  // Guards against resuming the same runId twice (e.g. StrictMode double-invoke,
+  // or the angles list refetching while a resume is already in flight).
+  const resumedRunIds = useRef<Set<string>>(new Set());
+
+  // Shared by both the "just clicked Write Script" path and the "resuming an
+  // existing run on mount" path. Tolerates transient poll failures (a
+  // backgrounded tab, a stale auth cookie, a blip) instead of aborting a
+  // multi-minute generation on the first hiccup — the Trigger.dev job keeps
+  // running server-side regardless of whether we're successfully watching it.
+  const pollRun = useCallback(async (runId: string): Promise<PollResult> => {
+    let result: PollResult = { status: "in_progress" };
+    let consecutiveErrors = 0;
+
+    do {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      try {
+        const statusRes = await fetch(`/api/scripts/status/${runId}`);
+        const json = await statusRes.json();
+        if (!statusRes.ok) throw new Error(json.error ?? "Failed to check generation status");
+        result = json;
+        consecutiveErrors = 0;
+      } catch (pollErr) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+          throw pollErr instanceof Error ? pollErr : new Error("Failed to check generation status");
+        }
+        // keep the loop going — treat as still in progress
+        result = { status: "in_progress" };
+      }
+    } while (result.status === "in_progress");
+
+    return result;
+  }, []);
+
+  // Applies a finished run's result to an angle: updates state, flips to the
+  // script step, opens the preview (only if the user is still looking at
+  // that angle), and clears writing state. Shared by the fresh-generate path
+  // and the resume-on-mount path so both end up in the same place.
+  const applyRunResult = useCallback((forAngleId: string, result: PollResult) => {
+    if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
+    if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
+
+    const finalWordCount = result.wordCount ?? 0;
+    setAngles((prev) =>
+      prev.map((a) =>
+        a.id === forAngleId
+          ? {
+              ...a,
+              script: result.script!,
+              scriptGeneratedAt: new Date().toISOString(),
+              scriptWordCount: finalWordCount,
+              activeScriptRunId: null,
+            }
+          : a
+      )
+    );
+    setStep(1);
+    if (writingAngleRef.current === forAngleId) {
+      setPreview({ script: result.script, wordCount: finalWordCount });
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -71,16 +140,47 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load angles");
-        if (active) {
-          const loaded: ProjectAngle[] = data.angles ?? [];
-          setAngles(loaded);
-          const preferred =
-            requestedAngleId && loaded.some((a) => a.id === requestedAngleId)
-              ? requestedAngleId
-              : loaded[0]?.id ?? null;
-          setActiveId(preferred);
-          const preferredAngle = loaded.find((a) => a.id === preferred);
-          if (preferredAngle?.script) setStep(1);
+        if (!active) return;
+
+        const loaded: ProjectAngle[] = data.angles ?? [];
+        setAngles(loaded);
+        const preferred =
+          requestedAngleId && loaded.some((a) => a.id === requestedAngleId)
+            ? requestedAngleId
+            : loaded[0]?.id ?? null;
+        setActiveId(preferred);
+        const preferredAngle = loaded.find((a) => a.id === preferred);
+        if (preferredAngle?.script) setStep(1);
+
+        // Resume polling for ANY angle that has a run in flight, not just the
+        // active one — the job doesn't care which tab is open, and if we only
+        // resumed the active angle we'd silently drop scripts for the others.
+        for (const angle of loaded) {
+          if (!angle.activeScriptRunId) continue;
+          if (resumedRunIds.current.has(angle.activeScriptRunId)) continue;
+          resumedRunIds.current.add(angle.activeScriptRunId);
+
+          const forAngleId = angle.id;
+          const runId = angle.activeScriptRunId;
+          setWritingAngleId((current) => current ?? forAngleId);
+          if (writingAngleRef.current === null) writingAngleRef.current = forAngleId;
+
+          pollRun(runId)
+            .then((result) => {
+              if (!active) return;
+              applyRunResult(forAngleId, result);
+            })
+            .catch((err) => {
+              if (!active) return;
+              setWriteError(err instanceof Error ? err.message : "Failed to generate script");
+            })
+            .finally(() => {
+              if (!active) return;
+              if (writingAngleRef.current === forAngleId) {
+                writingAngleRef.current = null;
+                setWritingAngleId(null);
+              }
+            });
         }
       })
       .catch((err) => {
@@ -116,29 +216,10 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Failed to start script generation");
 
-      let result: { status: string; script?: string; wordCount?: number; error?: string };
-      do {
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-        const statusRes = await fetch(`/api/scripts/status/${data.runId}`);
-        result = await statusRes.json();
-        if (!statusRes.ok) throw new Error(result.error ?? "Failed to check generation status");
-      } while (result.status === "in_progress");
+      resumedRunIds.current.add(data.runId);
+      const result = await pollRun(data.runId);
+      applyRunResult(forAngleId, result);
 
-      if (result.status === "failed") throw new Error(result.error ?? "Script generation failed");
-      if (result.status !== "complete" || !result.script) throw new Error("Script generation returned no script");
-
-      const finalWordCount = result.wordCount ?? wordCount;
-      setAngles((prev) =>
-        prev.map((a) =>
-          a.id === forAngleId
-            ? { ...a, script: result.script!, scriptGeneratedAt: new Date().toISOString(), scriptWordCount: finalWordCount }
-            : a
-        )
-      );
-      setStep(1);
-      if (writingAngleRef.current === forAngleId) {
-        setPreview({ script: result.script, wordCount: finalWordCount });
-      }
       try {
         const projectRes = await fetch("/api/projects", {
           method: "POST",
@@ -207,6 +288,9 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
           >
             {a.title.length > 40 ? `${a.title.slice(0, 40)}...` : a.title}
             {a.script && <Check className="ml-1.5 inline h-3 w-3 text-emerald-400" />}
+            {!a.script && writingAngleId === a.id && (
+              <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin text-blue-400" />
+            )}
           </button>
         ))}
       </div>

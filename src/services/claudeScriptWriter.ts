@@ -25,6 +25,9 @@ const CACHE_READ_COST_PER_M = parseFloat(process.env.ANTHROPIC_CACHE_READ_COST_P
 interface CaseContext {
   name: string;
   summary: string | null;
+  lastUpdated: string | null;
+  category: string | null;
+  solvedStatus: string | null;
 }
 
 interface AngleContext {
@@ -97,6 +100,16 @@ HOOK RULE: The first 5-15 seconds must NOT begin with "My name is...", "Today we
 
 STRUCTURAL TECHNIQUES to use throughout: progressive evidence release, open loops, mini-cliffhangers, recontextualization of earlier details, competing theories where the research actually supports them, investigation-progression pacing rather than pure biography.
 
+BANNED PHRASES AND PATTERNS — these are overused AI-narration tics. Do not use them, or close paraphrases of them, anywhere in the script:
+- Direct-address filler: "Let that sink in," "Let that sit for a moment," "Sit with that," "Think about that for a second," "Take a moment to consider..."
+- Meta-narration about the story itself: "This is the part of the story most people never hear," "Here's where it gets interesting," "But here's the thing," "And that's when everything changed."
+- Staccato name- or fact-listing for false gravity: stacking short sentence fragments back-to-back purely for rhythm ("Name. Name. Name. Name." or "One question. Then another. Then silence."). Names and facts should appear inside real sentences unless a fragment serves a specific, earned beat — not as a recurring structural device.
+- Manufactured rhetorical questions the narrator immediately answers: "So what really happened? The answer is..." Ask a question only when the answer is genuinely still open at that point in the script.
+- Symmetrical, checklist-style wrap-ups that address every party in turn (victims, then accused, then system, then society) with matched sentence structures. Endings should follow from what the specific story earned, not a template.
+- Empty scene-setting intensifiers: "little did they know," "what happened next would shock the nation," "nothing could have prepared them for..."
+
+If you notice yourself reaching for one of these because the moment feels like it needs a dramatic beat, find a concrete detail from the case facts instead — specificity creates the tension these phrases are trying to fake.
+
 FACTUAL DISCIPLINE — this is non-negotiable: distinguish CONFIRMED FACT from ALLEGATION, POLICE CLAIM, PROSECUTION CLAIM, DEFENSE CLAIM, REPORTING, and INFERENCE. Never present an allegation as established fact. Never invent dialogue, police statements, motives, or evidence. If the research does not establish something, say it remains unknown rather than filling the gap.
 
 ETHICAL RULES: no glorification of killers, no exploitative treatment of victims, no graphic description beyond what's necessary and responsibly presented, no unsupported accusations.
@@ -131,6 +144,12 @@ RESEARCH FOCUS: ${angle.researchFocus.join("; ")}
 ${caseData.summary ? `EXISTING CASE SUMMARY:\n${caseData.summary}\n` : ""}
 SOURCE MATERIAL:
 ${researchText}
+
+DATE AND COUNT ACCURACY — critical:
+- If sources give different dates for related-but-distinct events (e.g. an initial announcement vs. a later formal court ruling vs. a settlement approval), treat them as SEPARATE events with SEPARATE dates. Do not collapse them into one date.
+- When a specific number matters (how many people confessed, how many were convicted vs. arrested, how many years, dollar amounts), state exactly what the source material supports — do not round, estimate, or infer a rounder or more dramatic number.
+- If two sources conflict on a date or count, note the discrepancy in the relevant fact rather than silently picking one.
+- If the source material does not clearly establish a date or count you need for the outline, write the fact as approximate ("in [month/year], according to sources") rather than stating a specific date you are not confident in.
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
@@ -196,7 +215,11 @@ async function loadContext(
       .eq("id", angleId)
       .eq("case_id", caseId)
       .single(),
-    supabase.from("cases").select("name, summary").eq("id", caseId).single(),
+    supabase
+      .from("cases")
+      .select("name, summary, last_updated, category, solved_status")
+      .eq("id", caseId)
+      .single(),
   ]);
 
   if (angleError || !angleRow) throw new Error(`Angle not found: ${angleError?.message ?? "unknown error"}`);
@@ -231,26 +254,59 @@ async function loadContext(
       researchFocus: angleRow.research_focus,
       openingHook: angleRow.opening_hook,
     },
-    caseData: { name: caseRow.name, summary: caseRow.summary },
+    caseData: {
+      name: caseRow.name,
+      summary: caseRow.summary,
+      lastUpdated: caseRow.last_updated,
+      category: caseRow.category,
+      solvedStatus: caseRow.solved_status,
+    },
     channelDNA,
   };
+}
+
+// Scale Tavily's recency window to the case's most recent refresh. Recent
+// cases benefit from news-focused searches; dormant cases need broad coverage.
+function computeRecencyWindow(lastUpdated: string | null): { topic: "news" | "general"; days?: number } {
+  if (!lastUpdated) {
+    return { topic: "general" };
+  }
+
+  const daysSinceUpdate = (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+
+  if (daysSinceUpdate < 0) {
+    return { topic: "general" };
+  }
+  if (daysSinceUpdate <= 14) {
+    return { topic: "news", days: 60 };
+  }
+  if (daysSinceUpdate <= 90) {
+    return { topic: "news", days: 180 };
+  }
+  if (daysSinceUpdate <= 365) {
+    return { topic: "news", days: 730 };
+  }
+  return { topic: "general" };
 }
 
 export async function getOrBuildResearchBrief(
   angleId: string,
   caseId: string,
-  supabaseClient?: SupabaseClient
+  supabaseClient?: SupabaseClient,
+  forceRefresh = false
 ): Promise<ResearchBrief> {
   const supabase = supabaseClient ?? createServiceClient();
 
-  const { data: existingAngle } = await supabase
-    .from("angles")
-    .select("research_brief")
-    .eq("id", angleId)
-    .maybeSingle();
+  if (!forceRefresh) {
+    const { data: existingAngle } = await supabase
+      .from("angles")
+      .select("research_brief")
+      .eq("id", angleId)
+      .maybeSingle();
 
-  if (existingAngle?.research_brief) {
-    return existingAngle.research_brief as ResearchBrief;
+    if (existingAngle?.research_brief) {
+      return existingAngle.research_brief as ResearchBrief;
+    }
   }
 
   const { angle, caseData } = await loadContext(angleId, caseId, "", supabase);
@@ -258,8 +314,27 @@ export async function getOrBuildResearchBrief(
   let researchText = "No additional research available beyond the case summary above.";
   if (tavilyProvider.isConfigured()) {
     try {
-      const results = await tavilyProvider.search(`${caseData.name} ${angle.researchFocus.slice(0, 3).join(" ")}`, 6);
-      researchText = results.map((r, i) => `${i + 1}. [${r.title}] ${r.snippet}`).join("\n");
+      const newsOptions = computeRecencyWindow(caseData.lastUpdated);
+      const queries = [
+        { q: `${caseData.name} official timeline dates` },
+        { q: `${caseData.name} ${angle.researchFocus[0] ?? ""}` },
+        { q: `${caseData.name} announcement date confirmed` },
+      ];
+      const resultSets = await Promise.all(
+        queries.map(({ q }) => tavilyProvider.search(q, 5, newsOptions).catch(() => []))
+      );
+      const seen = new Set<string>();
+      const merged = resultSets.flat().filter((result) => {
+        if (seen.has(result.url)) return false;
+        seen.add(result.url);
+        return true;
+      });
+      researchText = merged
+        .map((result, i) => {
+          const dateTag = result.publishedDate ? ` (published ${result.publishedDate})` : "";
+          return `${i + 1}. [${result.title}]${dateTag} ${result.snippet}`;
+        })
+        .join("\n");
     } catch {
       // Non-fatal — proceed with just the case summary.
     }
@@ -828,7 +903,7 @@ export async function generateScriptSingleCall(
 ): Promise<{ script: string; usage: GenerationUsage }> {
   const { angle, caseData, channelDNA } = await loadContext(angleId, caseId, userId, supabaseClient);
 
-  const brief = await getOrBuildResearchBrief(angleId, caseId, supabaseClient);
+  const brief = await getOrBuildResearchBrief(angleId, caseId, supabaseClient, true);
 
   const channelBible = buildChannelBibleBlock(channelDNA);
   const systemBlocks = [
