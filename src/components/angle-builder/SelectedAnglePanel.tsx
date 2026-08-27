@@ -99,9 +99,24 @@ export function SelectedAnglePanel({
     setWriting(true);
     setWriteError(null);
     pollUntilDone(angle.activeScriptRunId, setProgress)
-      .then((result) => {
+      .then(async (result) => {
         onScriptGenerated(angle.id, result.script, result.wordCount, null);
-        router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+        try {
+          const res = await fetch("/api/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseId, status: "NARRATIVE" }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            router.push(`/projects/${data.id}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+          }
+        } catch {
+          // Script already saved via onScriptGenerated above — a failed
+          // redirect here shouldn't block the user from seeing their
+          // finished script, so this stays silent rather than surfacing
+          // a scary error for what's just a navigation nicety.
+        }
       })
       .catch((err) => setWriteError(err instanceof Error ? err.message : "Failed to generate script"))
       .finally(() => setWriting(false));
@@ -128,7 +143,20 @@ export function SelectedAnglePanel({
       onScriptGenerated(angle.id, result.script, finalWordCount, null);
       setDialogOpen(false);
       setPreview({ script: result.script, wordCount: finalWordCount });
-      router.push(`/projects/${caseId}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+      try {
+        const projectRes = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseId, status: "NARRATIVE" }),
+        });
+        const projectData = await projectRes.json();
+        if (projectRes.ok) {
+          router.push(`/projects/${projectData.id}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
+        }
+      } catch {
+        // Same reasoning as above — script is already visible in the
+        // preview modal even if this redirect doesn't happen.
+      }
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
     } finally {

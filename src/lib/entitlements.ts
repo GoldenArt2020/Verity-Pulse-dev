@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ReservationResult {
@@ -30,7 +30,7 @@ export async function checkAndReserveGeneration(
   idempotencyKey: string,
   context: { angleId?: string; caseId?: string }
 ): Promise<ReservationResult> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { data: existing } = await supabase
     .from("script_generations")
@@ -108,7 +108,7 @@ export async function completeGeneration(
   },
   supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = supabaseClient ?? (await createClient());
+  const supabase = supabaseClient ?? createServiceClient();
   await supabase
     .from("script_generations")
     .update({
@@ -132,7 +132,7 @@ export async function failGeneration(
   errorMessage: string,
   supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = supabaseClient ?? (await createClient());
+  const supabase = supabaseClient ?? createServiceClient();
   await supabase
     .from("script_generations")
     .update({ status: "failed", error: errorMessage, completed_at: new Date().toISOString() })

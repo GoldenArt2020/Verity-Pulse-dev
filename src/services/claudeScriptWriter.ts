@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { groqProvider } from "@/providers/ai/groqProvider";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
@@ -187,7 +187,7 @@ async function loadContext(
   userId: string,
   supabaseClient?: SupabaseClient
 ): Promise<{ angle: AngleContext; caseData: CaseContext; channelDNA: ChannelDNA | null }> {
-  const supabase = supabaseClient ?? (await createClient());
+  const supabase = supabaseClient ?? createServiceClient();
 
   const [{ data: angleRow, error: angleError }, { data: caseRow, error: caseError }] = await Promise.all([
     supabase
@@ -241,7 +241,7 @@ export async function getOrBuildResearchBrief(
   caseId: string,
   supabaseClient?: SupabaseClient
 ): Promise<ResearchBrief> {
-  const supabase = supabaseClient ?? (await createClient());
+  const supabase = supabaseClient ?? createServiceClient();
 
   const { data: existingAngle } = await supabase
     .from("angles")
@@ -458,7 +458,7 @@ export async function generateScript(
   wordCount: ValidWordCount,
   userId?: string
 ): Promise<{ script: string; usage: GenerationUsage; durationMs: number }> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const resolvedUserId = userId ?? (await supabase.auth.getUser()).data.user?.id;
 
   if (!resolvedUserId) {
@@ -514,7 +514,7 @@ export async function startScriptJob(
     brief.outline = [`Cover the full arc of the case, answering: ${angle.coreQuestion}`];
   }
 
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data: jobRow, error: insertError } = await supabase
     .from("script_jobs")
     .insert({
@@ -554,7 +554,7 @@ export async function advanceScriptJob(
   jobId: string,
   userId: string
 ): Promise<{ status: ScriptJobStatus; sectionsCompleted: number; totalSections: number }> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { data: job, error: fetchError } = await supabase
     .from("script_jobs")
@@ -632,7 +632,7 @@ export async function finalizeScriptJob(
   jobId: string,
   userId: string
 ): Promise<{ script: string; wordCount: number; usage: GenerationUsage; generationId: string }> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { data: job, error: fetchError } = await supabase
     .from("script_jobs")
@@ -686,7 +686,7 @@ export async function findActiveScriptJob(
   angleId: string,
   userId: string
 ): Promise<{ jobId: string; status: "writing" | "ready"; sectionsCompleted: number; totalSections: number } | null> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { data: job } = await supabase
     .from("script_jobs")

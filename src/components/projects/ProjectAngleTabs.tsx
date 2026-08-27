@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, FileText, Check } from "lucide-react";
 import { StepTabs } from "@/components/angle-builder/StepTabs";
 import { ScriptLengthDialog } from "@/components/shared/ScriptLengthDialog";
@@ -42,6 +43,7 @@ function totalScore(a: ProjectAngle) {
 }
 
 export function ProjectAngleTabs({ caseId }: { caseId: string }) {
+  const router = useRouter();
   const [requestedAngleId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("angle");
@@ -136,6 +138,19 @@ export function ProjectAngleTabs({ caseId }: { caseId: string }) {
       setStep(1);
       if (writingAngleRef.current === forAngleId) {
         setPreview({ script: result.script, wordCount: finalWordCount });
+      }
+      try {
+        const projectRes = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseId, status: "NARRATIVE" }),
+        });
+        const projectData = await projectRes.json();
+        if (projectRes.ok) {
+          router.push(`/projects/${projectData.id}?tab=ongoing&angle=${forAngleId}&stage=analyze-refine`);
+        }
+      } catch {
+        // The script remains available in the preview if navigation fails.
       }
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
