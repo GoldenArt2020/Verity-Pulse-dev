@@ -143,20 +143,7 @@ export function SelectedAnglePanel({
       onScriptGenerated(angle.id, result.script, finalWordCount, null);
       setDialogOpen(false);
       setPreview({ script: result.script, wordCount: finalWordCount });
-      try {
-        const projectRes = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ caseId, status: "NARRATIVE" }),
-        });
-        const projectData = await projectRes.json();
-        if (projectRes.ok) {
-          router.push(`/projects/${projectData.id}?tab=ongoing&angle=${angle.id}&stage=analyze-refine`);
-        }
-      } catch {
-        // Same reasoning as above — script is already visible in the
-        // preview modal even if this redirect doesn't happen.
-      }
+      await handleOpenInProject(caseId, angle.id);
     } catch (err) {
       setWriteError(err instanceof Error ? err.message : "Failed to generate script");
     } finally {
@@ -171,20 +158,24 @@ export function SelectedAnglePanel({
     setPreview({ script: angle.script, wordCount });
   }
 
-  async function handleOpenInProject() {
+  async function handleOpenInProject(caseId: string, angleId: string) {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseId, status: "NARRATIVE" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Failed to open project");
+    router.push(`/projects/${data.id}?tab=ongoing&angle=${angleId}&stage=analyze-refine`);
+  }
+
+  async function handleOpenInProjectClick() {
     if (!angle) return;
     setOpeningProject(true);
     setProjectError(null);
     try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId, status: "NARRATIVE" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to open project");
       setPreview(null);
-      router.push(`/projects/${data.id}?angle=${angle.id}`);
+      await handleOpenInProject(caseId, angle.id);
     } catch (err) {
       setProjectError(err instanceof Error ? err.message : "Failed to open project");
     } finally {
@@ -388,7 +379,7 @@ export function SelectedAnglePanel({
           primaryLabel="Open in Project"
           primaryLoading={openingProject}
           primaryError={projectError}
-          onPrimaryAction={handleOpenInProject}
+          onPrimaryAction={handleOpenInProjectClick}
           onRewrite={() => setDialogOpen(true)}
           rewriting={writing}
           onClose={() => {
