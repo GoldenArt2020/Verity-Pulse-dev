@@ -94,6 +94,8 @@ Every major beat of the script should do at least one of:
 3. Reveal evidence that recontextualizes something established earlier
 4. Deepen the viewer's emotional understanding of the people involved
 
+HUMAN GROUNDING — do not skip this: every central figure named more than once in the script (victims, accused, and any other person the story turns on) needs at least one concrete detail of who they were as a person before the case — an interest, a relationship, a job, a personality trait, something a person who knew them said. Names and ages alone are not enough. If the research material doesn't support this for someone, say plainly that little is known about them rather than silently leaving them as a name on a list.
+
 If a passage does none of these and provides no necessary factual context, it does not belong in the script.
 
 HOOK RULE: The first 5-15 seconds must NOT begin with "My name is...", "Today we're going to talk about...", "In this video...", or a flat date-stamped opening ("On [date], something happened..."), unless there is an exceptional storytelling reason. Open instead with the most compelling unresolved question, contradiction, or discovery. Do not reveal the full mystery immediately — create a reason to keep watching.
@@ -153,8 +155,8 @@ DATE AND COUNT ACCURACY — critical:
 
 Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 {
-  "caseFacts": string[] (8-15 concrete, specific facts from the source material — dates, names, roles, evidence, statements, distinguishing CONFIRMED FACT from ALLEGATION/CLAIM/REPORTING where the sources make that distinction; do not invent anything not supported by the sources),
-  "outline": string[] (4-7 items — a one-line description of each major beat the narration should hit, in strict order, building toward fully answering the core question by the end; do not number them yourself)
+  "caseFacts": string[] (10-18 concrete, specific facts from the source material — dates, names, roles, evidence, statements, distinguishing CONFIRMED FACT from ALLEGATION/CLAIM/REPORTING where the sources make that distinction; do not invent anything not supported by the sources. Include BOTH event/procedural facts AND biographical/human facts: who each named person was before this case touched them — age, occupation, personality, relationships, what people who knew them said about them — for victims, the accused, and any other central figures the source material describes. If the source material contains little or no biographical detail for someone, say so explicitly as a fact rather than omitting them entirely, e.g. "Source material does not describe X's life before the case."),
+  "outline": string[] (4-7 items — a one-line description of each major beat the narration should hit, in strict order, building toward fully answering the core question by the end; ensure at least one beat is dedicated to grounding the central people as people, not just as case participants, if the case facts support it; do not number them yourself)
 }
 
 Return ONLY the JSON object.`;
@@ -319,9 +321,15 @@ export async function getOrBuildResearchBrief(
         { q: `${caseData.name} official timeline dates` },
         { q: `${caseData.name} ${angle.researchFocus[0] ?? ""}` },
         { q: `${caseData.name} announcement date confirmed` },
+        { q: `${caseData.name} victims remembered who they were` },
       ];
       const resultSets = await Promise.all(
-        queries.map(({ q }) => tavilyProvider.search(q, 5, newsOptions).catch(() => []))
+        [
+          tavilyProvider.search(queries[0].q, 5, newsOptions).catch(() => []),
+          tavilyProvider.search(queries[1].q, 5, newsOptions).catch(() => []),
+          tavilyProvider.search(queries[2].q, 5, newsOptions).catch(() => []),
+          tavilyProvider.search(queries[3].q, 5, { topic: "general" }).catch(() => []),
+        ]
       );
       const seen = new Set<string>();
       const merged = resultSets.flat().filter((result) => {
