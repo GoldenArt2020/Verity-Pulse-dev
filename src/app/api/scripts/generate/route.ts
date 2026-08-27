@@ -50,7 +50,20 @@ export async function POST(req: NextRequest) {
   // Persisted so the client can recover and resume polling this exact
   // real run after a connection drop, tab close, or refresh — the run
   // itself keeps going on Trigger's servers regardless.
-  await supabase.from("angles").update({ active_script_run_id: handle.id }).eq("id", angleId);
+  //
+  // Guarded with .is("script", null): tasks.trigger() is async and this
+  // write isn't guaranteed to land before the task itself finishes. If the
+  // task races ahead, saves the script, and clears active_script_run_id
+  // to null — all before this line executes — the plain .eq(angleId)
+  // version would blindly overwrite that null back to handle.id, leaving
+  // a completed angle pointing at a "still active" run that's already
+  // done. Scoping the update to rows where script is still null makes
+  // this a no-op in that case instead of resurrecting a stale run id.
+  await supabase
+    .from("angles")
+    .update({ active_script_run_id: handle.id })
+    .eq("id", angleId)
+    .is("script", null);
 
   return NextResponse.json({ runId: handle.id });
 }

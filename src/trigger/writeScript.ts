@@ -35,6 +35,26 @@ export const writeScript = task({
         supabase
       );
 
+      const wordCount = script.split(/\s+/).filter(Boolean).length;
+
+      // Persist the script before marking the generation complete so a failed
+      // save is reported as a failed run instead of silently losing the script.
+      const { data: savedAngle, error: saveError } = await supabase
+        .from("angles")
+        .update({
+          script,
+          script_generated_at: new Date().toISOString(),
+          script_word_count: wordCount,
+          active_script_run_id: null,
+        })
+        .eq("id", payload.angleId)
+        .select("id")
+        .single();
+
+      if (saveError || !savedAngle) {
+        throw new Error(`Failed to save script: ${saveError?.message ?? "update affected no rows"}`);
+      }
+
       await completeGeneration(
         payload.generationId,
         {
@@ -48,7 +68,6 @@ export const writeScript = task({
         supabase
       );
 
-      const wordCount = script.split(/\s+/).filter(Boolean).length;
       return { script, wordCount };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Script generation failed";
