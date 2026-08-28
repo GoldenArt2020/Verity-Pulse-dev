@@ -185,9 +185,9 @@ function parseJsonObject<T>(raw: string): T {
     // fall through to repair
   }
 
-  const firstBrace = cleaned.indexOf("{");
+    const firstBrace = cleaned.indexOf("{");
   if (firstBrace === -1) {
-    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
+    throw new Error(`No JSON object found in AI response (length ${raw.length}): ${raw}`);
   }
 
   let attempt = cleaned.slice(firstBrace);
@@ -208,7 +208,7 @@ function parseJsonObject<T>(raw: string): T {
   try {
     return JSON.parse(attempt);
   } catch {
-    throw new Error(`No JSON object found in AI response: ${raw.slice(0, 300)}`);
+    throw new Error(`No JSON object found in AI response (length ${raw.length}): ${raw}`);
   }
 }
 
