@@ -158,6 +158,7 @@ ${researchText}
 
 DATE AND COUNT ACCURACY — critical:
 - If sources give different dates for related-but-distinct events (e.g. an initial announcement vs. a later formal court ruling vs. a settlement approval), treat them as SEPARATE events with SEPARATE dates. Do not collapse them into one date.
+- Specifically: a forensic/investigative breakthrough being announced, a court formally ruling on innocence/exoneration, and a financial settlement being approved are three DIFFERENT kinds of events that typically happen on three different dates, often months apart. If your source material gives a settlement date, do not assume that is also the ruling date, and vice versa. If you are not sure which date belongs to which event, say so explicitly in a caseFacts entry (e.g. "Source material gives May 28, 2026 for the settlement approval; the date of the innocence ruling itself is not clearly specified in source material.") rather than reusing one date for both.
 - When a specific number matters (how many people confessed, how many were convicted vs. arrested, how many years, dollar amounts), state exactly what the source material supports — do not round, estimate, or infer a rounder or more dramatic number.
 - If two sources conflict on a date or count, note the discrepancy in the relevant fact rather than silently picking one.
 - If the source material does not clearly establish a date or count you need for the outline, write the fact as approximate ("in [month/year], according to sources") rather than stating a specific date you are not confident in.
@@ -334,6 +335,7 @@ export async function getOrBuildResearchBrief(
         `${caseData.name} sentencing outcome each defendant`,
         `${caseData.name} who confessed how many`,
         `${caseData.name} each defendant sentence outcome individually`,
+        `${caseData.name} innocence ruling exact date`,
       ];
       const bioQuery = `${caseData.name} victims remembered who they were`;
       const resultSets = await Promise.all(

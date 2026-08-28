@@ -27,6 +27,20 @@ export async function POST(req: NextRequest) {
   if (!angleId || !caseId) {
     return NextResponse.json({ error: "angleId and caseId are required" }, { status: 400 });
   }
+
+  const { data: currentAngle } = await supabase
+    .from("angles")
+    .select("active_script_run_id")
+    .eq("id", angleId)
+    .maybeSingle();
+
+  if (currentAngle?.active_script_run_id) {
+    return NextResponse.json(
+      { error: "A generation is already in progress for this angle. Please wait for it to finish." },
+      { status: 409 }
+    );
+  }
+
   if (!isValidWordCount(wordCount)) {
     return NextResponse.json({ error: "wordCount must be 5000, 7000, or 10000." }, { status: 400 });
   }
