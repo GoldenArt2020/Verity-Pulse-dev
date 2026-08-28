@@ -364,7 +364,10 @@ export async function getOrBuildResearchBrief(
   // verification pass relies on. Groq was found to collapse distinct
   // individuals' outcomes into one shared (and wrong) group statement even
   // with explicit per-person instructions and good source material.
-  const { text: briefRaw } = await callClaude(undefined, buildResearchPrompt(caseData, angle, researchText), 2200);
+  const { text: briefRaw } = await callClaude(undefined, buildResearchPrompt(caseData, angle, researchText), 4000);
+  if (!briefRaw || !briefRaw.trim()) {
+    throw new Error("Research brief generation returned an empty response from Claude");
+  }
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
 
   await supabase.from("angles").update({ research_brief: brief }).eq("id", angleId);
