@@ -79,6 +79,7 @@ export const writeScript = task({
     } catch (err) {
       const message = err instanceof Error ? err.message : "Script generation failed";
       await failGeneration(payload.generationId, payload.userId, message, createServiceClient());
+      await supabase.from("angles").update({ active_script_run_id: null }).eq("id", payload.angleId);
       throw err;
     }
   },
