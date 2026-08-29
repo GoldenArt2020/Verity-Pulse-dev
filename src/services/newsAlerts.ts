@@ -56,8 +56,16 @@ interface ClassifyResult {
   location: string | null;
   summary: string | null;
 }
+interface TrendingClassifyResult {
+  isSignificantCaseDevelopment: boolean;
+  isHighProfile: boolean;
+  caseName: string | null;
+  location: string | null;
+  developmentType: string | null;
+  summary: string | null;
+}
 
-function tryParseJson(text: string): ClassifyResult | null {
+function tryParseJson<T>(text: string): T | null {
   try {
     const cleaned = text.trim().replace(/```json/gi, "").replace(/```/g, "");
     const first = cleaned.indexOf("{");
@@ -96,12 +104,41 @@ Return ONLY valid JSON (no markdown) matching:
   "summary": string or null (1-2 plain sentences summarizing what's known, only if both booleans above are true)
 }
 
+
 Return ONLY the JSON object.`;
 
   const raw = await groqProvider.generateText(prompt, { temperature: 0.1, maxTokens: 300 });
-  return tryParseJson(raw);
+  return tryParseJson<ClassifyResult>(raw);
 }
 
+async function classifyTrendingUpdate(article: NormalizedArticle): Promise<TrendingClassifyResult | null> {
+  const prompt = `You are screening a news headline/snippet for a true crime research tool that surfaces SIGNIFICANT DEVELOPMENTS in already-known, high-profile cases — the opposite of brand-new case discovery.
+
+HEADLINE: ${article.title}
+SNIPPET: ${article.snippet ?? "(none provided)"}
+SOURCE: ${article.sourceName ?? "unknown"}
+
+Evaluate:
+
+1. isSignificantCaseDevelopment: Is this reporting a MAJOR milestone in an ALREADY well-known, high-profile murder/homicide case — a verdict, guilty plea, jury deliberation reaching a decision point, sentencing, a major new piece of evidence, or a similarly newsworthy legal/investigative development? Answer FALSE for minor procedural news, routine hearing scheduling, or anything that isn't a genuinely significant moment in the case.
+
+2. isHighProfile: Does this case appear to already have substantial national/broad public attention (not a small local story)?
+
+Return ONLY valid JSON (no markdown) matching:
+{
+  "isSignificantCaseDevelopment": boolean,
+  "isHighProfile": boolean,
+  "caseName": string or null,
+  "location": string or null,
+  "developmentType": string or null (e.g. "verdict", "guilty plea", "jury deliberating", "sentencing", "major evidence"),
+  "summary": string or null
+}
+
+Return ONLY the JSON object.`;
+
+  const raw = await groqProvider.generateText(prompt, { temperature: 0.1, maxTokens: 300 });
+  return tryParseJson<TrendingClassifyResult>(raw);
+}
 interface SkipReasons {
   duplicateUrl: number;
   notMurderCase: number;
@@ -120,6 +157,7 @@ export interface ProcessArticlesSummary {
 }
 
 export async function processIncomingArticles(
+  
   provider: string,
   articles: NormalizedArticle[]
 ): Promise<ProcessArticlesSummary> {
@@ -274,4 +312,96 @@ export async function processIncomingArticles(
   const skipped = Object.values(skipReasons).reduce((a, b) => a + b, 0);
 
   return { candidates: candidates.length, inserted, skipped, skipReasons };
+}
+export interface ProcessTrendingSummary {
+  candidates: number;
+  inserted: number;
+  skipped: number;
+}
+
+/**
+ * Parallel track to processIncomingArticles: instead of screening for
+ * brand-new, never-seen cases, this screens for SIGNIFICANT DEVELOPMENTS
+ * in already-known, high-profile cases (verdicts, guilty pleas, jury
+ * decisions, sentencing) — the exact category the fresh-case screen above
+ * is designed to reject. Writes to trending_updates, a separate table,
+ * so this never interferes with the fresh-case dedup logic or the
+ * existing Discover "new cases" feed.
+ */
+export async function processTrendingUpdates(
+  provider: string,
+  articles: NormalizedArticle[]
+): Promise<ProcessTrendingSummary> {
+  const supabase = createServiceClient();
+
+  let inserted = 0;
+  let skipped = 0;
+
+  // Reuse the same murder/homicide keyword prefilter — a significant
+  // development in a murder case will still mention the crime itself in
+  // most headlines/snippets, so this remains a cheap, effective first pass.
+  const candidates = articles.filter(
+    (a) => KEYWORD_PATTERN.test(a.title) || (a.snippet && KEYWORD_PATTERN.test(a.snippet))
+  );
+
+  if (candidates.length === 0) {
+    return { candidates: 0, inserted: 0, skipped: 0 };
+  }
+
+  const { data: existingUrlRows } = await supabase
+    .from("trending_updates")
+    .select("url")
+    .in("url", candidates.map((a) => a.url));
+  const existingUrls = new Set((existingUrlRows ?? []).map((r) => r.url));
+
+  const toClassify = candidates
+    .filter((a) => !existingUrls.has(a.url))
+    .slice(0, MAX_ARTICLES_PER_RUN);
+
+  async function processOne(article: NormalizedArticle): Promise<void> {
+    let classification: TrendingClassifyResult | null = null;
+    try {
+      classification = await classifyTrendingUpdate(article);
+    } catch (err) {
+      console.error("newsAlerts: trending classification failed", err);
+      skipped++;
+      return;
+    }
+
+    if (!classification || !classification.isSignificantCaseDevelopment || !classification.isHighProfile) {
+      skipped++;
+      return;
+    }
+
+    const { error } = await supabase.from("trending_updates").insert({
+      provider,
+      source_country: article.sourceCountry,
+      headline: article.title,
+      url: article.url,
+      source_name: article.sourceName,
+      published_at: article.publishedAt,
+      summary: classification.summary,
+      case_name: classification.caseName,
+      location: classification.location,
+      development_type: classification.developmentType,
+      status: "pending",
+    });
+
+    if (error) {
+      if (!error.message.includes("duplicate key")) {
+        console.error("newsAlerts: trending insert failed", error.message);
+      }
+      skipped++;
+      return;
+    }
+
+    inserted++;
+  }
+
+  for (let i = 0; i < toClassify.length; i += CLASSIFY_CONCURRENCY) {
+    const batch = toClassify.slice(i, i + CLASSIFY_CONCURRENCY);
+    await Promise.all(batch.map(processOne));
+  }
+
+  return { candidates: candidates.length, inserted, skipped };
 }

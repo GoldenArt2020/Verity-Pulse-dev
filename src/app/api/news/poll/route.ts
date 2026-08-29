@@ -4,8 +4,9 @@ import { apitubeProvider } from "@/providers/news/apitubeProvider";
 import { newsdataProvider } from "@/providers/news/newsdataProvider";
 import { currentsProvider } from "@/providers/news/currentsProvider";
 import { googleNewsRssProvider } from "@/providers/news/googleNewsRssProvider";
-import { processIncomingArticles } from "@/services/newsAlerts";
+import { processIncomingArticles, processTrendingUpdates } from "@/services/newsAlerts";
 import type { NewsProvider } from "@/providers/news/types";
+
 
 // Without this, Vercel falls back to a short default timeout for this
 // route. Four providers, each potentially doing article-processing work,
@@ -58,14 +59,17 @@ async function pollOneProvider(
 
   try {
     const articles = await provider.fetchArticles(lastPolledAt?.toISOString() ?? null);
-    const summary = await processIncomingArticles(provider.name, articles);
+    const [summary, trendingSummary] = await Promise.all([
+      processIncomingArticles(provider.name, articles),
+      processTrendingUpdates(provider.name, articles),
+    ]);
     await supabase
       .from("news_poll_state")
       .upsert(
         { provider: provider.name, last_polled_at: new Date().toISOString() },
         { onConflict: "provider" }
       );
-    return [provider.name, { fetched: articles.length, ...summary }];
+    return [provider.name, { fetched: articles.length, ...summary, trending: trendingSummary }];
   } catch (err) {
     console.error(`news poll: ${provider.name} failed`, err);
     return [provider.name, { error: err instanceof Error ? err.message : "unknown error" }];
