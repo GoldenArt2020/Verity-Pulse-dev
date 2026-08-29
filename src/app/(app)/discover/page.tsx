@@ -12,6 +12,7 @@ import { RecommendationsRowV2 } from "@/components/discover/RecommendationsRowV2
 import { CollectionsGrid } from "@/components/discover/CollectionsGrid";
 import { ChannelOnboarding } from "@/components/discover/ChannelOnboarding";
 import { useChannelId } from "@/hooks/useChannelId";
+import { TrendingUpdatesSection } from "@/components/discover/TrendingUpdatesSection";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
@@ -38,7 +39,31 @@ export default function DiscoverPage() {
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
           </motion.div>
+          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
+            <DiscoverHero />
+          </motion.div>
 
+          {/* Trending updates — significant developments in already-known cases */}
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="w-full min-w-0"
+          >
+            <TrendingUpdatesSection />
+          </motion.div>
+
+          {/* 1. Recommended For Your Audience */}
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            transition={{ duration: 0.3, delay: 0.15 }}
+            className="w-full min-w-0"
+          >
+            <RecommendationsRowV2 />
+          </motion.div>
           {/* 1. Recommended For Your Audience */}
           <motion.div
             variants={fadeUp}
