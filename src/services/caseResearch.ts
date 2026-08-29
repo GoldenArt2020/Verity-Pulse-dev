@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { tavilyProvider } from "@/providers/search/tavilyProvider";
+import { youtubeProvider } from "@/providers/youtube/youtubeProvider";
+import { youtubePublicCaptionsProvider } from "@/providers/transcript/youtubePublicCaptionsProvider";
 import { aiRouter } from "@/providers/ai/router";
+import { groqProvider } from "@/providers/ai/groqProvider";
 import { after } from "next/server";
 import type { SearchResult } from "@/providers/search/types";
 import { classifySourceReliability, formatSourcesWithReliability } from "@/lib/sourceReliability";
@@ -22,6 +25,23 @@ interface CaseFacts {
   unresolvedQuestions: string[];
 }
 
+interface DetailedPersonRecord {
+  name: string;
+  role: "victim" | "accused" | "perpetrator" | "official" | "witness" | "other";
+  age: string | null;
+  wayOfLife: string | null;
+  whatTheyDidThatDay: string | null;
+  priorHistory: string | null;
+  actionsTaken: string | null;
+  statedMotiveOrReason: string | null;
+  documentedStatements: string | null;
+  beliefsOrMindset: string | null;
+  outcome: string | null;
+  confessionStatus: string | null;
+  aliveStatus: string | null;
+  additionalNotes: string | null;
+}
+
 interface ResearchAnalysis {
   summary: string;
   country: string | null;
@@ -37,9 +57,20 @@ interface ResearchAnalysis {
   caseFacts: CaseFacts;
 }
 
-// Fan out into several angled queries instead of one generic search, so we
-// actually surface victim details, timeline, and legal-status facts rather
-// than whatever a single "case name" search happens to return.
+// News-outlet/official uploads are the most reliable transcript sources for
+// factual extraction — press conferences, official statements, court
+// coverage — as opposed to independent creator commentary/reaction videos.
+const RELIABLE_TRANSCRIPT_CHANNEL_HINTS = [
+  "news", "police", "sheriff", "department", "official", "court",
+  "press conference", "pd", "county",
+];
+
+function looksReliableForTranscript(channelTitle: string | null | undefined): boolean {
+  if (!channelTitle) return false;
+  const lower = channelTitle.toLowerCase();
+  return RELIABLE_TRANSCRIPT_CHANNEL_HINTS.some((hint) => lower.includes(hint));
+}
+
 function buildResearchQueries(caseName: string): string[] {
   return [
     caseName,
@@ -49,10 +80,14 @@ function buildResearchQueries(caseName: string): string[] {
 }
 
 async function gatherSources(caseName: string): Promise<SearchResult[]> {
-  const queries = buildResearchQueries(caseName);
-  const batches = await Promise.all(
-    queries.map((q) => tavilyProvider.search(q, 6).catch(() => [] as SearchResult[]))
-  );
+  const newsQuery = { q: `${caseName} news`, options: { topic: "news" as const, days: 365 } };
+  const generalQueries = buildResearchQueries(caseName).map((q) => ({ q, options: undefined }));
+
+  const batches = await Promise.all([
+    ...generalQueries.map(({ q }) => tavilyProvider.search(q, 6).catch(() => [] as SearchResult[])),
+    tavilyProvider.search(newsQuery.q, 6, newsQuery.options).catch(() => [] as SearchResult[]),
+  ]);
+
   const seen = new Set<string>();
   const merged: SearchResult[] = [];
   for (const batch of batches) {
@@ -65,8 +100,44 @@ async function gatherSources(caseName: string): Promise<SearchResult[]> {
   return merged;
 }
 
+/**
+ * Pulls up to 15 candidate case videos, prioritizes the most likely-reliable
+ * ones (official/news uploads), and fetches full transcripts for the top 5
+ * of those. Non-fatal at every step — a transcript failure or empty result
+ * just means less source material, not a broken research run.
+ */
+async function gatherYouTubeTranscripts(caseName: string): Promise<string> {
+  try {
+    const videos = await youtubeProvider.searchCaseVideos(caseName, 15);
+    if (!videos.length) return "";
+
+    const prioritized = [...videos].sort((a, b) => {
+      const aReliable = looksReliableForTranscript(a.channelTitle) ? 1 : 0;
+      const bReliable = looksReliableForTranscript(b.channelTitle) ? 1 : 0;
+      return bReliable - aReliable;
+    });
+
+    const candidates = prioritized.slice(0, 5);
+
+    const transcripts = await Promise.all(
+      candidates.map(async (v) => {
+        try {
+          const result = await youtubePublicCaptionsProvider.fetchTranscript(v.videoId);
+if (result.status !== "available" || !result.rawText?.trim()) return null;
+return `--- YouTube video: "${v.title}" (channel: ${v.channelTitle ?? "unknown"}) ---\n${result.rawText.slice(0, 8000)}`;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return transcripts.filter((t): t is string => t !== null).join("\n\n");
+  } catch {
+    return "";
+  }
+}
 function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
-  return `You are an investigative research analyst for a true crime YouTube intelligence platform. Based on the source material below about "${caseName}", return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+  return `You are an investigative research analyst for a true crime YouTube intelligence platform. Based on the sourcematerial below about "${caseName}", return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
 
 {
   "summary": string (max 300 words, factual investigative-briefing tone, do not speculate beyond what sources state),
@@ -74,7 +145,7 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   "category": string or null (e.g. "Missing Person", "Murder Investigation", "Cold Case"),
   "tags": string[] (3-6 short tags),
   "opportunityScore": number 0-100,
-  "competitionScore": number 0-100 (ROUGH PLACEHOLDER ONLY — overwritten moments later with a real number once actual YouTube video data is fetched. Base this purely on how much THIS EXACT CASE has likely already been covered by OTHER TRUE CRIME YOUTUBE CREATORS specifically. This is NOT the same as general news/media attention — a case can be all over the news with zero YouTube coverage, or vice versa. If genuinely unsure, use 30 rather than guessing high),
+  "competitionScore": number 0-100 (ROUGH PLACEHOLDER ONLY — overwritten moments later with a real number once actualYouTube video data is fetched. Base this purely on how much THIS EXACT CASE has likely already been covered by OTHER TRUE CRIME YOUTUBE CREATORS specifically. This is NOT the same as general news/media attention — a case can be all over the news with zero YouTube coverage, or vice versa. If genuinely unsure, use 30 rather than guessing high),
   "coverageScore": number 0-10 (if unknown, use 5 — this is only a fallback used when real YouTube coverage data can't be fetched),
   "imageQuery": string (2-5 word stock-photo phrase — a place/object/atmosphere, NEVER a person),
   "victimDemographics": { "ethnicity": string or null, "ageRange": string or null, "gender": string or null },
@@ -90,7 +161,7 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   }
 }
 
-Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH and MEDIUM sources for factual claims in "summary" and "caseFacts" — treat LOW-tier sources as context only, and do not state something as established fact if it only appears in a LOW-tier source.
+Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH and MEDIUM sources for factual claims in "summary" and "caseFacts" — treat LOW-tier sources as context only, and do not state something as established fact if it only appears in a LOW-tier source. YouTube transcript excerpts, where included below, are from official/news channel uploads and should be treated as high-reliability primary material.
 
 SOURCE MATERIAL:
 ${sourcesText}
@@ -98,17 +169,54 @@ ${sourcesText}
 Extract EVERY concrete fact present in the sources into the appropriate caseFacts field — names, ages, dates, figures, quotes. Do not compress or generalize here; that's what "summary" is for. Never invent a fact not present in the sources. If a field has nothing to report, return an empty array rather than inventing content. Return ONLY the JSON object.`;
 }
 
+function buildDetailedPeoplePrompt(caseName: string, sourceText: string): string {
+  return `You are building an exhaustive, individually-verified factual record for every named person central to the case "${caseName}", based strictly on the source material below.
+
+CRITICAL RULES:
+1. Process ONE PERSON AT A TIME. Independently determine each person's own facts — age, activities, history, actions — drawing ONLY from what the source material actually says about THAT SPECIFIC PERSON. Never assume two people share a trait, action, motive, or outcome just because they're connected to the same case. If four people are accused, produce four independently-reasoned records.
+
+2. MOTIVE AND BELIEF ARE THE HIGHEST-RISK FIELDS. Fill "statedMotiveOrReason" and "beliefsOrMindset" ONLY when a source directly and explicitly attributes that reason or belief to this specific person — a quote, a court finding, a documented statement, an official account attributing intent. Do NOT infer a motive from someone's actions, do NOT guess a plausible reason, and do NOT fill these fields just because a motive "would make sense." These fields should very often be null. Leaving them null and correct is far better than filling them with a plausible-sounding guess. If a motive was alleged by prosecutors but never confirmed, say so explicitly and attribute it: "Prosecutors alleged [X] as motive; not confirmed by [person]."
+
+3. Every other field follows the same discipline: if the source material doesn't clearly establish something for this specific person, write null — do not fill a gap with an assumption, even a reasonable-sounding one.
+
+4. Quotes in "documentedStatements" must be real, attributed statements from the source material — never invented or paraphrased as if verbatim.
+
+SOURCE MATERIAL:
+${sourceText}
+
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{
+  "people": [
+    {
+      "name": string,
+      "role": "victim" | "accused" | "perpetrator" | "official" | "witness" | "other",
+      "age": string | null,
+      "wayOfLife": string | null,
+      "whatTheyDidThatDay": string | null,
+      "priorHistory": string | null,
+      "actionsTaken": string | null,
+      "statedMotiveOrReason": string | null,
+      "documentedStatements": string | null,
+      "beliefsOrMindset": string | null,
+      "outcome": string | null,
+      "confessionStatus": string | null,
+      "aliveStatus": string | null,
+      "additionalNotes": string | null
+    }
+  ]
+}
+
+Include an entry for every named victim, accused/convicted person, identified perpetrator, and any other person central to how the case unfolded. Return ONLY the JSON object.`;
+}
+
 function parseAnalysis(raw: string): ResearchAnalysis {
   let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
-
   if (firstBrace === -1 || lastBrace === -1) {
     throw new Error(`No JSON object found in AI response: ${raw.slice(0, 200)}`);
   }
-
   cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-
   try {
     return JSON.parse(cleaned);
   } catch (err) {
@@ -118,33 +226,21 @@ function parseAnalysis(raw: string): ResearchAnalysis {
   }
 }
 
-/**
- * First-pass research for a stub Case: multi-query Tavily search (case
- * name, victims, timeline, charges/court, latest news) + ONE AI call to
- * produce summary, category, tags, scores, a case-specific image search
- * query, demographic/case-type tagging, AND a structured case_facts
- * dossier (named people, dated timeline, charges, key figures/quotes,
- * locations, unresolved questions) that later angle and script generation
- * draw from directly instead of only the compressed summary. Every source
- * is tagged HIGH/MEDIUM/LOW reliability (see src/lib/sourceReliability.ts)
- * so the model — and later prompts reusing these sources — knows which
- * claims to trust for stated fact vs. context only. Saves the result to
- * the `cases` row, then runs two non-fatal second-pass steps: background
- * research (see src/services/backgroundResearch.ts) off the named people
- * just extracted, and real YouTube coverage data (see
- * src/services/youtubeCoverage.ts) so the Angle Builder header shows an
- * actual data-driven coverage score immediately rather than waiting until
- * angles are generated.
- * SERVER-ONLY — uses Tavily/AI provider secret keys which must never be
- * read in the browser. Only ever imported from /api/case/research/route.ts.
- * Uses Groq directly for the research analysis request.
- *
- * `victimDemographics`/`caseTypeTags`/`solvedStatus` are extracted
- * cautiously — the prompt explicitly instructs the model to leave
- * demographic fields null rather than guess, since these feed the
- * recommendation engine's audience-matching logic and a wrong or
- * invented tag here would silently bias future recommendations.
- */
+function parseDetailedPeople(raw: string): { people: DetailedPersonRecord[] } {
+  let cleaned = raw.trim().replace(/```json/gi, "").replace(/```/g, "");
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error(`No JSON object found in detailed people response: ${raw.slice(0, 200)}`);
+  }
+  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    throw new Error(`Failed to parse detailed people JSON: ${(err as Error).message}`);
+  }
+}
+
 export async function runCaseResearch(caseId: string, caseName: string): Promise<void> {
   if (!tavilyProvider.isConfigured()) {
     throw new Error("Tavily is not configured — cannot research this case");
@@ -153,20 +249,40 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     throw new Error("No AI provider is configured — cannot analyze this case");
   }
 
-  const results = await gatherSources(caseName);
+  const [results, transcriptText] = await Promise.all([
+    gatherSources(caseName),
+    gatherYouTubeTranscripts(caseName),
+  ]);
 
-  if (results.length === 0) {
+  if (results.length === 0 && !transcriptText) {
     throw new Error(`No sources found for "${caseName}"`);
   }
 
   const sourcesText = formatSourcesWithReliability(results, 800);
+  const combinedSourceText = transcriptText ? `${sourcesText}\n\n${transcriptText}` : sourcesText;
 
-  const raw = await aiRouter.generateText(buildAnalysisPrompt(caseName, sourcesText), {
-    temperature: 0.3,
-    maxTokens: 3000,
-  });
+  const [rawAnalysis, rawDetailedPeople] = await Promise.all([
+    aiRouter.generateText(buildAnalysisPrompt(caseName, combinedSourceText), {
+      temperature: 0.3,
+      maxTokens: 3000,
+    }),
+    groqProvider.generateText(buildDetailedPeoplePrompt(caseName, combinedSourceText), {
+      temperature: 0.2,
+      maxTokens: 4000,
+    }),
+  ]);
 
-  const analysis = parseAnalysis(raw);
+  const analysis = parseAnalysis(rawAnalysis);
+
+  let detailedPeople: DetailedPersonRecord[] = [];
+  try {
+    detailedPeople = parseDetailedPeople(rawDetailedPeople).people ?? [];
+  } catch (err) {
+    // Non-fatal — the main analysis already succeeded and is saved below;
+    // detailed per-person records are a valuable addition, not a hard
+    // requirement, so a parse failure here shouldn't fail the whole run.
+    console.error("Detailed people extraction failed (non-fatal):", err instanceof Error ? err.message : err);
+  }
 
   const supabase = await createClient();
   const { error: updateError } = await supabase
@@ -183,6 +299,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
       case_type_tags: analysis.caseTypeTags,
       solved_status: analysis.solvedStatus,
       case_facts: analysis.caseFacts,
+      detailed_people: detailedPeople,
       last_updated: new Date().toISOString(),
     })
     .eq("id", caseId);
@@ -205,23 +322,12 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     console.error("Failed to save sources:", sourcesError.message);
   }
 
-  // Second pass: named victim/suspect background profiles + real YouTube
-  // coverage data. Both are non-fatal and were previously awaited
-  // sequentially here, which stacked their latency onto this single HTTP
-  // request and risked the whole route exceeding Vercel's timeout even
-  // though the PRIMARY research (already saved above) is the only part the
-  // caller actually needs back quickly. next/server's after() runs this
-  // work AFTER the response is sent, while guaranteeing (unlike a bare
-  // unawaited promise) that Vercel keeps the function alive until it
-  // finishes — so the response returns fast, but the background work still
-  // reliably completes and saves.
   after(async () => {
     try {
       await runBackgroundResearch(caseId, caseName, analysis.caseFacts.people ?? []);
     } catch (err) {
       console.error("Background research failed (non-fatal):", err instanceof Error ? err.message : err);
     }
-
     try {
       await getOrFetchYouTubeCoverage(caseId, caseName);
     } catch (err) {

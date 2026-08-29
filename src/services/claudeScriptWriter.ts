@@ -28,6 +28,7 @@ interface CaseContext {
   lastUpdated: string | null;
   category: string | null;
   solvedStatus: string | null;
+  detailedPeople: unknown; // DetailedPersonRecord[] from case-research stage
 }
 
 interface AngleContext {
@@ -179,6 +180,7 @@ CORE QUESTION THE SCRIPT MUST ANSWER: ${angle.coreQuestion}
 RESEARCH FOCUS: ${angle.researchFocus.join("; ")}
 
 ${caseData.summary ? `EXISTING CASE SUMMARY:\n${caseData.summary}\n` : ""}
+${caseData.detailedPeople ? `PRE-VERIFIED PER-PERSON RECORDS (from earlier case research — treat as authoritative ground truth for each named person; use this directly for peopleFacts rather than re-deriving from source material below where it's already covered here):\n${JSON.stringify(caseData.detailedPeople, null, 2)}\n` : ""}
 SOURCE MATERIAL:
 ${researchText}
 
@@ -256,7 +258,7 @@ async function loadContext(
       .single(),
     supabase
       .from("cases")
-      .select("name, summary, last_updated, category, solved_status")
+      .select("name, summary, last_updated, category, solved_status, detailed_people")
       .eq("id", caseId)
       .single(),
   ]);
@@ -293,13 +295,15 @@ async function loadContext(
       researchFocus: angleRow.research_focus,
       openingHook: angleRow.opening_hook,
     },
-    caseData: {
-      name: caseRow.name,
-      summary: caseRow.summary,
-      lastUpdated: caseRow.last_updated,
-      category: caseRow.category,
-      solvedStatus: caseRow.solved_status,
-    },
+
+  caseData: {
+    name: caseRow.name,
+    summary: caseRow.summary,
+    lastUpdated: caseRow.last_updated,
+    category: caseRow.category,
+    solvedStatus: caseRow.solved_status,
+   detailedPeople: caseRow.detailed_people,
+  },
     channelDNA,
   };
 }
