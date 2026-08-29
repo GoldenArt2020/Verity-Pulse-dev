@@ -41,6 +41,11 @@ export function AnalyzeRefinePanel({
   const [rewriting, setRewriting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
+  const [edits, setEdits] = useState<{ find: string; instruction: string }[]>([
+    { find: "", instruction: "" },
+  ]);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const activeRef = useRef(true);
 
   const pollRun = useCallback(async (runId: string): Promise<PollResult> => {
@@ -113,6 +118,49 @@ export function AnalyzeRefinePanel({
     }
   }
 
+  function updateEdit(index: number, field: "find" | "instruction", value: string) {
+    setEdits((previous) => previous.map((edit, editIndex) =>
+      editIndex === index ? { ...edit, [field]: value } : edit
+    ));
+  }
+
+  function addEditRow() {
+    setEdits((previous) => [...previous, { find: "", instruction: "" }]);
+  }
+
+  function removeEditRow(index: number) {
+    setEdits((previous) => previous.filter((_, editIndex) => editIndex !== index));
+  }
+
+  async function handleApplyEdits() {
+    const validEdits = edits.filter((edit) => edit.find.trim() && edit.instruction.trim());
+    if (!validEdits.length || !script) return;
+    setEditError(null);
+    setEditing(true);
+
+    try {
+      const idempotencyKey = crypto.randomUUID();
+      const response = await fetch("/api/scripts/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleId, caseId, edits: validEdits, idempotencyKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Failed to start edit");
+
+      const result = await pollRun(data.runId);
+      if (result.status === "failed") throw new Error(result.error ?? "Edit failed");
+      if (result.status !== "complete" || !result.script) throw new Error("Edit returned no script");
+
+      onScriptUpdated(result.script, script, []);
+      setEdits([{ find: "", instruction: "" }]);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to apply edits");
+    } finally {
+      setEditing(false);
+    }
+  }
+
   if (!script) {
     return (
       <div className="mt-4 rounded-2xl border border-dashed border-slate-800/60 bg-slate-900/30 p-8 text-center">
@@ -168,6 +216,64 @@ export function AnalyzeRefinePanel({
           </ul>
         </div>
       )}
+
+      <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
+        <h3 className="text-sm font-semibold text-white">Precise Edits</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Paste the exact text to change and what to do with it. Everything else in the script stays untouched.
+        </p>
+
+        <div className="mt-3 space-y-3">
+          {edits.map((edit, index) => (
+            <div key={index} className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-3">
+              <textarea
+                value={edit.find}
+                onChange={(event) => updateEdit(index, "find", event.target.value)}
+                disabled={editing}
+                rows={2}
+                placeholder="Text to find (paste the exact sentence or passage)..."
+                className="w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 focus:outline-none disabled:opacity-60"
+              />
+              <textarea
+                value={edit.instruction}
+                onChange={(event) => updateEdit(index, "instruction", event.target.value)}
+                disabled={editing}
+                rows={2}
+                placeholder="What to do with it (e.g. 'make this punchier', 'cut this line', 'replace with...')..."
+                className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 focus:outline-none disabled:opacity-60"
+              />
+              {edits.length > 1 && (
+                <button
+                  onClick={() => removeEditRow(index)}
+                  disabled={editing}
+                  className="mt-2 text-xs text-rose-400 hover:text-rose-300 disabled:opacity-60"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={addEditRow}
+          disabled={editing}
+          className="mt-2 text-xs font-medium text-blue-400 hover:text-blue-300 disabled:opacity-60"
+        >
+          + Add another edit
+        </button>
+
+        {editError && <p className="mt-2 text-xs text-rose-400">{editError}</p>}
+
+        <button
+          onClick={handleApplyEdits}
+          disabled={editing || !edits.some((edit) => edit.find.trim() && edit.instruction.trim())}
+          className="mt-3 flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-60 disabled:hover:scale-100"
+        >
+          {editing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {editing ? "Applying edits..." : "Apply Edits"}
+        </button>
+      </div>
 
       <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
         <h3 className="text-sm font-semibold text-white">Critique & Rewrite</h3>

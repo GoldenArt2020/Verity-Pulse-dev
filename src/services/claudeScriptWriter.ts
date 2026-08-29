@@ -1107,3 +1107,55 @@ export async function rewriteScriptSingleCall(
 
   return { script, usage: toGenerationUsage(totalUsage), verificationIssues };
 }
+
+interface EditInstruction {
+  find: string;
+  instruction: string;
+}
+
+function buildEditPrompt(currentScript: string, edits: EditInstruction[]): string {
+  const editList = edits
+    .map((edit, index) => `${index + 1}. FIND: "${edit.find}"\n   INSTRUCTION: ${edit.instruction}`)
+    .join("\n\n");
+
+  return `You are making precise, targeted edits to an existing true crime narration script. The creator has already approved everything in this script except the specific passages listed below.
+
+CURRENT SCRIPT:
+${currentScript}
+
+REQUESTED EDITS:
+${editList}
+
+Rules:
+- Apply ONLY the requested edits above. Do not rewrite, restructure, rephrase, or "improve" anything else in the script — every sentence not referenced in the edits above must appear in your output exactly as it does in the current script.
+- For each edit, locate the FIND text in the script (it may not be word-for-word identical due to formatting — match it by meaning if an exact match isn't found) and apply the INSTRUCTION to that passage only.
+- If an instruction says to cut something, remove it cleanly without leaving an awkward gap — adjust only the immediate surrounding transition if strictly necessary for the sentence to still read naturally, and nothing beyond that.
+- If a FIND text cannot be located anywhere in the script, skip that edit rather than guessing at a different passage to change.
+- Maintain the exact same voice, tone, and style as the rest of the script — the surrounding untouched prose was written by the same writer, and the edited passages must not read differently from it.
+
+Output the COMPLETE script with the edits applied, start to finish, in one continuous piece — no preamble, no notes about what you changed, no markdown. Finish on a complete sentence.`;
+}
+
+/** Applies find/instruction edits while preserving all unrelated script text. */
+export async function editScriptSingleCall(
+  angleId: string,
+  currentScript: string,
+  edits: EditInstruction[]
+): Promise<{ script: string; usage: GenerationUsage }> {
+  void angleId;
+  if (!edits.length) {
+    throw new Error("At least one edit is required");
+  }
+
+  const { text: editedRaw, usage } = await callClaude(
+    undefined,
+    buildEditPrompt(currentScript, edits),
+    SINGLE_CALL_MAX_TOKENS
+  );
+
+  if (!editedRaw || !editedRaw.trim()) {
+    throw new Error("Edit generation returned an empty response from Claude");
+  }
+
+  return { script: editedRaw.trim(), usage: toGenerationUsage(usage) };
+}
