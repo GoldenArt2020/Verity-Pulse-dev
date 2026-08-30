@@ -274,7 +274,7 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     throw new Error(`No sources found for "${caseName}"`);
   }
 
-  const sourcesText = formatSourcesWithReliability(results, 800);
+  const sourcesText = formatSourcesWithReliability(results, 3000);
   const combinedSourceText = transcriptText ? `${sourcesText}\n\n${transcriptText}` : sourcesText;
 
   const [rawAnalysis, rawDetailedPeople] = await Promise.all([

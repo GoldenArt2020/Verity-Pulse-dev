@@ -83,8 +83,16 @@ export function classifySourceReliability(url: string): SourceReliability {
   return "MEDIUM";
 }
 
-/** Formats a source list with its reliability tier inline, for embedding
- * directly in an AI prompt so the model can weight claims accordingly. */
+/** Below this length a "source" is almost certainly a search-result snippet
+ * rather than extracted article text - Tavily returns nothing usable for
+ * paywalled or JS-heavy pages. Marking these matters because a model given a
+ * two-line fragment will otherwise report the article as thin, turning a
+ * retrieval failure into a false claim about the public record. */
+const SNIPPET_ONLY_CHARS = 600;
+
+/** Formats a source list with its reliability tier and publisher inline, for
+ * embedding directly in an AI prompt so the model can weight claims
+ * accordingly and attribute them to the actual outlet. */
 export function formatSourcesWithReliability(
   sources: { title: string; snippet: string; url: string; publishedDate?: string }[],
   snippetChars = 400
@@ -92,8 +100,15 @@ export function formatSourcesWithReliability(
   return sources
     .map((s, i) => {
       const tier = classifySourceReliability(s.url);
+      const publisher = hostnameOf(s.url) ?? "unknown source";
       const dateStr = s.publishedDate ? ` (${s.publishedDate})` : "";
-      return `${i + 1}. [${tier}] ${s.title}${dateStr}\n${s.snippet.slice(0, snippetChars)}`;
+      const text = s.snippet.slice(0, snippetChars);
+      const truncated = s.snippet.length > snippetChars ? " [text truncated here]" : "";
+      const shallow =
+        s.snippet.length < SNIPPET_ONLY_CHARS
+          ? " [SNIPPET ONLY - full article text could not be retrieved; absence of a detail here is NOT evidence the detail is unreported]"
+          : "";
+      return `${i + 1}. [${tier}] ${publisher}${shallow} - ${s.title}${dateStr}\n${text}${truncated}`;
     })
     .join("\n\n");
 }

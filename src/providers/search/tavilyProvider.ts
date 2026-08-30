@@ -36,6 +36,11 @@ export const tavilyProvider: SearchProvider = {
             query,
             max_results: maxResults,
             search_depth: "advanced",
+            // Without this Tavily returns only its own short snippet, which
+            // routinely omits detail buried further down an article - prior
+            // record, supervision status, exact charge counts. Those gaps
+            // then read downstream as gaps in the public record.
+            include_raw_content: true,
             ...(options?.topic ? { topic: options.topic } : {}),
             ...(options?.topic === "news" && options?.days ? { days: options.days } : {}),
           }),
@@ -63,12 +68,28 @@ export const tavilyProvider: SearchProvider = {
       return res.json();
     });
 
-    return (data.results ?? []).map((r: { title: string; url: string; content: string; published_date?: string }) => ({
-      title: r.title,
-      url: r.url,
-      snippet: cleanSourceText(r.content),
-      publishedDate: r.published_date,
-      source: "tavily",
-    }));
+  const RAW_CONTENT_CHARS = 6000;
+
+  return (data.results ?? []).map(
+    (r: { title: string; url: string; content: string; raw_content?: string | null; published_date?: string }) => {
+      const body = r.raw_content?.trim() ? r.raw_content.slice(0, RAW_CONTENT_CHARS) : r.content;
+      let publisher: string;
+      try {
+        publisher = new URL(r.url).hostname.replace(/^www\./, "");
+      } catch {
+        publisher = "unknown";
+      }
+      return {
+        title: r.title,
+        url: r.url,
+        snippet: cleanSourceText(body),
+        publishedDate: r.published_date,
+        // The actual outlet, not the search provider. Attribution rules
+        // downstream ask which outlet supports a claim, so this has to name
+        // the publisher rather than how the result was found.
+        source: publisher,
+      };
+    }
+  );
   },
 };
