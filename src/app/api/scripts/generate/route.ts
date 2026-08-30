@@ -73,6 +73,14 @@ export async function POST(req: NextRequest) {
   // a completed angle pointing at a "still active" run that's already
   // done. Scoping the update to rows where script is still null makes
   // this a no-op in that case instead of resurrecting a stale run id.
+  // Unguarded: a durable record of the most recent run for this angle, so a
+  // poll arriving after the task has already completed and cleared
+  // active_script_run_id can still resolve the run instead of 404ing.
+  await supabase
+    .from("angles")
+    .update({ last_script_run_id: handle.id })
+    .eq("id", angleId);
+
   await supabase
     .from("angles")
     .update({ active_script_run_id: handle.id })

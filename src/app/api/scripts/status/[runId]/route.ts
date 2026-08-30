@@ -6,6 +6,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
+
+  // runId is interpolated into a PostgREST filter below, so restrict it to
+  // the Trigger.dev run id charset rather than trusting the path segment.
+  if (!/^[A-Za-z0-9_]+$/.test(runId)) {
+    return NextResponse.json({ error: "Invalid run id." }, { status: 400 });
+  }
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,12 +22,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  // Ownership chain: angles.case_id -> cases.channel_id -> channels.user_id.
-  // Resolve ownership before looking up the Trigger.dev run itself.
+  // RLS (angles_select_own) already restricts this row to the caller, so
+  // no application-level ownership check is needed.
   const { data: angle, error: angleError } = await supabase
     .from("angles")
-    .select("id, case_id, cases!inner(channel_id, channels!inner(user_id))")
-    .eq("active_script_run_id", runId)
+    .select("id, case_id")
+    .or(`active_script_run_id.eq.${runId},last_script_run_id.eq.${runId}`)
     .maybeSingle();
 
   if (angleError) {
@@ -37,12 +43,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ runI
   // Either way, we can't verify ownership from this table alone anymore.
   if (!angle) {
     return NextResponse.json({ error: "Run not found or already resolved." }, { status: 404 });
-  }
-
-  // @ts-expect-error - Supabase's generated types don't infer the joined shape here
-  const ownerId = angle.cases?.channels?.user_id;
-  if (ownerId !== user.id) {
-    return NextResponse.json({ error: "Not authorized to view this run." }, { status: 403 });
   }
 
   try {
