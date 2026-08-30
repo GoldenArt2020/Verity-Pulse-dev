@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { LegalLinks } from "@/components/layout/LegalLinks";
 import Image from "next/image";
 
 export default function RegisterPage() {
@@ -185,6 +187,20 @@ export default function RegisterPage() {
               <GoogleIcon />
               Continue with Google
             </button>
+
+            {/* Placed after both sign-up methods so it applies to either path.
+                Google's OAuth reviewers also look for these links inside the app. */}
+            <p className="mt-5 text-center text-xs leading-relaxed text-slate-500">
+              By creating a workspace you agree to our{" "}
+              <Link href="/terms" className="text-blue-400 underline hover:text-blue-300">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="text-blue-400 underline hover:text-blue-300">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </>
         ) : (
           <>
@@ -220,6 +236,8 @@ export default function RegisterPage() {
             Sign In
           </a>
         </p>
+
+        <LegalLinks className="mt-6" />
       </motion.div>
     </div>
   );

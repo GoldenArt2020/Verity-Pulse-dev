@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { LegalLinks } from "@/components/layout/LegalLinks";
 
 export function LoginCard() {
   const router = useRouter();
@@ -121,6 +122,10 @@ export function LoginCard() {
         Don&apos;t have an account?{" "}
         <a href="/register" className="text-blue-400 hover:text-blue-300">Create Workspace</a>
       </p>
+
+      {/* Google's OAuth reviewers check these are reachable from the app itself,
+          not just from the consent screen. */}
+      <LegalLinks className="mt-6" />
     </motion.div>
   );
 }
