@@ -52,6 +52,7 @@ export const writeScript = task({
           script,
           script_generated_at: new Date().toISOString(),
           script_word_count: wordCount,
+          verification_issues: verificationIssues ?? [],
           active_script_run_id: null,
         })
         .eq("id", payload.angleId)
