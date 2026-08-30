@@ -62,15 +62,21 @@ interface ResearchAnalysis {
 // News-outlet/official uploads are the most reliable transcript sources for
 // factual extraction — press conferences, official statements, court
 // coverage — as opposed to independent creator commentary/reaction videos.
-const RELIABLE_TRANSCRIPT_CHANNEL_HINTS = [
-  "news", "police", "sheriff", "department", "official", "court",
-  "press conference", "pd", "county",
+// Channel-name patterns suggesting an official or news-outlet upload rather
+// than independent creator commentary. Word-boundary matched: a bare substring
+// test on "pd" also matches "Podcast" and "Update", which let commentary
+// channels sort as official.
+const RELIABLE_TRANSCRIPT_CHANNEL_PATTERNS: RegExp[] = [
+  /\bpolice\b/, /\bsheriff\b/, /\bpress conference\b/, /\bdistrict attorney\b/,
+  /\bprosecutor\b/, /\bcoroner\b/, /\bp\.?d\.?\b/, /\b[a-z]{2,}pd\b/,
+  /\bcounty\b/, /\bcourt(s|house|room)?\b/, /\bnews(room)?\b/,
+  /\babc\s?\d/, /\bnbc\b/, /\bcbs\b/, /\bfox\s?\d/,
 ];
 
 function looksReliableForTranscript(channelTitle: string | null | undefined): boolean {
   if (!channelTitle) return false;
   const lower = channelTitle.toLowerCase();
-  return RELIABLE_TRANSCRIPT_CHANNEL_HINTS.some((hint) => lower.includes(hint));
+  return RELIABLE_TRANSCRIPT_CHANNEL_PATTERNS.some((pattern) => pattern.test(lower));
 }
 
 function buildResearchQueries(caseName: string): string[] {
@@ -113,13 +119,11 @@ async function gatherYouTubeTranscripts(caseName: string): Promise<string> {
     const videos = await youtubeProvider.searchCaseVideos(caseName, 15);
     if (!videos.length) return "";
 
-    const prioritized = [...videos].sort((a, b) => {
-      const aReliable = looksReliableForTranscript(a.channelTitle) ? 1 : 0;
-      const bReliable = looksReliableForTranscript(b.channelTitle) ? 1 : 0;
-      return bReliable - aReliable;
-    });
-
-    const candidates = prioritized.slice(0, 5);
+    // Only channels that actually match. This previously sorted by the
+    // heuristic then took the top 5 regardless, so auto-generated captions
+    // from commentary channels reached the prompt as primary source material.
+    const candidates = videos.filter((v) => looksReliableForTranscript(v.channelTitle)).slice(0, 5);
+    if (!candidates.length) return "";
 
     const transcripts = await Promise.all(
       candidates.map(async (v) => {
@@ -165,7 +169,7 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
   }
 }
 
-Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH and MEDIUM sources for factual claims in "summary" and "caseFacts" — treat LOW-tier sources as context only, and do not state something as established fact if it only appears in a LOW-tier source. YouTube transcript excerpts, where included below, are from official/news channel uploads and should be treated as high-reliability primary material.
+Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH and MEDIUM sources for factual claims in "summary" and "caseFacts" — treat LOW-tier sources as context only, and do not state something as established fact if it only appears in a LOW-tier source. YouTube transcript excerpts, where included below, come from channels whose NAMES suggest an official or news source. That is a heuristic on the channel title only - it is not verification. Treat them as MEDIUM reliability reporting, never as primary material, and never state something as established fact on a transcript alone.
 
 SOURCE MATERIAL:
 ${sourcesText}
