@@ -26,6 +26,9 @@ interface CaseContext {
   name: string;
   summary: string | null;
   lastUpdated: string | null;
+  country: string | null;
+  city: string | null;
+  incidentDate: string | null;
   category: string | null;
   solvedStatus: string | null;
   detailedPeople: unknown; // DetailedPersonRecord[] from case-research stage
@@ -110,7 +113,7 @@ HOOK RULE: The first 5-15 seconds must NOT begin with "My name is...", "Today we
 
 STRUCTURAL TECHNIQUES to use throughout: progressive evidence release, open loops, mini-cliffhangers, recontextualization of earlier details, competing theories where the research actually supports them, investigation-progression pacing rather than pure biography.
 
-HUMAN GROUNDING — do not skip this: every central figure named more than once in the script (victims, accused, and any other person the story turns on) needs at least one concrete detail of who they were as a person before the case — an interest, a relationship, a job, a personality trait, something a person who knew them said. Names and ages alone are not enough. If the research material doesn't support this for someone, say plainly that little is known about them rather than silently leaving them as a name on a list.
+HUMAN GROUNDING — do not skip this: every central figure named more than once in the script (victims, accused, and any other person the story turns on) needs at least one concrete detail of who they were as a person before the case — an interest, a relationship, a job, a personality trait, something a person who knew them said. Names and ages alone are not enough. If the research material doesn't support this for someone, note that only where the absence itself matters to the story, at most once in the whole script, and attribute the gap to this script's sourcing rather than to the public record.
 
 NO REPETITION — apply these checks as you write, not just at the end:
 - Do not restate a fact you've already given the viewer unless the restatement adds genuinely new information, evidence, context, or consequence. Important facts earn strong placement and clear context once — they do not need to be repeated to land. ("DNA was recovered from the scene" stated once is fine; later noting "that same DNA was eventually developed into a 27-allele profile" is fine because it's new information — but restating "DNA was found at the scene" again with nothing new added is not.)
@@ -185,9 +188,17 @@ CORE QUESTION THE SCRIPT MUST ANSWER: ${angle.coreQuestion}
 RESEARCH FOCUS: ${angle.researchFocus.join("; ")}
 
 ${caseData.summary ? `EXISTING CASE SUMMARY:\n${caseData.summary}\n` : ""}
-${caseData.detailedPeople ? `PRE-VERIFIED PER-PERSON RECORDS (from earlier case research — treat as authoritative ground truth for each named person; use this directly for peopleFacts rather than re-deriving from source material below where it's already covered here):\n${JSON.stringify(caseData.detailedPeople, null, 2)}\n` : ""}
+${caseData.detailedPeople ? `EARLIER AUTOMATED PER-PERSON EXTRACTION (UNVERIFIED) (from earlier case research — these were extracted by an earlier automated pass from name-matched search results and have NOT been verified as belonging to this case subject - apply the IDENTITY BINDING rules below to them exactly as you would to raw source material; use this directly for peopleFacts rather than re-deriving from source material below where it's already covered here):\n${JSON.stringify(caseData.detailedPeople, null, 2)}\n` : ""}
 SOURCE MATERIAL:
 ${researchText}
+
+IDENTITY BINDING - read this before extracting any fact about a named person:
+- Sources are found by keyword search, so some results will be about a DIFFERENT person who happens to share a name with someone in this case. Namesakes are common. Assume nothing from a name match alone.
+- A prior conviction, prior arrest, prior case, court docket, appellate opinion, or biographical detail may be attributed to a person in this case ONLY if a source that covers THIS incident makes that connection itself. A court record surfaced by a name search is never sufficient on its own, however exactly the name matches.
+- Court records and appellate opinions are the highest-risk material here: they are real documents, they quote accurately, and they are indexed by name. Being accurate about the wrong person is still a factual error, and it is the worst failure this briefing can contain.
+- Before attributing any prior record, check for mismatched identifiers: an age or date of birth inconsistent with this case, a different middle name or surname variant, a different state or jurisdiction, a timeline that would be impossible. Any one of these means treat it as a different person.
+- If a source describes a prior record but no source ties it to this case, either omit it or record it as an explicit uncertainty, e.g. "A federal case exists under the same name but no source ties it to this defendant."
+- Prefer prior-record facts stated directly by an outlet covering this incident, and name that outlet inside the fact itself.
 
 DATE AND COUNT ACCURACY — critical:
 - If sources give different dates for related-but-distinct events (e.g. an initial announcement vs. a later formal court ruling vs. a settlement approval), treat them as SEPARATE events with SEPARATE dates. Do not collapse them into one date.
@@ -263,7 +274,7 @@ async function loadContext(
       .single(),
     supabase
       .from("cases")
-      .select("name, summary, last_updated, category, solved_status, detailed_people")
+      .select("name, summary, last_updated, category, solved_status, detailed_people, city, incident_date, country")
       .eq("id", caseId)
       .single(),
   ]);
@@ -307,7 +318,10 @@ async function loadContext(
     lastUpdated: caseRow.last_updated,
     category: caseRow.category,
     solvedStatus: caseRow.solved_status,
-   detailedPeople: caseRow.detailed_people,
+   country: caseRow.country,
+    city: caseRow.city,
+    incidentDate: caseRow.incident_date,
+    detailedPeople: caseRow.detailed_people,
   },
     channelDNA,
   };
@@ -315,12 +329,17 @@ async function loadContext(
 
 // Scale Tavily's recency window to the case's most recent refresh. Recent
 // cases benefit from news-focused searches; dormant cases need broad coverage.
-function computeRecencyWindow(lastUpdated: string | null): { topic: "news" | "general"; days?: number } {
-  if (!lastUpdated) {
+function computeRecencyWindow(anchorDate: string | null): { topic: "news" | "general"; days?: number } {
+  if (!anchorDate) {
     return { topic: "general" };
   }
 
-  const daysSinceUpdate = (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+  const anchorMs = new Date(anchorDate).getTime();
+  if (Number.isNaN(anchorMs)) {
+    return { topic: "general" };
+  }
+
+  const daysSinceUpdate = (Date.now() - anchorMs) / (1000 * 60 * 60 * 24);
 
   if (daysSinceUpdate < 0) {
     return { topic: "general" };
@@ -362,17 +381,23 @@ export async function getOrBuildResearchBrief(
   let researchText = "No additional research available beyond the case summary above.";
   if (tavilyProvider.isConfigured()) {
     try {
-      const newsOptions = computeRecencyWindow(caseData.lastUpdated);
+      const newsOptions = computeRecencyWindow(caseData.incidentDate ?? caseData.lastUpdated);
+      // Every query carries a place/time disambiguator where one exists. A
+      // bare personal name is the highest contamination search shape there
+      // is, and it is what pulled a same named defendant unrelated federal
+      // record into a briefing once already.
+      const where = [caseData.city, caseData.country].filter(Boolean).join(" ");
+      const subject = `${caseData.name} ${where} ${caseData.incidentDate ?? ""}`.replace(/\s+/g, " ").trim();
       const dateQueries = [
-        `${caseData.name} official timeline dates`,
-        `${caseData.name} ${angle.researchFocus[0] ?? ""}`,
-        `${caseData.name} announcement date confirmed`,
-        `${caseData.name} sentencing outcome each defendant`,
-        `${caseData.name} who confessed how many`,
-        `${caseData.name} each defendant sentence outcome individually`,
-        `${caseData.name} innocence ruling exact date`,
+        subject,
+        `${subject} ${angle.researchFocus[0] ?? ""}`,
+        `${subject} charges arrested`,
+        `${subject} timeline what happened`,
+        `${subject} prior record criminal history according to police`,
+        `${subject} parole probation supervision released`,
+        `${subject} surveillance footage evidence investigators`,
       ];
-      const bioQuery = `${caseData.name} victims remembered who they were`;
+      const bioQuery = `${subject} victim identified family remembered`;
       const resultSets = await Promise.all(
         [
           ...dateQueries.map((query) => tavilyProvider.search(query, 4, newsOptions).catch(() => [])),

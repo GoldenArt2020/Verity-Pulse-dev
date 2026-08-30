@@ -45,6 +45,8 @@ interface DetailedPersonRecord {
 interface ResearchAnalysis {
   summary: string;
   country: string | null;
+  city: string | null;
+  incidentDate: string | null;
   category: string | null;
   tags: string[];
   opportunityScore: number;
@@ -142,6 +144,8 @@ function buildAnalysisPrompt(caseName: string, sourcesText: string): string {
 {
   "summary": string (max 300 words, factual investigative-briefing tone, do not speculate beyond what sources state),
   "country": string or null,
+  "city": string or null (the specific city, borough, town or neighborhood where the incident occurred),
+  "incidentDate": string or null (the date of the incident itself, as specific as the sources allow, e.g. "August 23, 2026" or "late August 2026" - NOT the date of the arrest, charging or any later development),
   "category": string or null (e.g. "Missing Person", "Murder Investigation", "Cold Case"),
   "tags": string[] (3-6 short tags),
   "opportunityScore": number 0-100,
@@ -179,7 +183,9 @@ CRITICAL RULES:
 
 3. Every other field follows the same discipline: if the source material doesn't clearly establish something for this specific person, write null — do not fill a gap with an assumption, even a reasonable-sounding one.
 
-4. Quotes in "documentedStatements" must be real, attributed statements from the source material — never invented or paraphrased as if verbatim.
+4. Quotes in "documentedStatements" must be real, attributed statements from the source material
+
+5. IDENTITY IS NOT ESTABLISHED BY A NAME MATCH. Sources are found by keyword search, so some results describe a DIFFERENT person who shares a name with someone in this case. Namesakes are common. A prior conviction, prior arrest, prior case, court docket or appellate opinion may go in "priorHistory" ONLY if a source covering THIS incident makes that connection itself. A court record surfaced by a name search is never sufficient on its own, however exactly the name matches. Court records are the highest-risk material here precisely because they are real, quotable and indexed by name; being accurate about the wrong person is still a factual error. Check for mismatched identifiers before attributing anything: an age or date of birth inconsistent with this case, a different middle name or surname variant, a different state or jurisdiction, an impossible timeline. Any one of those means treat it as a different person and leave "priorHistory" null. — never invented or paraphrased as if verbatim.
 
 SOURCE MATERIAL:
 ${sourceText}
@@ -290,6 +296,8 @@ export async function runCaseResearch(caseId: string, caseName: string): Promise
     .update({
       summary: analysis.summary,
       country: analysis.country,
+      city: analysis.city,
+      incident_date: analysis.incidentDate,
       category: analysis.category,
       opportunity_score: analysis.opportunityScore,
       competition_score: analysis.competitionScore,
