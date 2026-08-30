@@ -183,9 +183,19 @@ CRITICAL RULES:
 
 3. Every other field follows the same discipline: if the source material doesn't clearly establish something for this specific person, write null — do not fill a gap with an assumption, even a reasonable-sounding one.
 
-4. Quotes in "documentedStatements" must be real, attributed statements from the source material
+4. Quotes in "documentedStatements" must be real, attributed statements from the source material — never invented or paraphrased as if verbatim.
 
-5. IDENTITY IS NOT ESTABLISHED BY A NAME MATCH. Sources are found by keyword search, so some results describe a DIFFERENT person who shares a name with someone in this case. Namesakes are common. A prior conviction, prior arrest, prior case, court docket or appellate opinion may go in "priorHistory" ONLY if a source covering THIS incident makes that connection itself. A court record surfaced by a name search is never sufficient on its own, however exactly the name matches. Court records are the highest-risk material here precisely because they are real, quotable and indexed by name; being accurate about the wrong person is still a factual error. Check for mismatched identifiers before attributing anything: an age or date of birth inconsistent with this case, a different middle name or surname variant, a different state or jurisdiction, an impossible timeline. Any one of those means treat it as a different person and leave "priorHistory" null. — never invented or paraphrased as if verbatim.
+5. IDENTITY IS NOT ESTABLISHED BY A NAME MATCH. Sources are found by keyword search, so some results describe a DIFFERENT person who shares a name with someone in this case. Namesakes are common. A prior conviction, prior arrest, prior case, court docket or appellate opinion may go in "priorHistory" ONLY if a source covering THIS incident makes that connection itself. A court record surfaced by a name search is never sufficient on its own, however exactly the name matches. Court records are the highest-risk material here precisely because they are real, quotable and indexed by name; being accurate about the wrong person is still a factual error. Check for mismatched identifiers before attributing anything: an age or date of birth inconsistent with this case, a different middle name or surname variant, a different state or jurisdiction, an impossible timeline. Any one of those means treat it as a different person and leave "priorHistory" null.
+
+6. NATURAL PERSONS ONLY. Never create an entry for an organisation, agency, department, company or news outlet (e.g. NYPD, FBI, a sheriff's office, a broadcaster). Every entry must be an individual human being. What an agency did or said is not a person record.
+
+7. NEVER INFER AN OCCUPATION, TITLE OR CREDENTIAL FROM A NAME. Name particles that resemble titles are parts of the name, not qualifications — "MD" and "Md." are common transliterations of Mohammed, and similar fragments appear across many naming traditions. Fill "wayOfLife" only when a source explicitly states what the person did for a living. Leave it null otherwise. Inventing a profession from a name fragment is a serious factual error about a real person.
+
+8. REPRODUCE NUMBERS EXACTLY as the sources state them — ages, sentence lengths, counts of charges or arrests, dollar amounts. Do not round, average or approximate. If two sources give different figures, use the figure from the source covering this incident and note the discrepancy in "additionalNotes".
+
+9. SPELL EVERY NAME exactly as the sources spell it, and spell it identically in every field. A misspelled name is a different person.
+
+10. NAME LOCATIONS exactly as the sources name them. Do not substitute a generic category of place for a specific named venue (e.g. do not write "a bodega" where sources name a particular grill, deli or restaurant), and do not change the type of establishment.
 
 SOURCE MATERIAL:
 ${sourceText}
