@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { LegalLinks } from "@/components/layout/LegalLinks";
+import Link from "next/link";
 
 export function LoginCard() {
   const router = useRouter();
@@ -92,7 +93,7 @@ export function LoginCard() {
             <input type="checkbox" className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-blue-500" />
             Remember Me
           </label>
-          <a href="#" className="text-blue-400 hover:text-blue-300">Forgot Password?</a>
+          <Link href="/forgot-password" className="text-blue-400 hover:text-blue-300">Forgot Password?</Link>
         </div>
 
         <Button

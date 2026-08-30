@@ -65,10 +65,18 @@ interface PersonFact {
   aliveStatus: string;
 }
 
+interface BriefIssue {
+  claim: string;
+  person: string | null;
+  problem: string;
+  severity: "high" | "medium";
+}
+
 interface ResearchBrief {
   caseFacts: string[];
   peopleFacts: PersonFact[];
   outline: string[];
+  sourceIssues?: BriefIssue[];
 }
 
 export type ScriptJobStatus = "writing" | "ready" | "complete" | "failed";
@@ -426,15 +434,167 @@ export async function getOrBuildResearchBrief(
   // verification pass relies on. Groq was found to collapse distinct
   // individuals' outcomes into one shared (and wrong) group statement even
   // with explicit per-person instructions and good source material.
-  const { text: briefRaw } = await callClaude(undefined, buildResearchPrompt(caseData, angle, researchText), 4000);
+  const { text: briefRaw } = await callClaude(undefined, buildResearchPrompt(caseData, angle, researchText), 8000);
   if (!briefRaw || !briefRaw.trim()) {
     throw new Error("Research brief generation returned an empty response from Claude");
   }
   const brief = parseJsonObject<ResearchBrief>(briefRaw);
 
+  // parseJsonObject repairs unterminated JSON by appending closing brackets, so
+  // a response truncated at max_tokens parses cleanly with people and facts
+  // silently missing. Nothing downstream can tell a repaired brief from an
+  // intact one, so refuse an implausibly thin one rather than build on it.
+  if (!brief.caseFacts?.length || brief.caseFacts.length < 5 || !brief.outline?.length) {
+    throw new Error(
+      `Research brief looks truncated or incomplete (${brief.caseFacts?.length ?? 0} facts, ` +
+        `${brief.peopleFacts?.length ?? 0} people, ${brief.outline?.length ?? 0} outline beats). ` +
+        "Refusing to build a script on it."
+    );
+  }
+
+  brief.sourceIssues = await verifyBriefAgainstSources(caseData.name, brief, researchText);
+
   await supabase.from("angles").update({ research_brief: brief }).eq("id", angleId);
 
   return brief;
+}
+
+function buildBriefAuditPrompt(caseName: string, brief: ResearchBrief, researchText: string): string {
+  return `You are auditing a research briefing about "${caseName}" against the source material it was built from, before it is used to write a published documentary script.
+
+SOURCE MATERIAL THE BRIEFING WAS BUILT FROM:
+${researchText}
+
+BRIEFING CASE FACTS:
+${brief.caseFacts.map((fact) => `- ${fact}`).join("\n")}
+
+BRIEFING PEOPLE FACTS:
+${JSON.stringify(brief.peopleFacts ?? [], null, 2)}
+
+Your job is ATTRIBUTION, not consistency. For each briefing claim about a named person - prior criminal record, prior cases, occupation, age, role, identity - determine whether the source material above actually supports attaching that claim to THIS person in THIS incident.
+
+Flag a claim when any of these is true:
+- No source above supports it at all. HIGH severity.
+- The only support is a court record, docket or appellate opinion found by name search, with no source covering this incident making the connection. Sources are retrieved by keyword, so a name match alone can describe an entirely different person. HIGH severity.
+- An occupation, title or credential appears inferred from a name particle rather than stated by a source. HIGH severity.
+- A number (age, sentence length, count of charges or arrests, dollar amount) differs from the sources or appears rounded. HIGH severity.
+- A named venue was replaced by a generic category of place, or the type of establishment changed. MEDIUM severity.
+- A name is spelled inconsistently between fields or differs from the sources. MEDIUM severity.
+- A causal or institutional claim is asserted where sources establish only sequence. MEDIUM severity.
+
+Do NOT flag reasonable summarisation, stylistic phrasing, or a claim the sources plainly support.
+
+Return ONLY valid JSON (no markdown, no commentary) matching this exact shape:
+{
+  "issues": [{ "claim": string, "person": string | null, "problem": string, "severity": "high" | "medium" }]
+}
+
+If every claim is properly attributed, return { "issues": [] }. Return ONLY the JSON object.`;
+}
+
+/**
+ * Audits a brief against the source text it was built from. Different from
+ * verifyScriptAgainstBrief: that compares script to brief, so a brief holding a
+ * same-named stranger's court record passes cleanly because the script
+ * faithfully repeats it. This pass is what can catch that.
+ *
+ * A failure returns an explicit high-severity issue rather than an empty array,
+ * so an audit that could not run is never mistaken for a clean audit.
+ */
+export async function verifyBriefAgainstSources(
+  caseName: string,
+  brief: ResearchBrief,
+  researchText: string
+): Promise<BriefIssue[]> {
+  try {
+    const { text: raw } = await callClaude(
+      undefined,
+      buildBriefAuditPrompt(caseName, brief, researchText),
+      2000
+    );
+    const audit = parseJsonObject<{ issues: BriefIssue[] }>(raw);
+    return audit.issues ?? [];
+  } catch (err) {
+    return [
+      {
+        claim: "(entire research brief)",
+        person: null,
+        problem: `Source-attribution audit did not run (${
+          err instanceof Error ? err.message : "unknown error"
+        }). Facts in this brief are UNAUDITED - verify any prior-record or biographical claim by hand before publishing.`,
+        severity: "high",
+      },
+    ];
+  }
+}
+
+const MONTHS = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+/**
+ * Incident dates are extracted as free text and are often approximate
+ * ("late August 2026"), which Date.parse returns NaN for. Falls back to a
+ * month-and-year scan so an approximate date still yields a usable age.
+ */
+function parseApproximateDate(value: string | null): number {
+  if (!value) return NaN;
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) return direct;
+
+  const lower = value.toLowerCase();
+  const year = lower.match(/\b(19|20)\d{2}\b/);
+  if (!year) return NaN;
+  const monthIndex = MONTHS.findIndex((month) => lower.includes(month));
+  return Date.UTC(Number(year[0]), monthIndex === -1 ? 6 : monthIndex, 15);
+}
+
+/**
+ * Case-level research (summary, detailed_people, sources) comes from
+ * runCaseResearch and is NOT refreshed when a script is generated - only the
+ * brief is. A brief can therefore look freshly built while resting on stale
+ * underlying research. For a developing case that matters: charges get
+ * amended, prior records get reported, initial accounts get corrected.
+ */
+function buildFreshnessIssues(caseData: CaseContext): BriefIssue[] {
+  if (!caseData.lastUpdated) {
+    return [
+      {
+        claim: "(case research age unknown)",
+        person: null,
+        problem:
+          "This case has no last_updated timestamp, so the age of the underlying research cannot be established. Re-run case research before publishing.",
+        severity: "high",
+      },
+    ];
+  }
+
+  const researchAgeHours = (Date.now() - new Date(caseData.lastUpdated).getTime()) / 3_600_000;
+  if (Number.isNaN(researchAgeHours)) return [];
+
+  const incidentMs = parseApproximateDate(caseData.incidentDate);
+  const incidentAgeDays = Number.isNaN(incidentMs) ? null : (Date.now() - incidentMs) / 86_400_000;
+  const isDeveloping = incidentAgeDays !== null && incidentAgeDays <= 60;
+  const thresholdHours = isDeveloping ? 24 : 720;
+
+  if (researchAgeHours <= thresholdHours) return [];
+
+  const age =
+    researchAgeHours < 48
+      ? `${Math.round(researchAgeHours)} hours`
+      : `${Math.round(researchAgeHours / 24)} days`;
+
+  return [
+    {
+      claim: "(underlying case research)",
+      person: null,
+      problem: isDeveloping
+        ? `Case research is ${age} old and this incident is recent enough to still be generating coverage. Charges, prior-record reporting and initial accounts all change in this window. Re-run case research before publishing.`
+        : `Case research is ${age} old. Re-run case research if any development has been reported since.`,
+      severity: "high",
+    },
+  ];
 }
 
 function mergeUsage(a: RawUsage, b: RawUsage): RawUsage {
@@ -1012,8 +1172,16 @@ export async function verifyScriptAgainstBrief(
     const { text: raw } = await callClaude(undefined, buildVerificationPrompt(script, brief), 1500);
     const result = parseJsonObject<{ issues: VerificationIssue[] }>(raw);
     return result.issues ?? [];
-  } catch {
-    return [];
+  } catch (err) {
+    // An empty array here would be indistinguishable from a clean check.
+    return [
+      {
+        claim: "(entire script)",
+        problem: `[HIGH] Script-versus-brief check did not run (${
+          err instanceof Error ? err.message : "unknown error"
+        }). This script is UNVERIFIED against its research brief.`,
+      },
+    ];
   }
 }
 
@@ -1069,7 +1237,12 @@ export async function generateScriptSingleCall(
     }
   }
 
-  const verificationIssues = await verifyScriptAgainstBrief(script, brief);
+  const scriptIssues = await verifyScriptAgainstBrief(script, brief);
+  const flagged = [...buildFreshnessIssues(caseData), ...(brief.sourceIssues ?? [])].map((issue) => ({
+    claim: issue.claim,
+    problem: `[${issue.severity.toUpperCase()}]${issue.person ? " " + issue.person + ":" : ""} ${issue.problem}`,
+  }));
+  const verificationIssues = [...flagged, ...scriptIssues];
 
   return { script, usage: toGenerationUsage(totalUsage), verificationIssues };
 }
@@ -1146,7 +1319,12 @@ export async function rewriteScriptSingleCall(
     }
   }
 
-  const verificationIssues = await verifyScriptAgainstBrief(script, brief);
+  const scriptIssues = await verifyScriptAgainstBrief(script, brief);
+  const flagged = [...buildFreshnessIssues(caseData), ...(brief.sourceIssues ?? [])].map((issue) => ({
+    claim: issue.claim,
+    problem: `[${issue.severity.toUpperCase()}]${issue.person ? " " + issue.person + ":" : ""} ${issue.problem}`,
+  }));
+  const verificationIssues = [...flagged, ...scriptIssues];
 
   return { script, usage: toGenerationUsage(totalUsage), verificationIssues };
 }

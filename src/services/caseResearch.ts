@@ -174,6 +174,16 @@ Each source below is tagged [HIGH], [MEDIUM], or [LOW] reliability. Prefer HIGH 
 SOURCE MATERIAL:
 ${sourcesText}
 
+REQUIRED COVERAGE CHECK - do this before returning:
+Certain categories of fact are predictable from the shape of a case, and their absence from your source material is a RETRIEVAL FAILURE, not evidence the information does not exist. Work through the applicable ones below. For each category the sources do NOT cover, add an entry to caseFacts.unresolvedQuestions phrased as a retrieval gap - e.g. "Not retrieved: whether the accused was under any form of supervision at the time" - and NEVER phrase it as an absence in the public record.
+- If anyone has been arrested: the full charge list, the arrest date, and custody status.
+- If a named person is accused: their prior criminal record, or an explicit statement that sources covering this incident do not describe one.
+- If the accused had any prior conviction: whether they were on parole, probation or other supervision when this incident occurred.
+- What evidence investigators relied on - footage, forensics, witnesses, tips - and how the suspect was identified.
+- For every victim: name, age, and any biographical detail the sources provide.
+- Whether any survivor or witness has given a public account.
+This distinction matters: a script built on this briefing will otherwise tell viewers that facts are missing from the public record when they were merely missing from this search.
+
 Extract EVERY concrete fact present in the sources into the appropriate caseFacts field — names, ages, dates, figures, quotes. Do not compress or generalize here; that's what "summary" is for. Never invent a fact not present in the sources. If a field has nothing to report, return an empty array rather than inventing content. Return ONLY the JSON object.`;
 }
 
