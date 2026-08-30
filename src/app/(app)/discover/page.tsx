@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -39,11 +39,8 @@ export default function DiscoverPage() {
           <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
             <DiscoverHero />
           </motion.div>
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.3 }} className="w-full min-w-0">
-            <DiscoverHero />
-          </motion.div>
 
-          {/* Trending updates — significant developments in already-known cases */}
+          {/* Trending updates â€” significant developments in already-known cases */}
           <motion.div
             variants={fadeUp}
             initial="hidden"
@@ -54,16 +51,6 @@ export default function DiscoverPage() {
             <TrendingUpdatesSection />
           </motion.div>
 
-          {/* 1. Recommended For Your Audience */}
-          <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ duration: 0.3, delay: 0.15 }}
-            className="w-full min-w-0"
-          >
-            <RecommendationsRowV2 />
-          </motion.div>
           {/* 1. Recommended For Your Audience */}
           <motion.div
             variants={fadeUp}
