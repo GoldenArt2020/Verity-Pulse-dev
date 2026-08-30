@@ -10,6 +10,27 @@ import { runCaseResearch } from "@/services/caseResearch";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
+const SEARCHABLE_COLUMNS = ["name", "category", "country", "summary"] as const;
+
+/**
+ * `.or()` takes a raw PostgREST filter expression, so commas, parens and
+ * dots in user input are parsed as filter syntax rather than as data.
+ * Double-quoting the value makes PostgREST treat it as a literal; `\` and
+ * `"` are escaped so the quoting cannot be broken out of. LIKE wildcards
+ * are escaped first, or a `%`/`_` in the term would match arbitrary text.
+ */
+function toIlikeFilterValue(raw: string): string {
+  const likeEscaped = raw
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, (char) => `\\${char}`);
+
+  const quoteEscaped = likeEscaped
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+
+  return `"%${quoteEscaped}%"`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -33,10 +54,13 @@ export async function GET(req: NextRequest) {
     // Uses the session-bound client, not service role — RLS scopes this to
     // cases this user's channel(s) have already claimed, plus the
     // unclaimed pool. No more searching the whole platform's cases.
+    const trimmedQuery = query.trim();
+    const filterValue = toIlikeFilterValue(trimmedQuery);
+
     let dbQuery = supabase
       .from("cases")
       .select("id, name, country, category, summary, opportunity_score, created_at")
-      .or(`name.ilike.%${query}%,category.ilike.%${query}%,country.ilike.%${query}%,summary.ilike.%${query}%`);
+      .or(SEARCHABLE_COLUMNS.map((col) => `${col}.ilike.${filterValue}`).join(","));
 
     // Rank matching Channel DNA category first if available
     if (channelCategory) {
@@ -62,7 +86,7 @@ export async function GET(req: NextRequest) {
     const { data: stub, error: stubError } = await supabase
       .from("cases")
       .insert({
-        name: query,
+        name: trimmedQuery,
         status: "UNSOLVED",
         last_updated: new Date().toISOString(),
       })
